@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as SPLAT from "gsplat";
 import customOrbitControls from "../customOrbitControls";
-import myOrbitControls from "../myOrbitControls";
+// import myOrbitControls from "../myOrbitControls";
 
 const progressDialog = document.getElementById("progress-dialog");
 const progressIndicator = document.getElementById("progress-indicator");
