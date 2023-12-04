@@ -18,13 +18,14 @@ class customOrbitControls {
     constructor(
         inputCamera: Camera,
         domElement: HTMLElement,
+		getIsLoading: () => boolean, //custom
         alpha: number = 0.5, //custom
         beta: number = 0.1, //custom
         radius: number = 10, //custom
         enableKeyboardControls: boolean = true,
         inputTarget: Vector3 = new Vector3(),
-		autoRotate: boolean = true, //custom
     ) {
+		let autoRotate = true; //custom
         let target = inputTarget.clone();
 
         let desiredTarget = target.clone();
@@ -277,19 +278,12 @@ class customOrbitControls {
             if (keys["KeyR"]) desiredBeta += rotateSpeed;
             if (keys["KeyF"]) desiredBeta -= rotateSpeed;
 
-			if(autoRotate){
-
+			if(autoRotate && !getIsLoading()){
 				if(desiredAlpha < 2 * Math.PI && desiredRadius > 5){
 					desiredAlpha += rotateSpeed;
 					desiredRadius -= 0.02 / desiredAlpha;
 				} else autoRotate = false;
-				console.log("A:desiredAlpha, desiredBeta, desiredRadius"
-				, desiredAlpha, desiredBeta, desiredRadius);
-
 			}
-			console.log("B:desiredAlpha, desiredBeta, desiredRadius"
-			, desiredAlpha, desiredBeta, desiredRadius);
-
             isUpdatingCamera = false;
         };
 
