@@ -22,7 +22,7 @@ const SplatScene = ({ url }) => {
 			scene.current = new SPLAT.Scene();
 			camera.current = new SPLAT.Camera();
 			renderer.current = new SPLAT.WebGLRenderer();
-			controls.current = new customOrbitControls(camera.current, renderer.current.domElement);
+			controls.current = new customOrbitControls(camera.current, renderer.current.domElement, () => isLoading.current);
 
 			const handleResize = () => {
 				renderer.current.setSize(window.innerWidth, window.innerHeight);
@@ -94,7 +94,6 @@ const SplatScene = ({ url }) => {
 							camera.current.position.x = - radius * Math.sin(angle);
 							camera.current.position.z = radius * Math.cos(angle) - 0.5;
 							angle += speed;
-							console.log("angle", angle);
 							renderer.current.render(scene.current, camera.current);
 							// 次のフレームをリクエスト
 							requestAnimationFrame(animate);
@@ -156,6 +155,5 @@ const SplatScene = ({ url }) => {
 
 	return <div ref={sceneRef} />;
 };
-
 
 export default SplatScene;
