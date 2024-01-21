@@ -6,23 +6,23 @@ import dynamic from 'next/dynamic';
 const SplatScene = dynamic(() => import('./scene/SplatScene'), { ssr: false });
 
 const ViewerContent = () => {
-    const location = useLocation();
-    const queryParams = new URLSearchParams(location.search);
-    const targetUrl = queryParams.get('url');
-    // const defaultUrl = "https://pub-b5e3fa5caf8549b4bf8bff1ac7c7eee8.r2.dev/53470b29-88cd-4cce-9184-6faf9f8776ae/output/a.splat";
-    const defaultUrl = "https://huggingface.co/datasets/dylanebert/3dgs/resolve/main/bonsai/bonsai-7k-mini.splat";
-    const [sceneUrl, setSceneUrl] = useState(targetUrl || defaultUrl);
+	const location = useLocation();
+	const queryParams = new URLSearchParams(location.search);
+	const targetUrl = queryParams.get('url');
+	// const defaultUrl = "https://pub-b5e3fa5caf8549b4bf8bff1ac7c7eee8.r2.dev/53470b29-88cd-4cce-9184-6faf9f8776ae/output/a.splat";
+	const defaultUrl = "https://huggingface.co/datasets/dylanebert/3dgs/resolve/main/bonsai/bonsai-7k-mini.splat";
+	const [sceneUrl, setSceneUrl] = useState(targetUrl || defaultUrl);
 
-    useEffect(() => {
-        // Update the sceneUrl only when the targetUrl changes
-        if (targetUrl) {
-            setSceneUrl(targetUrl);
-        }
-    }, [targetUrl]);
+	useEffect(() => {
+		// Update the sceneUrl only when the targetUrl changes
+		if (targetUrl) {
+			setSceneUrl(targetUrl);
+		}
+	}, [targetUrl]);
 
 	return (
 		<>
-			<div id="progress-container">
+			<div className="fixed inset-0 flex items-center justify-center">
 				<dialog open id="progress-dialog">
 					<p>
 						<label htmlFor="progress-indicator">Loading scene...</label>
