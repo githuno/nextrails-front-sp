@@ -9,46 +9,58 @@ let recordedBlobs: Blob[] = [];
 
 const MediaCaptureVeiwer = ({
   setStream,
-  setRecordedVideo,
 }: {
   setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
-  setRecordedVideo: React.Dispatch<React.SetStateAction<string | null>>;
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [stream, setLocalStream] = useState<MediaStream | null>(null);
 
-  const handleSuccess = (stream: MediaStream) => {
+  const getMediaSuccess = (stream: MediaStream) => {
     setStream(stream);
     setLocalStream(stream);
   };
 
-  const handleError = (error: Error) => {
-    console.error("Error: ", error);
+  const getMediaError = (error: Error) => {
+    console.error("Camera Device Not Found: ", error);
+    // alert("カメラにアクセスできません。カメラが存在し、接続されていること、\
+    // または他のアプリケーションによって使用されていないことを確認してください。\
+    // また、ブラウザにカメラへのアクセスを許可していることを確認してください。");
   };
 
-  useEffect(() => {
+  const getMedia = () => {
     navigator.mediaDevices
       .getUserMedia({
         video: {
           facingMode: {
-            exact: "environment",
+            exact: "environment", // リアカメラを指定
           },
         },
         audio: false,
       })
-      .then(handleSuccess)
-      .catch(() => {
+      .then(getMediaSuccess)
+      .catch((err) => {
         navigator.mediaDevices
           .getUserMedia({
             video: true,
             audio: false,
           })
-          .then(handleSuccess)
-          .catch((err) => {
-            handleError(err);
+          .then(getMediaSuccess)
+          .catch(() => {
+            getMediaError(err);
           });
       });
+  }
 
+  // const getAspectRatio = () => {
+  //   if (videoRef.current) {
+  //     const aspectRatio = videoRef.current.videoWidth / videoRef.current.videoHeight;
+  //     return aspectRatio;
+  //   }
+  //   return 0;
+  // }
+
+  useEffect(() => { // マウント時に実行 -> getMedia()を実行
+    getMedia();
     return () => {
       if (stream) {
         stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
@@ -59,7 +71,7 @@ const MediaCaptureVeiwer = ({
     };
   }, []);
 
-  useEffect(() => {
+  useEffect(() => { // streamが更新されたら実行 -> videoRefにstreamをセット
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
@@ -180,12 +192,12 @@ export default function MediaCapture() {
     return <div>{loadingMessage}</div>;
   }
 
+  console.log("MediaCapture実行"); // debug
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24">
       <div id="media-container" className="min-h-7/10 bg-gray-200 rounded-lg shadow-lg">
         <MediaCaptureVeiwer
           setStream={setStream}
-          setRecordedVideo={setRecordedVideo}
         />
       </div>
       <div className="flex items-center justify-center w-24 h-24 bg-blue-500 rounded-full shadow-lg">
@@ -196,6 +208,14 @@ export default function MediaCapture() {
     </main>
   );
 }
+
+// indexedDBのデータを一覧化する（getIndexedDbボタン）-> (play)(delete)
+// uploadボタンを作成する->create3D（uploadボタン<createObject && create3D>）
+// CloudDB（Objects）のデータを一覧化する（getObjectsボタン） -> (play)(delete)
+
+// -- CloudDB（images）のデータを一覧化する
+// -- CloudDB（image）のデータを削除する
+
 
 // // Error Boundary コンポーネント
 // type Props = {
