@@ -13,7 +13,7 @@ const MediaCaptureVeiwer = () => {
   };
 
   const handleError = (error: Error) => {
-    console.error("Error: ", error);
+    console.error("Camera Device Not Found: ", error);
   };
 
   useEffect(() => {
