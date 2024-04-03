@@ -29,11 +29,11 @@ const PortfolioPage = () => {
 	return (
 		<div className="flex flex-col items-center justify-center min-h-screen py-2 max-w-screen-xl mx-auto">
 			<h2 className="text-4xl mb-6">制作物一例</h2>
-			<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+			<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 				{projects.map((project, index) => (
 					<a href={project.link} target="_blank" rel="noopener noreferrer" key={index} className="flex flex-col">
 						<div className="border rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 ease-in-out flex flex-col h-full">
-							<div className="relative h-64 w-full">
+							<div className="relative w-full pb-[56.25%]">
 								<Image src={project.img} alt={project.title} layout="fill" objectFit="cover" />
 								<div className="absolute top-0 right-0 p-2">
 									<div className="bg-white rounded-full p-1">
@@ -46,6 +46,7 @@ const PortfolioPage = () => {
 									<h3 className="text-2xl mb-4">{project.title}</h3>
 									<p className="mb-4">{project.text}</p>
 									{project.id && project.password && (
+										<div className="overflow-auto">
 										<table className="table-auto">
 											<tbody>
 												<tr>
@@ -58,6 +59,7 @@ const PortfolioPage = () => {
 												</tr>
 											</tbody>
 										</table>
+									</div>
 									)}
 								</div>
 							</div>
