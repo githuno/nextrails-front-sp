@@ -20,6 +20,7 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
 
   const handleStartRecording = () => {
     if (stream) {
+      setIsScanning(false);
       recordedBlobsRef.current = [];
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorder.ondataavailable = (event) => {
@@ -34,7 +35,6 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
       mediaRecorder.start();
       mediaRecorderRef.current = mediaRecorder;
       setRecording(true);
-      setIsScanning(false);
     }
   };
 
@@ -42,12 +42,13 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setRecording(false);
+      setIsScanning(true);
       setIsLoading(true);
     }
   };
 
   const saveRecording = async (blob: Blob) => {
-    let db = await openDB("recordings", 3, {
+    let db = await openDB("media", 3, {
       upgrade(db) {
         if (!db.objectStoreNames.contains("videos")) {
           db.createObjectStore("videos", {

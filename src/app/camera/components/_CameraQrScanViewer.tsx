@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import jsQR from "jsqr";
 
-interface CameraViewerProps {
+interface CameraQrScanViewerProps {
   setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
   onQRCodeScanned: (data: string) => void;
   isScanning: boolean;
 }
 
-const CameraViewer: React.FC<CameraViewerProps> = ({ setStream, onQRCodeScanned, isScanning }) => {
+const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQRCodeScanned, isScanning }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [stream, setLocalStream] = useState<MediaStream | null>(null);
@@ -77,7 +77,7 @@ const CameraViewer: React.FC<CameraViewerProps> = ({ setStream, onQRCodeScanned,
             const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(imageData.data, imageData.width, imageData.height);
 
-            if (code) {
+            if (code?.data) {
               onQRCodeScanned(code.data);
             }
           }
@@ -102,7 +102,7 @@ const CameraViewer: React.FC<CameraViewerProps> = ({ setStream, onQRCodeScanned,
   );
 };
 
-export { CameraViewer };
+export { CameraQrScanViewer };
 
 // 【Barcode Detection API】
 // https://developer.mozilla.org/en-US/docs/Web/API/Barcode_Detection_API

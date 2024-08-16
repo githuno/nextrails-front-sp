@@ -18,6 +18,7 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({
 
   const handleCaptureImage = async () => {
     setIsLoading(true);
+    setIsScanning(false);
     if (stream && canvasRef.current) {
       const video = document.createElement("video");
       video.srcObject = stream;
@@ -38,13 +39,13 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({
       }
       video.pause();
       video.srcObject = null;
-      setIsScanning(false);
     }
+    setIsScanning(true);
     setIsLoading(false);
   };
 
   const saveImage = async (blob: Blob) => {
-    let db = await openDB("images", 3, {
+    let db = await openDB("media", 3, {
       upgrade(db) {
         if (!db.objectStoreNames.contains("photos")) {
           db.createObjectStore("photos", {

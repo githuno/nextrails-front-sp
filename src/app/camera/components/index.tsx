@@ -1,7 +1,11 @@
-import { CameraViewer } from "./_CameraViewer";
+import { CameraQrScanViewer } from "./_CameraQrScanViewer";
 import { CaptureVideoButton } from "./_CaptureVideoButton";
 import { CaptureImageButton } from "./_CaptureImageButton";
-import { LocalVideosList } from "./_LocalVideosList";
-import { LocalImagesList } from "./_LocalImagesList";
+import { LocalMediaList } from "./_LocalMediaList";
 
-export { CameraViewer, CaptureVideoButton, CaptureImageButton, LocalVideosList, LocalImagesList };
+export {
+  CameraQrScanViewer,
+  CaptureVideoButton,
+  CaptureImageButton,
+  LocalMediaList,
+};

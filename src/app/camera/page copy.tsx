@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { openDB } from "idb";
 import { isMobile } from "react-device-detect";
-import { LocalVideosList } from "./components/_LocalVideosList";
+import { LocalMediaList } from "./components";
 
 let mediaRecorder: MediaRecorder;
 let recordedBlobs: Blob[] = [];
@@ -176,7 +176,7 @@ export default function MediaCapture() {
       <div className="flex items-center justify-center w-24 h-24 bg-blue-500 rounded-full shadow-lg">
         <CaptureVideoButton stream={stream} setVideoId={setVideoId} />
       </div>
-      <LocalVideosList />
+      {/* <LocalMediaList media={media} setMedia={setMedia} setCount={setCount} /> */}
     </main>
   );
 }
