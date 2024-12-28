@@ -129,17 +129,26 @@ const LocalGallery = () => {
 
   return (
     <>
-      {isLoading && <LoadingSpinner />}
       <div className="grid grid-cols-3 gap-4 items-center">
-        <h1 className="font-bold text-center break-words">
-          setName: {imageSetName}
-        </h1>
-        <button
-          onClick={() => setIsNameModalOpen(true)}
-          className="m-2 p-2 bg-blue-500 text-white rounded"
-        >
-          編集
-        </button>
+        {isLoading ? (
+          <div className="col-span-3 grid justify-center">
+            <LoadingSpinner />
+          </div>
+        ) : (
+          <>
+            <h1 className="font-bold text-center break-words">
+              setName: {imageSetName}
+            </h1>
+            <button
+              onClick={() => setIsNameModalOpen(true)}
+              className="m-2 p-2 bg-blue-500 text-white rounded"
+            >
+              編集
+            </button>
+            <p className="text-center break-words">count: {mediaList.length}</p>
+          </>
+        )}
+
         <Modal
           isOpen={isNameModalOpen}
           onClose={() => setIsNameModalOpen(false)}
@@ -155,7 +164,6 @@ const LocalGallery = () => {
             <div className="mt-4 flex justify-end"></div>
           </div>
         </Modal>
-        <p className="text-center break-words">count: {mediaList.length}</p>
 
         {mediaList.map((media) => (
           <div key={media.id} className="relative">

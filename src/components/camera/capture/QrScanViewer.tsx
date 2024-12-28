@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import jsQR from "jsqr";
 import { useCameraContext } from "../CameraContext";
 
@@ -11,18 +11,21 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({
   setStream,
   onQRCodeScanned,
 }) => {
-  const { cameraState, setCameraState } = useCameraContext();
+  const { setCameraState } = useCameraContext();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [stream, setLocalStream] = useState<MediaStream | null>(null);
 
-  const onGetSensorSuccess = (stream: MediaStream) => {
-    setStream(stream);
-    setLocalStream(stream);
-    setCameraState("scanning");
-  };
+  const onGetSensorSuccess = useCallback(
+    (stream: MediaStream) => {
+      setStream(stream);
+      setLocalStream(stream);
+      setCameraState("scanning");
+    },
+    [setStream, setCameraState]
+  );
 
-  const getSensor = () => {
+  const getSensor = useCallback(() => {
     navigator.mediaDevices
       .getUserMedia({
         video: {
@@ -44,75 +47,66 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({
             console.error("Camera Device Not Found: ", err);
           });
       });
-  };
+  }, [onGetSensorSuccess]);
 
+  const cleanup = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setStream(null);
+    setLocalStream(null);
+    setCameraState("initializing");
+  }, [stream, setStream, setCameraState]);
+
+  const scanQRCode = useCallback(() => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+
+      if (context && video.videoWidth > 0 && video.videoHeight > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+        if (code?.data) {
+          onQRCodeScanned(code.data);
+        }
+      }
+    }
+  }, [onQRCodeScanned]);
+
+  const startScanning = useCallback(() => {
+    const intervalId = setInterval(scanQRCode, 300); // Scan every 300ms
+    return () => clearInterval(intervalId); // Clear the interval on unmount
+  }, [scanQRCode]);
+
+  // コンポーネントがマウントされたときにセンサーを取得し、アンマウントされたときにクリーンアップする
   useEffect(() => {
     getSensor();
+    const stopScanning = startScanning();
     return () => {
-      //
-      if (stream) {
-        stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
-      }
-      //
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-      // cameraの使用をやめる
-      setStream(null);
-      setLocalStream(null);
-      setCameraState("initializing");
+      cleanup();
+      stopScanning();
     };
   }, []);
 
+  // streamが更新されたらvideoRefにstreamをセット
   useEffect(() => {
-    // streamが更新されたらvideoRefにstreamをセット
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
   }, [stream]);
-
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-
-    if (cameraState === "scanning") {
-      const scanQRCode = () => {
-        if (videoRef.current && canvasRef.current) {
-          const video = videoRef.current;
-          const canvas = canvasRef.current;
-          const context = canvas.getContext("2d");
-
-          if (context && video.videoWidth > 0 && video.videoHeight > 0) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = context.getImageData(
-              0,
-              0,
-              canvas.width,
-              canvas.height
-            );
-            const code = jsQR(
-              imageData.data,
-              imageData.width,
-              imageData.height
-            );
-
-            if (code?.data) {
-              onQRCodeScanned(code.data);
-            }
-          }
-        }
-      };
-
-      intervalId = setInterval(scanQRCode, 300); // Scan every 300ms
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId); // Clear the interval on unmount
-      }
-    };
-  }, [stream, cameraState]);
 
   return (
     <div>
