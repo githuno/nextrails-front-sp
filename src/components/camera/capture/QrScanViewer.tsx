@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
+import { CameraState } from "../_utils";
 import jsQR from "jsqr";
 
-interface CameraQrScanViewerProps {
+interface QrScanViewerProps {
   setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
   onQRCodeScanned: (data: string) => void;
-  isScanning: boolean;
+  state: CameraState;
+  setState: React.Dispatch<React.SetStateAction<CameraState>>;
 }
 
-const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQRCodeScanned, isScanning }) => {
+const QrScanViewer: React.FC<QrScanViewerProps> = ({
+  setStream,
+  onQRCodeScanned,
+  state,
+  setState,
+}) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [stream, setLocalStream] = useState<MediaStream | null>(null);
@@ -15,6 +22,7 @@ const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQR
   const getMediaSuccess = (stream: MediaStream) => {
     setStream(stream);
     setLocalStream(stream);
+    setState("scanning");
   };
 
   const getMediaError = (error: Error) => {
@@ -26,7 +34,7 @@ const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQR
       .getUserMedia({
         video: {
           facingMode: {
-            exact: "environment",
+            exact: "environment", // リアカメラを指定
           },
         },
         audio: false,
@@ -55,6 +63,7 @@ const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQR
   }, []);
 
   useEffect(() => {
+    // streamが更新されたらvideoRefにstreamをセット
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
@@ -63,7 +72,7 @@ const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQR
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
-    if (isScanning) {
+    if (state === "scanning") {
       const scanQRCode = () => {
         if (videoRef.current && canvasRef.current) {
           const video = videoRef.current;
@@ -74,8 +83,17 @@ const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQR
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            const imageData = context.getImageData(
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            );
+            const code = jsQR(
+              imageData.data,
+              imageData.width,
+              imageData.height
+            );
 
             if (code?.data) {
               onQRCodeScanned(code.data);
@@ -92,7 +110,7 @@ const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQR
         clearInterval(intervalId); // Clear the interval on unmount
       }
     };
-  }, [stream, isScanning]);
+  }, [stream, state]);
 
   return (
     <div>
@@ -102,7 +120,7 @@ const CameraQrScanViewer: React.FC<CameraQrScanViewerProps> = ({ setStream, onQR
   );
 };
 
-export { CameraQrScanViewer };
+export { QrScanViewer };
 
 // 【Barcode Detection API】
 // https://developer.mozilla.org/en-US/docs/Web/API/Barcode_Detection_API

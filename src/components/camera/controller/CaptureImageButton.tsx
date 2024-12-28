@@ -1,24 +1,25 @@
-import React, { useRef, useState } from "react";
-import { openDB } from "idb";
-import LoadingSpinner from "./loading";
+import React, { useRef } from "react";
+import { CameraState, Media, useIDBMedia, LoadingSpinner } from "../_utils";
 
 interface CaptureImageButtonProps {
   stream: MediaStream | null;
-  setIsScanning: React.Dispatch<React.SetStateAction<boolean>>;
+  state: CameraState;
+  setState: React.Dispatch<React.SetStateAction<CameraState>>;
   onSaved: () => void;
 }
 
 const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({
   stream,
-  setIsScanning,
+  state,
+  setState,
   onSaved,
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [fetchIDB, ] = useIDBMedia("Media");
 
   const handleCaptureImage = async () => {
-    setIsLoading(true);
-    setIsScanning(false);
+    if (state === "recording") return;
+    setState("capturing");
     if (stream && canvasRef.current) {
       const video = document.createElement("video");
       video.srcObject = stream;
@@ -34,39 +35,21 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({
           canvas.toBlob((blob) => resolve(blob), "image/png")
         );
         if (blob) {
-          await saveImage(blob);
+          const image: Media = { id: new Date().toISOString(), blob, url: null,  isUploaded: false, type: "image" };
+          await fetchIDB("POST", image);
+          onSaved();
         }
       }
       video.pause();
       video.srcObject = null;
     }
-    setIsScanning(true);
-    setIsLoading(false);
-  };
-
-  const saveImage = async (blob: Blob) => {
-    let db = await openDB("media", 3, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains("photos")) {
-          db.createObjectStore("photos", {
-            keyPath: "id",
-            autoIncrement: true,
-          });
-        }
-      },
-    });
-    let tx = db.transaction("photos", "readwrite");
-    let photos = tx.objectStore("photos");
-    const photoId = new Date().toISOString();
-    const photoData = { id: photoId, blob };
-    await photos.add(photoData);
-    onSaved();
+    setState("initializing");
   };
 
   return (
-    <div>
-      <button onClick={handleCaptureImage} disabled={isLoading}>
-        {isLoading ? <LoadingSpinner /> : "Capture"}
+    <div className="flex items-center justify-center w-24 h-24 bg-blue-500 rounded-full shadow-lg">
+      <button onClick={handleCaptureImage} disabled={state === "capturing"}>
+        {state === "capturing" ? <LoadingSpinner /> : "Capture"}
       </button>
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </div>
