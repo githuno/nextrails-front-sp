@@ -9,9 +9,10 @@ const ViewerContent = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const targetUrl = queryParams.get("url");
-  // const defaultUrl = "https://pub-b5e3fa5caf8549b4bf8bff1ac7c7eee8.r2.dev/53470b29-88cd-4cce-9184-6faf9f8776ae/output/a.splat";
   const defaultUrl =
-    "https://huggingface.co/datasets/dylanebert/3dgs/resolve/main/bonsai/bonsai-7k-mini.splat";
+    "https://pub-b5e3fa5caf8549b4bf8bff1ac7c7eee8.r2.dev/53470b29-88cd-4cce-9184-6faf9f8776ae/output/a.splat";
+  // const defaultUrl =
+  // "https://huggingface.co/datasets/dylanebert/3dgs/resolve/main/bonsai/bonsai-7k-mini.splat";
   const [sceneUrl, setSceneUrl] = useState(targetUrl || defaultUrl);
 
   useEffect(() => {
@@ -24,11 +25,7 @@ const ViewerContent = () => {
   return (
     <>
       <div className="pointer-events-none">
-        <dialog
-          open
-          id="progress-dialog"
-          className="top-1/2 p-2 rounded-lg"
-        >
+        <dialog open id="progress-dialog" className="top-1/2 p-2 rounded-lg">
           <p htmlFor="progress-indicator">Loading scene...</p>
           <progress max="100" id="progress-indicator"></progress>
         </dialog>
