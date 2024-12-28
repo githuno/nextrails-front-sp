@@ -1,5 +1,5 @@
-import { FC, ReactNode, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { FC, ReactNode, useRef } from "react";
+import { createPortal } from "react-dom";
 
 type ModalProps = {
   isOpen: boolean;
@@ -13,14 +13,14 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
   const handleOpen = () => {
     if (dialogRef.current) {
       dialogRef.current.showModal();
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     }
   };
 
   const handleClose = () => {
     if (dialogRef.current) {
       dialogRef.current.close();
-      document.body.style.overflow = '';
+      document.body.style.overflow = "";
       onClose();
     }
   };
@@ -32,12 +32,9 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, children }) => {
   }
 
   return createPortal(
-    <dialog ref={dialogRef} className="modal">
+    <dialog ref={dialogRef} className="modal rounded-lg shadow-xl">
       {children}
-      <button
-        onClick={handleClose}
-        style={{ marginTop: '1rem', padding: '0.5rem 1rem', cursor: 'pointer' }}
-      >
+      <button onClick={handleClose} className="bg-slate-300 cursor-pointer">
         閉じる
       </button>
     </dialog>,

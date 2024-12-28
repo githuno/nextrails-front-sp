@@ -2,29 +2,27 @@ import { openDB, IDBPDatabase, deleteDB } from "idb";
 import { useState, useCallback } from "react";
 import { Media } from "./types";
 
-const useIDBMedia = <T extends Media>(dbName: string) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const dbVersion = 1;
-  const storeName = "media";
+interface IDBMediaProps {
+  dbName: string;
+}
 
-  const initIDB = useCallback(async (): Promise<IDBPDatabase> => {
-    console.log("Initializing database");
+interface FetchIDBArgs<T> {
+  method: "AllGET" | "AllDELETE" | "AllDEBUG" | "GET" | "POST" | "DELETE";
+  storeName: string;
+  data?: T;
+}
+
+const useIDBMedia = <T extends Media>({ dbName }: IDBMediaProps) => {
+  const [isLoading, setIsLoading] = useState(true);
+
+  const destroyDB = useCallback(async (): Promise<void> => {
     try {
       await deleteDB(dbName);
-      return openDB(dbName, dbVersion, {
-        upgrade(db, oldVersion, newVersion) {
-          console.log(`Upgrading from version ${oldVersion} to ${newVersion}`);
-          if (!db.objectStoreNames.contains(storeName)) {
-            console.log(`Creating object store: ${storeName}`);
-            db.createObjectStore(storeName, { keyPath: "id" });
-          }
-        },
-      });
     } catch (error) {
-      console.error("Error initializing database:", error);
+      console.error("Error destroying database:", error);
       throw error;
     }
-  }, [dbName, dbVersion, storeName]);
+  }, [dbName]);
 
   const debugDB = useCallback(async () => {
     console.log("Debugging database");
@@ -39,35 +37,100 @@ const useIDBMedia = <T extends Media>(dbName: string) => {
     }
   }, [dbName]);
 
-  const fetchObjects = useCallback(async (): Promise<Media[]> => {
+  const getAllObjects = useCallback(async (): Promise<Media[]> => {
     try {
-      const db = await openDB(dbName, dbVersion);
-      const tx = db.transaction(storeName, "readonly");
-      const allObjects = await tx.objectStore(storeName).getAll();
-      const objects = allObjects.map(
-        (media: { id: string; blob: Blob; isUploaded: boolean }) => ({
+      const db = await openDB(dbName);
+      const tx = db.transaction(db.objectStoreNames, "readonly");
+      const allObjects = await Promise.all(
+        Array.from(tx.objectStoreNames).map(async (storeName) => {
+          const store = tx.objectStore(storeName);
+          return await store.getAll();
+        })
+      );
+      const objects = allObjects
+        .flat()
+        .map((media: { id: string; blob: Blob; isUploaded: boolean }) => ({
           id: media.id,
           url: URL.createObjectURL(media.blob),
           blob: media.blob,
           isUploaded: media.isUploaded || false,
           type: media.blob.type.startsWith("image") ? "image" : "video",
-        })
-      );
+        }));
       return objects as Media[];
-
     } catch (error) {
-      console.error("Error fetching objects:", error);
-      if (error instanceof Error) {
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
-      }
+      console.error("Error fetching all objects:", error);
       throw error;
     }
-  }, [storeName, dbName]);
+  }, [dbName]);
 
-  const saveObject = async (data: T): Promise<void> => {
+  const initStore = useCallback(
+    async (storeName: string): Promise<IDBPDatabase> => {
+      console.log("Initializing store:", storeName);
+      try {
+        const db = await openDB(dbName);
+        if (!db.objectStoreNames.contains(storeName)) {
+          const newVersion = db.version + 1;
+          return openDB(dbName, newVersion, {
+            upgrade(db) {
+              db.createObjectStore(storeName, { keyPath: "id" });
+            },
+          });
+        }
+        return db;
+      } catch (error) {
+        console.error("Error initializing store:", storeName, error);
+        throw error;
+      }
+    },
+    [dbName]
+  );
+
+  const deleteStore = useCallback(
+    async (storeName: string): Promise<void> => {
+      try {
+        const db = await openDB(dbName);
+        if (db.objectStoreNames.contains(storeName)) {
+          db.deleteObjectStore(storeName);
+        }
+      } catch (error) {
+        console.error("Error deleting store:", storeName, error);
+        throw error;
+      }
+    },
+    [dbName]
+  );
+
+  const getStoreObjects = useCallback(
+    async (storeName: string): Promise<Media[]> => {
+      try {
+        const db = await initStore(storeName);
+        const tx = db.transaction(storeName, "readonly");
+        const storeObjects = await tx.objectStore(storeName).getAll();
+        const objects = storeObjects.map(
+          (media: { id: string; blob: Blob; isUploaded: boolean }) => ({
+            id: media.id,
+            url: URL.createObjectURL(media.blob),
+            blob: media.blob,
+            isUploaded: media.isUploaded || false,
+            type: media.blob.type.startsWith("image") ? "image" : "video",
+          })
+        );
+        return objects as Media[];
+      } catch (error) {
+        console.error("Error fetching objects:", error);
+        if (error instanceof Error) {
+          console.error("Error message:", error.message);
+          console.error("Error stack:", error.stack);
+        }
+        throw error;
+      }
+    },
+    [dbName]
+  );
+
+  const postStoreObject = async (storeName: string, data: T): Promise<void> => {
     try {
-      const db = await openDB(dbName, dbVersion);
+      const db = await initStore(storeName);
       const tx = db.transaction(storeName, "readwrite");
       const store = tx.objectStore(storeName);
       await store.add(data);
@@ -77,9 +140,12 @@ const useIDBMedia = <T extends Media>(dbName: string) => {
     }
   };
 
-  const deleteObject = async (id: string): Promise<void> => {
+  const deleteStoreObject = async (
+    storeName: string,
+    id: string
+  ): Promise<void> => {
     try {
-      const db = await openDB(dbName, dbVersion);
+      const db = await openDB(dbName);
       const tx = db.transaction(storeName, "readwrite");
       const store = tx.objectStore(storeName);
       await store.delete(id);
@@ -89,36 +155,48 @@ const useIDBMedia = <T extends Media>(dbName: string) => {
     }
   };
 
-  const fetchIDB = useCallback(async (Method: string, data?: T): Promise<Media[] | void> => {
-    try {
-      if (Method === "GET") {
-        setIsLoading(true);
-        const db = await openDB(dbName, dbVersion);
-        const objects = await fetchObjects();
-        setIsLoading(false);
-        return objects;
+  const fetchIDB = useCallback(
+    async ({
+      method,
+      storeName,
+      data,
+    }: FetchIDBArgs<T>): Promise<Media[] | void> => {
+      try {
+        if (method === "AllGET") {
+          setIsLoading(true);
+          const objects = await getAllObjects();
+          setIsLoading(false);
+          return objects;
+        }
+        if (method === "GET") {
+          setIsLoading(true);
+          const objects = await getStoreObjects(storeName);
+          setIsLoading(false);
+          return objects;
+        }
+        if (method === "POST" && data) {
+          await postStoreObject(storeName, data);
+        }
+        if (method === "DELETE" && data) {
+          await deleteStoreObject(storeName, data.id);
+        }
+        if (method === "AllDEBUG") {
+          await debugDB();
+        }
+        if (method === "AllDELETE") {
+          setIsLoading(true);
+          await destroyDB();
+          const objects = await getStoreObjects(storeName);
+          setIsLoading(false);
+          return objects;
+        }
+      } catch (error) {
+        console.error("Error in fetchIDB:", error);
+        throw error;
       }
-      if (Method === "POST" && data) {
-        await saveObject(data);
-      }
-      if (Method === "DELETE" && data) {
-        await deleteObject(data.id);
-      }
-      if (Method === "DEBUG") {
-        await debugDB();
-      }
-      if (Method === "INIT") {
-        setIsLoading(true);
-        const db = await initIDB();
-        const objects = await fetchObjects();
-        setIsLoading(false);
-        return objects;
-      }
-    } catch (error) {
-      console.error("Error in fetchIDB:", error);
-      throw error;
-    }
-  }, []);
+    },
+    []
+  );
 
   return [fetchIDB, isLoading] as const;
 };

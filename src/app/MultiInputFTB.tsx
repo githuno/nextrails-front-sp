@@ -62,7 +62,7 @@ const MultiInputFTB: React.FC = () => {
 
   return (
     <div className="fixed top-0 w-svw h-svh pointer-events-none z-50">
-      <div className="absolute bottom-[5%] right-[5%] pointer-events-auto">
+      <div className="absolute bottom-[5%] right-0 pointer-events-auto">
         <button
           onClick={toggleButtons}
           className="w-16 h-16 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center"
@@ -97,7 +97,7 @@ const MultiInputFTB: React.FC = () => {
           })}
       </div>
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <div className="p-4">{selectedComponent}</div>
+        <div className="p-2">{selectedComponent}</div>
       </Modal>
     </div>
   );

@@ -1,35 +1,28 @@
 import React, { useState, useEffect, useRef } from "react";
-import { CameraState } from "../_utils";
 import jsQR from "jsqr";
+import { useCameraContext } from "../CameraContext";
 
 interface QrScanViewerProps {
   setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
   onQRCodeScanned: (data: string) => void;
-  state: CameraState;
-  setState: React.Dispatch<React.SetStateAction<CameraState>>;
 }
 
 const QrScanViewer: React.FC<QrScanViewerProps> = ({
   setStream,
   onQRCodeScanned,
-  state,
-  setState,
 }) => {
+  const { cameraState, setCameraState } = useCameraContext();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [stream, setLocalStream] = useState<MediaStream | null>(null);
 
-  const getMediaSuccess = (stream: MediaStream) => {
+  const onGetSensorSuccess = (stream: MediaStream) => {
     setStream(stream);
     setLocalStream(stream);
-    setState("scanning");
+    setCameraState("scanning");
   };
 
-  const getMediaError = (error: Error) => {
-    console.error("Camera Device Not Found: ", error);
-  };
-
-  const getMedia = () => {
+  const getSensor = () => {
     navigator.mediaDevices
       .getUserMedia({
         video: {
@@ -39,26 +32,35 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({
         },
         audio: false,
       })
-      .then(getMediaSuccess)
+      .then(onGetSensorSuccess)
       .catch((err) => {
         navigator.mediaDevices
           .getUserMedia({
             video: true,
             audio: false,
           })
-          .then(getMediaSuccess)
+          .then(onGetSensorSuccess)
           .catch(() => {
-            getMediaError(err);
+            console.error("Camera Device Not Found: ", err);
           });
       });
   };
 
   useEffect(() => {
-    getMedia();
+    getSensor();
     return () => {
+      //
       if (stream) {
         stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       }
+      //
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      // cameraの使用をやめる
+      setStream(null);
+      setLocalStream(null);
+      setCameraState("initializing");
     };
   }, []);
 
@@ -72,7 +74,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
-    if (state === "scanning") {
+    if (cameraState === "scanning") {
       const scanQRCode = () => {
         if (videoRef.current && canvasRef.current) {
           const video = videoRef.current;
@@ -110,7 +112,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({
         clearInterval(intervalId); // Clear the interval on unmount
       }
     };
-  }, [stream, state]);
+  }, [stream, cameraState]);
 
   return (
     <div>

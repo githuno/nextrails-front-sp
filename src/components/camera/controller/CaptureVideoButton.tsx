@@ -1,26 +1,21 @@
 import React, { useRef } from "react";
-import { CameraState, Media, useIDBMedia, LoadingSpinner } from "../_utils";
+import { Media, useIDBMedia, LoadingSpinner } from "../_utils";
+import { useCameraContext } from "../CameraContext";
 
 interface CaptureVideoButtonProps {
-  stream: MediaStream | null;
-  state: CameraState;
-  setState: React.Dispatch<React.SetStateAction<CameraState>>;
   onSaved: () => void;
 }
 
-const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
-  stream,
-  state,
-  setState,
-  onSaved,
-}) => {
+const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({ onSaved }) => {
+  const { stream, cameraState, setCameraState, dbName, imageSetName } =
+    useCameraContext();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedBlobsRef = useRef<Blob[]>([]);
-  const [fetchIDB, ] = useIDBMedia("Media");
+  const [fetchIDB] = useIDBMedia({ dbName });
 
   const handleStartRecording = () => {
     if (stream) {
-      setState("recording");
+      setCameraState("recording");
       recordedBlobsRef.current = [];
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorder.ondataavailable = (event) => {
@@ -30,9 +25,19 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
       };
       mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedBlobsRef.current, { type: "video/webm" });
-        const video: Media = { id: new Date().toISOString(), blob, url: null, isUploaded: false, type: "video" };
-        await fetchIDB("POST", video);
-        setState("initializing"); 
+        const video: Media = {
+          id: new Date().toISOString(),
+          blob,
+          url: null,
+          isUploaded: false,
+          type: "video",
+        };
+        await fetchIDB({
+          method: "POST",
+          data: video,
+          storeName: imageSetName,
+        });
+        setCameraState("initializing");
         onSaved();
       };
       mediaRecorder.start();
@@ -43,19 +48,27 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
   const handleStopRecording = () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
-      setState("saving");
+      setCameraState("saving");
     }
   };
 
   return (
     <div className="flex items-center justify-center w-24 h-24 bg-red-500 rounded-full shadow-lg">
       <button
-        onClick={state === "recording" ? handleStopRecording : handleStartRecording}
-        disabled={state === "saving"}
+        onClick={
+          cameraState === "recording"
+            ? handleStopRecording
+            : handleStartRecording
+        }
+        disabled={cameraState === "saving"}
       >
-        {state === "saving" ? null : state === "recording" ? "STOP" : "REC"}
+        {cameraState === "saving"
+          ? null
+          : cameraState === "recording"
+          ? "STOP"
+          : "REC"}
       </button>
-      {state === "saving" && <LoadingSpinner />}
+      {cameraState === "saving" && <LoadingSpinner />}
     </div>
   );
 };

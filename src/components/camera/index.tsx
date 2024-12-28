@@ -1,24 +1,28 @@
-import React, { useState } from "react";
-import { CameraState } from "./_utils";
+import React from "react";
 import { QrScanViewer } from "./capture/QrScanViewer";
 import { Controller } from "./controller";
 import { LocalGallery } from "./gallery/LocalGallery";
+import { CameraProvider, useCameraContext } from "./CameraContext";
 
-const Camera: React.FC = () => {
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [state, setState] = useState<CameraState>("initializing");
+const CameraContent: React.FC = () => {
+  const { setStream } = useCameraContext();
+
   return (
     <div className="flex flex-col items-center justify-between p-1">
       <QrScanViewer
         setStream={setStream}
-        state={state}
-        setState={setState}
         onQRCodeScanned={(data) => alert(data)}
       />
-      <Controller stream={stream} state={state} setState={setState} />
-      <LocalGallery state={state} setState={setState} />
+      <Controller />
+      <LocalGallery />
     </div>
   );
 };
+
+const Camera: React.FC = () => (
+  <CameraProvider>
+    <CameraContent />
+  </CameraProvider>
+);
 
 export default Camera;
