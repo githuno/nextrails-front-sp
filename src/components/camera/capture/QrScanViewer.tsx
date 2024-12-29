@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect } from "react";
 import jsQR from "jsqr";
 import { useCameraContext } from "../CameraContext";
 import { LoadingSpinner } from "../_utils";
@@ -169,8 +169,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scannerRef = useRef<QrScannerManager | null>(null);
-  const [renderCount, setRenderCount] = useState(0); // 暫定対応
-  
+
   useEffect(() => {
     // ビデオとキャンバスが存在しない場合はリターン
     if (!videoRef.current || !canvasRef.current) {
@@ -190,16 +189,12 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
         console.error("Failed to initialize QR scanner:", error);
         setCameraState("initializing");
       });
-    // 初回マウント時に2回レンダリングさせる（暫定対応）
-    if (renderCount < 2) {
-      setRenderCount(renderCount + 1);
-    }
     // アンマウント時にクリーンアップ
     return () => {
       scannerRef.current?.cleanup();
     };
-  }, [renderCount]);
-  
+  }, []);
+
   return (
     <>
       {cameraState === "initializing" && (
