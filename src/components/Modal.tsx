@@ -43,7 +43,7 @@ const Modal: FC<ModalProps> = ({
       className={`modal bg-white ${className}`}
       {...props}
     >
-      <div className="relative p-2">
+      <div className="relative p-2 bg-translate">
         {children}
 
         <button
