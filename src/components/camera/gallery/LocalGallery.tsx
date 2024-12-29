@@ -152,16 +152,16 @@ const LocalGallery = () => {
         <Modal
           isOpen={isNameModalOpen}
           onClose={() => setIsNameModalOpen(false)}
+          className="bg-transparent"
         >
-          <div className="p-4">
-            <h2 className="text-xl font-bold mb-4">名前を編集</h2>
+          <div className="rounded-lg p-4 bg-white/80 shadow-lg">
+            <h2 className="text-xl mb-4">setNameを編集</h2>
             <input
               type="text"
               value={imageSetName}
               onChange={(e) => setImageSetName(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded"
+              className="w-full p-2 border border-gray-300 bg-white/80 rounded"
             />
-            <div className="mt-4 flex justify-end"></div>
           </div>
         </Modal>
 

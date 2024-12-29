@@ -4,7 +4,11 @@ import React, { useEffect, useState } from "react";
 import { Modal } from "@/components";
 import Camera from "@/components/camera";
 
-// カメラが利用可能かどうかをチェックする関数
+interface MultiInputFTBProps extends React.HTMLAttributes<HTMLDivElement> {
+  className?: string;
+}
+
+// カメラが利用可能かどうかをチェックしてcameraボタンを非活性にするか判定する
 // const hasCamera = async (): Promise<boolean> => {
 //   try {
 //     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -15,7 +19,10 @@ import Camera from "@/components/camera";
 //   }
 // };
 
-const MultiInputFTB: React.FC = () => {
+const MultiInputFTB: React.FC<MultiInputFTBProps> = ({
+  className,
+  ...props
+}) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedComponent, setSelectedComponent] =
@@ -62,7 +69,10 @@ const MultiInputFTB: React.FC = () => {
 
   return (
     <div className="fixed top-0 w-svw h-svh pointer-events-none z-50">
-      <div className="absolute bottom-[5%] right-0 pointer-events-auto">
+      <div
+        className={`absolute bottom-[5%] right-[5%] pointer-events-auto ${className}`}
+        {...props}
+      >
         <button
           onClick={toggleButtons}
           className="w-16 h-16 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center"
@@ -96,8 +106,12 @@ const MultiInputFTB: React.FC = () => {
             );
           })}
       </div>
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <div className="p-2">{selectedComponent}</div>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        className="bg-transparent"
+      >
+        <div className="shadow-md">{selectedComponent}</div>
       </Modal>
     </div>
   );
