@@ -40,10 +40,10 @@ const Modal: FC<ModalProps> = ({
   return createPortal(
     <dialog
       ref={dialogRef}
-      className={`modal bg-white ${className}`}
+      className={`modal ${className}`}
       {...props}
     >
-      <div className="relative p-2 bg-translate">
+      <div className="relative p-2">
         {children}
 
         <button
