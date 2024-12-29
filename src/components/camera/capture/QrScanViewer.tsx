@@ -25,28 +25,28 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({
     [setStream, setCameraState]
   );
 
-  const getSensor = useCallback(() => {
-    navigator.mediaDevices
-      .getUserMedia({
+  const getSensor = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: {
             exact: "environment", // リアカメラを指定
           },
         },
         audio: false,
-      })
-      .then(onGetSensorSuccess)
-      .catch((err) => {
-        navigator.mediaDevices
-          .getUserMedia({
-            video: true,
-            audio: false,
-          })
-          .then(onGetSensorSuccess)
-          .catch(() => {
-            console.error("Camera Device Not Found: ", err);
-          });
       });
+      onGetSensorSuccess(stream);
+    } catch (err) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+        onGetSensorSuccess(stream);
+      } catch (error) {
+        console.error("Camera Device Not Found: ", err);
+      }
+    }
   }, [onGetSensorSuccess]);
 
   const cleanup = useCallback(() => {
@@ -93,12 +93,15 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({
 
   // コンポーネントがマウントされたときにセンサーを取得し、アンマウントされたときにクリーンアップする
   useEffect(() => {
-    getSensor();
-    const stopScanning = startScanning();
-    return () => {
-      cleanup();
-      stopScanning();
+    const initializeSensor = async () => {
+      await getSensor();
+      const stopScanning = startScanning();
+      return () => {
+        cleanup();
+        stopScanning();
+      };
     };
+    initializeSensor();
   }, []);
 
   // streamが更新されたらvideoRefにstreamをセット
