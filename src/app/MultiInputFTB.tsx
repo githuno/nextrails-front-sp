@@ -19,6 +19,12 @@ interface MultiInputFTBProps extends React.HTMLAttributes<HTMLDivElement> {
 //   }
 // };
 
+const resetZoom = () => {
+  document.body.style.zoom = "1";
+  document.body.style.transform = "scale(1)";
+  document.body.style.transformOrigin = "0 0";
+};
+
 const MultiInputFTB: React.FC<MultiInputFTBProps> = ({
   className,
   ...props
@@ -40,8 +46,11 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({
 
   const openModal = (component: React.ReactNode) => {
     setSelectedComponent(component);
-    setIsExpanded(false);
+    if (React.isValidElement(component) && component.type === Camera) {
+      resetZoom();
+    }
     setIsModalOpen(true);
+    setIsExpanded(false);
   };
 
   const buttons = [
@@ -109,9 +118,9 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        className="bg-transparent fixed bottom-[-15%]"
+        className="bg-transparent fixed bottom-[-20%]"
       >
-        <div>{selectedComponent}</div>
+        {selectedComponent}
       </Modal>
     </div>
   );

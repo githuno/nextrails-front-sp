@@ -6,15 +6,8 @@ import React, {
   Dispatch,
   SetStateAction,
 } from "react";
+import {CameraState} from "./_utils";
 import { Session } from "@/components";
-
-type CameraState =
-  | "initializing"
-  | "scanning"
-  | "recording"
-  | "capturing"
-  | "saving"
-  | "waiting";
 
 interface CameraContextProps {
   imageSetName: string;

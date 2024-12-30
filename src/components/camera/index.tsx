@@ -1,21 +1,19 @@
-import React, { useRef } from "react";
+import React from "react";
 import { QrScanViewer } from "./capture/QrScanViewer";
 import { Controller } from "./controller";
 import { LocalGallery } from "./gallery/LocalGallery";
 import { CameraProvider } from "./CameraContext";
 
 const CameraContent: React.FC = () => {
-  const qrScanViewerRef = useRef<HTMLDivElement>(null);
-
   return (
     <>
-      <div ref={qrScanViewerRef}>
+      <div>
         <QrScanViewer onQRCodeScanned={(data) => alert(data)} />
       </div>
-      <div className="fixed bottom-8 flex items-center justify-center">
+      <div className="fixed bottom-[8%] flex items-center justify-center">
         <Controller />
       </div>
-      <div className="fixed top-2 left-0 w-full p-2 max-h-[20%] overflow-y-auto">
+      <div className="fixed top-1 left-0 w-full p-2">
         <LocalGallery />
       </div>
     </>
