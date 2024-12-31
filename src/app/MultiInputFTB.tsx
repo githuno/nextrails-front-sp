@@ -20,7 +20,7 @@ interface MultiInputFTBProps extends React.HTMLAttributes<HTMLDivElement> {
 // };
 
 const resetZoom = () => {
-  document.body.style.zoom = "1";
+  (document.body.style as any).zoom = "1";
   document.body.style.transform = "scale(1)";
   document.body.style.transformOrigin = "0 0";
 };
