@@ -19,8 +19,7 @@ type Item = {
 export default function Page() {
   // 仮
   const session: Session = {
-    user_id: "sample_u_id",
-    object_id: "sample_o_id",
+    userId: "11111111-1111-1111-1111-111111111111",
   };
 
   // サーバーサイドとクライアントサイドで同じメッセージを表示する ↓
@@ -46,7 +45,7 @@ export default function Page() {
             Accept: "application/json",
           },
           body: JSON.stringify({
-            user_id: session.user_id,
+            user_id: session.userId,
           }),
         }
       );
@@ -58,7 +57,7 @@ export default function Page() {
     } catch (error) {
       console.error("Error fetching items:", error);
     }
-  }, [session.user_id, session.object_id]);
+  }, [session.userId]);
 
   useEffect(() => {
     if (isClient) {

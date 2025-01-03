@@ -26,10 +26,9 @@ export const CameraProvider: React.FC<{ children: ReactNode }> = ({
 }) => {
   // 仮
   const session: Session = {
-    user_id: "sample_u_id",
-    object_id: "sample_o_id",
+    userId: "11111111-1111-1111-1111-111111111111",
   };
-  const dbName = `AppName-${session.user_id}`;
+  const dbName = `user-${session.userId}`;
   const [imageSetName, setImageSetName] = useState<string>("1");
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraState, setCameraState] = useState<CameraState>("initializing");

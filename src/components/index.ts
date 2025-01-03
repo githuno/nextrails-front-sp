@@ -13,6 +13,5 @@ export {
 
 // 仮
 type Session = {
-  user_id: string;
-  object_id: string;
+  userId: string;
 };
