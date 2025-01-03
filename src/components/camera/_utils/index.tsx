@@ -1,5 +1,6 @@
-import useIDBMedia from "./useIDBMedia";
-import { Media, CameraState } from "./types";
+import useIdb from "./useIdb";
+import useCloudStorage from "./useCloudStorage";
+import { ImagesetStatus, FileType, CameraState } from "./types";
 import {
   LoadingSpinner,
   CloseIcon,
@@ -9,18 +10,22 @@ import {
   StopIcon,
   MenuIcon,
   PictureIcon,
+  SyncIcon,
 } from "./icons";
 
 export {
-  useIDBMedia,
+  useIdb,
+  useCloudStorage,
   LoadingSpinner,
-  type Media,
+  ImagesetStatus,
+  type FileType,
   type CameraState,
   CloseIcon,
   EditIcon,
   CameraIcon,
   RecordIcon,
   StopIcon,
+  SyncIcon,
   MenuIcon,
   PictureIcon,
 };

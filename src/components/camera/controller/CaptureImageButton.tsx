@@ -1,5 +1,11 @@
 import React, { useRef } from "react";
-import { Media, useIDBMedia, LoadingSpinner, CameraIcon } from "../_utils";
+import {
+  useIdb,
+  LoadingSpinner,
+  CameraIcon,
+  FileType,
+  ImagesetStatus,
+} from "../_utils";
 import { useCameraContext } from "../CameraContext";
 
 interface CaptureImageButtonProps {
@@ -10,7 +16,7 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { stream, cameraState, setCameraState, imageSetName, dbName } =
     useCameraContext();
-  const [fetchIDB] = useIDBMedia({ dbName });
+  const { idb } = useIdb(dbName);
 
   const handleCaptureImage = async () => {
     if (cameraState === "recording") return;
@@ -30,18 +36,21 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
           canvas.toBlob((blob) => resolve(blob), "image/png")
         );
         if (blob) {
-          const image: Media = {
-            id: new Date().toISOString(),
-            blob,
-            url: null,
-            isUploaded: false,
-            type: "image",
+          const image: FileType & { blob: Blob } = {
+            id: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+            path: null,
+            blob: blob,
+
+            filename: "", // PUTで編集させる
+            version: 1, // PUTで編集された回数
+            extension: "png",
+            key: null, // S3 key　=> あればアップロード済み
+            createdAt: new Date().toISOString(), // 作成日時
+            updatedAt: new Date().toISOString(), // 更新日時
+            deletedAt: null, // 削除日時
+            status: ImagesetStatus.DRAFT,
           };
-          await fetchIDB({
-            method: "POST",
-            data: image,
-            storeName: imageSetName,
-          });
+          await idb.post(imageSetName, image);
           onSaved();
         }
       }

@@ -1,6 +1,6 @@
 import { openDB, IDBPDatabase, deleteDB } from "idb";
 import { useState, useCallback } from "react";
-import { Media } from "./types";
+import { FileType } from "./types";
 
 interface IDBMediaProps {
   dbName: string;
@@ -12,7 +12,7 @@ interface FetchIDBArgs<T> {
   data?: T;
 }
 
-const useIDBMedia = <T extends Media>({ dbName }: IDBMediaProps) => {
+const useIDBMedia = <T extends FileType>({ dbName }: IDBMediaProps) => {
   const [isLoading, setIsLoading] = useState(true);
 
   const destroyDB = useCallback(async (): Promise<void> => {
@@ -37,7 +37,7 @@ const useIDBMedia = <T extends Media>({ dbName }: IDBMediaProps) => {
     }
   }, [dbName]);
 
-  const getAllObjects = useCallback(async (): Promise<Media[]> => {
+  const getAllObjects = useCallback(async (): Promise<FileType[]> => {
     try {
       const db = await openDB(dbName);
       const tx = db.transaction(db.objectStoreNames, "readonly");
@@ -49,14 +49,14 @@ const useIDBMedia = <T extends Media>({ dbName }: IDBMediaProps) => {
       );
       const objects = allObjects
         .flat()
-        .map((media: { id: string; blob: Blob; isUploaded: boolean }) => ({
+        .map((media: { id: string; blob: Blob; }) => ({
           id: media.id,
-          url: URL.createObjectURL(media.blob),
           blob: media.blob,
-          isUploaded: media.isUploaded || false,
-          type: media.blob.type.startsWith("image") ? "image" : "video",
-        }));
-      return objects as Media[];
+          extension: media.blob.type.split("/")[1], // 例: "image/jpeg" -> "jpeg"
+          size: media.blob.size,
+          path: URL.createObjectURL(media.blob),
+        })) as FileType[];
+      return objects;
     } catch (error) {
       console.error("Error fetching all objects:", error);
       throw error;
@@ -101,21 +101,21 @@ const useIDBMedia = <T extends Media>({ dbName }: IDBMediaProps) => {
   );
 
   const getStoreObjects = useCallback(
-    async (storeName: string): Promise<Media[]> => {
+    async (storeName: string): Promise<FileType[]> => {
       try {
         const db = await initStore(storeName);
         const tx = db.transaction(storeName, "readonly");
         const storeObjects = await tx.objectStore(storeName).getAll();
         const objects = storeObjects.map(
-          (media: { id: string; blob: Blob; isUploaded: boolean }) => ({
+          (media: { id: string; blob: Blob; }) => ({
             id: media.id,
-            url: URL.createObjectURL(media.blob),
             blob: media.blob,
-            isUploaded: media.isUploaded || false,
-            type: media.blob.type.startsWith("image") ? "image" : "video",
+            extension: media.blob.type.split("/")[1], // 例: "image/jpeg" -> "jpeg"
+            size: media.blob.size,
+            path: URL.createObjectURL(media.blob),
           })
         );
-        return objects as Media[];
+        return objects as FileType[];
       } catch (error) {
         console.error("Error fetching objects:", error);
         if (error instanceof Error) {
@@ -160,7 +160,7 @@ const useIDBMedia = <T extends Media>({ dbName }: IDBMediaProps) => {
       method,
       storeName,
       data,
-    }: FetchIDBArgs<T>): Promise<Media[] | void> => {
+    }: FetchIDBArgs<T>): Promise<FileType[] | void> => {
       try {
         if (method === "AllGET") {
           setIsLoading(true);
@@ -198,7 +198,11 @@ const useIDBMedia = <T extends Media>({ dbName }: IDBMediaProps) => {
     []
   );
 
-  return [fetchIDB, isLoading] as const;
+  const syncCloud = useCallback(async () => {
+    // ここにクラウドとの同期処理を記述
+  }, []);
+
+  return [fetchIDB, syncCloud, isLoading] as const;
 };
 
 export default useIDBMedia;

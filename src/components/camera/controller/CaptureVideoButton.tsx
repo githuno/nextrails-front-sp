@@ -1,17 +1,26 @@
 import React, { useRef } from "react";
-import { Media, useIDBMedia, LoadingSpinner, StopIcon, RecordIcon } from "../_utils";
+import {
+  useIdb,
+  LoadingSpinner,
+  StopIcon,
+  RecordIcon,
+  useCloudStorage,
+  ImagesetStatus,
+} from "../_utils";
 import { useCameraContext } from "../CameraContext";
 
 interface CaptureVideoButtonProps {
-  onSaved: () => void;
+  onSaveCompleted: () => void;
 }
 
-const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({ onSaved }) => {
+const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
+  onSaveCompleted,
+}) => {
   const { stream, cameraState, setCameraState, dbName, imageSetName } =
     useCameraContext();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedBlobsRef = useRef<Blob[]>([]);
-  const [fetchIDB] = useIDBMedia({ dbName });
+  const { idb } = useIdb(dbName);
 
   const handleStartRecording = () => {
     if (stream) {
@@ -25,20 +34,23 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({ onSaved }) => {
       };
       mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedBlobsRef.current, { type: "video/webm" });
-        const video: Media = {
-          id: new Date().toISOString(),
-          blob,
-          url: null,
-          isUploaded: false,
-          type: "video",
+        const video = {
+          id: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+          path: null,
+          blob: blob,
+
+          filename: "", // PUTで編集させる
+          version: 1, // PUTで編集された回数
+          extension: "webm",
+          key: null, // S3 key　=> あればアップロード済み
+          createdAt: new Date().toISOString(), // 作成日時
+          updatedAt: new Date().toISOString(), // 更新日時
+          deletedAt: null, // 削除日時
+          status: ImagesetStatus.DRAFT,
         };
-        await fetchIDB({
-          method: "POST",
-          data: video,
-          storeName: imageSetName,
-        });
+        await idb.post(imageSetName, video);
         setCameraState("initializing");
-        onSaved();
+        onSaveCompleted();
       };
       mediaRecorder.start();
       mediaRecorderRef.current = mediaRecorder;
