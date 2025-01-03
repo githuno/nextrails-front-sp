@@ -1,7 +1,6 @@
 import React, { useRef, useEffect } from "react";
 import jsQR from "jsqr";
 import { useCameraContext } from "../CameraContext";
-import { LoadingSpinner } from "../_utils";
 
 // TODO: バーコードスキャナーの実装したい
 // TODO: タブを離れた時にカメラを完全停止したい
@@ -202,11 +201,6 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
 
   return (
     <>
-      {cameraState === "initializing" && (
-        <div className="grid justify-center">
-          <LoadingSpinner />
-        </div>
-      )}
       <video ref={videoRef} className="rounded-lg" autoPlay playsInline muted />
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </>

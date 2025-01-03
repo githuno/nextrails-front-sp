@@ -6,7 +6,7 @@ import { MenuButton } from "./MenuButton";
 const Controller = () => {
   return (
     <div className="flex h-6 items-center justify-center gap-2 rounded-lg shadow-lg bg-white/20">
-      <CaptureVideoButton onSaved={() => {}} />
+      <CaptureVideoButton onSaveCompleted={() => {}} />
       <CaptureImageButton onSaved={() => {}} />
       <SelectImageButton onSaved={() => {}} />
       <MenuButton />
