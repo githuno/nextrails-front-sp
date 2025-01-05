@@ -109,7 +109,7 @@ const LocalGallery = () => {
         // CloudStorageへアップロード
         const type = contentTypeToExtension[file.contentType];
         file.key = await cloudStorage.upload({
-          storagePath: `users/${session.userId}/${imageset.name}/${type.class}/${file.storageId}.${type.ext}`,
+          storagePath: `users/${session.userId}/${storeName}/${type.class}/${file.storageId}.${type.ext}`,
           fileId: file.storageId,
           filePath: file.path,
           contentType: file.contentType,
