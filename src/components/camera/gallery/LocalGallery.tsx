@@ -152,7 +152,7 @@ const LocalGallery = () => {
     } catch (error) {
       console.error("Error uploading files:", error);
     }
-  }, [cloudStorage, imageset]);
+  }, [cloudStorage, imageset, storeName]);
 
   // オンラインメソッド PUT -----------------------------------------------------
   const autoUpdateFiles = useCallback(async () => {
@@ -178,7 +178,7 @@ const LocalGallery = () => {
     } catch (error) {
       console.error("Error updating files:", error);
     }
-  }, [imageset, syncAt]);
+  }, [imageset, syncAt, storeName]);
 
   // オンラインメソッド DELETE --------------------------------------------------
   const deleteFile = useCallback(async (fileId: string) => {
@@ -195,7 +195,7 @@ const LocalGallery = () => {
     } catch (error) {
       console.error("Error updating files:", error);
     }
-  }, []);
+  }, [storeName]);
 
   const getImageset = useCallback(async () => {
     // debug
