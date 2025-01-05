@@ -2,8 +2,7 @@ import React from "react";
 import { useCameraContext } from "../CameraContext";
 import { MenuIcon } from "../_utils";
 
-interface MenuButtonProps {
-}
+interface MenuButtonProps {}
 
 const MenuButton: React.FC<MenuButtonProps> = () => {
   const { cameraState } = useCameraContext();
@@ -14,7 +13,7 @@ const MenuButton: React.FC<MenuButtonProps> = () => {
         onClick={() => {
           alert("Open menu");
         }}
-        disabled={cameraState === "saving"}
+        disabled={cameraState === "SAVING"}
         className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-slate-200 to-yellow-100 shadow-inner hover:shadow-lg transition-transform"
       >
         <MenuIcon />

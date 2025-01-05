@@ -4,7 +4,6 @@ import {
   LoadingSpinner,
   StopIcon,
   RecordIcon,
-  useCloudStorage,
   ImagesetStatus,
 } from "../_utils";
 import { useCameraContext } from "../CameraContext";
@@ -16,7 +15,7 @@ interface CaptureVideoButtonProps {
 const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
   onSaveCompleted,
 }) => {
-  const { stream, cameraState, setCameraState, dbName, imageSetName } =
+  const { stream, cameraState, setCameraState, dbName, storeName } =
     useCameraContext();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedBlobsRef = useRef<Blob[]>([]);
@@ -24,7 +23,7 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
 
   const handleStartRecording = () => {
     if (stream) {
-      setCameraState("recording");
+      setCameraState("RECORDING");
       recordedBlobsRef.current = [];
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorder.ondataavailable = (event) => {
@@ -35,21 +34,25 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
       mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedBlobsRef.current, { type: "video/webm" });
         const video = {
-          id: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+          storageId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+          id: null,
           path: null,
           blob: blob,
+          size: blob.size,
+          contentType: "video/webm",
 
           filename: "", // PUTで編集させる
           version: 1, // PUTで編集された回数
-          extension: "webm",
           key: null, // S3 key　=> あればアップロード済み
           createdAt: new Date().toISOString(), // 作成日時
           updatedAt: new Date().toISOString(), // 更新日時
           deletedAt: null, // 削除日時
-          status: ImagesetStatus.DRAFT,
+          metadata: {
+            status: ImagesetStatus.DRAFT,
+          },
         };
-        await idb.post(imageSetName, video);
-        setCameraState("initializing");
+        await idb.post(storeName, video);
+        setCameraState("INITIALIZING");
         onSaveCompleted();
       };
       mediaRecorder.start();
@@ -60,7 +63,7 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
   const handleStopRecording = () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
-      setCameraState("saving");
+      setCameraState("SAVING");
     }
   };
 
@@ -68,16 +71,16 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
     <div className="flex items-center justify-center w-16 h-16 rounded-full shadow-md">
       <button
         onClick={
-          cameraState === "recording"
+          cameraState === "RECORDING"
             ? handleStopRecording
             : handleStartRecording
         }
-        disabled={cameraState === "saving"}
+        disabled={cameraState === "SAVING"}
         className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-red-200 to-white shadow-inner hover:shadow-lg transition-transform"
       >
-        {cameraState === "saving" ? (
+        {cameraState === "SAVING" ? (
           <LoadingSpinner />
-        ) : cameraState === "recording" ? (
+        ) : cameraState === "RECORDING" ? (
           <StopIcon />
         ) : (
           <RecordIcon />

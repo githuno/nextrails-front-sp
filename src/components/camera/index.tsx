@@ -7,9 +7,7 @@ import { CameraProvider } from "./CameraContext";
 const CameraContent: React.FC = () => {
   return (
     <>
-      <div>
-        <QrScanViewer onQRCodeScanned={(data) => alert(data)} />
-      </div>
+      <QrScanViewer onQRCodeScanned={(data) => alert(data)} />
       <div className="fixed bottom-[8%] flex items-center justify-center">
         <Controller />
       </div>

@@ -15,7 +15,7 @@ const SelectImageButton: React.FC<SelectImageButtonProps> = ({ onSaved }) => {
         onClick={() => {
           alert("Select Image");
         }}
-        disabled={cameraState === "saving"}
+        disabled={cameraState === "SAVING"}
         className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-slate-200 to-yellow-100 shadow-inner hover:shadow-lg transition-transform"
       >
         <PictureIcon />

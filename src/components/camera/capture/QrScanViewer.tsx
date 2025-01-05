@@ -1,6 +1,8 @@
 import React, { useRef, useEffect } from "react";
 import jsQR from "jsqr";
 import { useCameraContext } from "../CameraContext";
+import { useModal } from "@/components";
+import { LoadingSpinner } from "../_utils";
 
 // TODO: バーコードスキャナーの実装したい
 // TODO: タブを離れた時にカメラを完全停止したい
@@ -13,12 +15,12 @@ class QrScannerManager {
   private canvasElement: HTMLCanvasElement | null = null;
   private scanInterval: number | null = null;
   private onQRCodeScanned: (data: string) => void;
-  private onStateChange: (state: "initializing" | "scanning") => void;
+  private onStateChange: (state: "INITIALIZING" | "SCANNING") => void;
   private setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
 
   constructor(
     onQRCodeScanned: (data: string) => void,
-    onStateChange: (state: "initializing" | "scanning") => void,
+    onStateChange: (state: "INITIALIZING" | "SCANNING") => void,
     setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>
   ) {
     this.onQRCodeScanned = onQRCodeScanned;
@@ -32,13 +34,13 @@ class QrScannerManager {
   ): Promise<void> {
     this.videoElement = videoElement;
     this.canvasElement = canvasElement;
-    this.onStateChange("initializing");
+    this.onStateChange("INITIALIZING");
 
     try {
       await this.getSensor();
       await this.waitForVideoReady();
       this.startScanning();
-      this.onStateChange("scanning");
+      this.onStateChange("SCANNING");
     } catch (error) {
       console.error("Failed to initialize camera:", error);
       this.cleanup();
@@ -160,7 +162,7 @@ class QrScannerManager {
     this.videoElement = null;
     this.canvasElement = null;
     this.setStream(null);
-    this.onStateChange("initializing");
+    this.onStateChange("INITIALIZING");
   }
 }
 
@@ -169,11 +171,13 @@ interface QrScanViewerProps {
 }
 
 const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
-  const { setCameraState, cameraState, setStream } = useCameraContext();
+  const { cameraState, setCameraState, setStream } = useCameraContext();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scannerRef = useRef<QrScannerManager | null>(null);
+  const { registerBeforeOpen, registerBeforeClose } = useModal();
 
+  // TODO:各effectを一つにまとめる
   useEffect(() => {
     // ビデオとキャンバスが存在しない場合はリターン
     if (!videoRef.current || !canvasRef.current) {
@@ -191,7 +195,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
       .initialize(videoRef.current, canvasRef.current)
       .catch((error) => {
         console.error("Failed to initialize QR scanner:", error);
-        setCameraState("initializing");
+        setCameraState("INITIALIZING");
       });
     // アンマウント時にクリーンアップ
     return () => {
@@ -199,8 +203,35 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
     };
   }, []);
 
+  useEffect(() => {
+    // ウィンドウが閉じられる前にクリーンアップ
+    return registerBeforeClose(async () => {
+      scannerRef.current?.cleanup();
+      return true;
+    });
+  }, []);
+
+  useEffect(() => {
+    // ウィンドウが開かれる前にカメラを再起動
+    return registerBeforeOpen(async () => {
+      if (videoRef.current && canvasRef.current && scannerRef.current) {
+        await scannerRef.current.initialize(
+          videoRef.current,
+          canvasRef.current
+        );
+        return true;
+      }
+      return false;
+    });
+  }, []);
+
   return (
     <>
+      {cameraState === "INITIALIZING" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <LoadingSpinner size="72px" />
+        </div>
+      )}
       <video ref={videoRef} className="rounded-lg" autoPlay playsInline muted />
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </>

@@ -14,13 +14,13 @@ interface CaptureImageButtonProps {
 
 const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { stream, cameraState, setCameraState, imageSetName, dbName } =
+  const { stream, cameraState, setCameraState, storeName, dbName } =
     useCameraContext();
   const { idb } = useIdb(dbName);
 
   const handleCaptureImage = async () => {
-    if (cameraState === "recording") return;
-    setCameraState("capturing");
+    if (cameraState === "RECORDING") return;
+    setCameraState("CAPTURING");
     if (stream && canvasRef.current) {
       const video = document.createElement("video");
       video.srcObject = stream;
@@ -37,37 +37,41 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
         );
         if (blob) {
           const image: FileType & { blob: Blob } = {
-            id: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+            storageId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+            id: null,
             path: null,
             blob: blob,
+            size: blob.size,
+            contentType: "image/png",
 
             filename: "", // PUTで編集させる
             version: 1, // PUTで編集された回数
-            extension: "png",
             key: null, // S3 key　=> あればアップロード済み
             createdAt: new Date().toISOString(), // 作成日時
             updatedAt: new Date().toISOString(), // 更新日時
             deletedAt: null, // 削除日時
-            status: ImagesetStatus.DRAFT,
+            metadata: {
+              status: ImagesetStatus.DRAFT,
+            },
           };
-          await idb.post(imageSetName, image);
+          await idb.post(storeName, image);
           onSaved();
         }
       }
       video.pause();
       video.srcObject = null;
     }
-    setCameraState("initializing");
+    setCameraState("INITIALIZING");
   };
 
   return (
     <div className="flex items-center justify-center w-16 h-16 rounded-full shadow-md">
       <button
         onClick={handleCaptureImage}
-        disabled={cameraState === "capturing"}
+        disabled={cameraState === "CAPTURING"}
         className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-blue-200 to-white shadow-inner hover:shadow-lg transition-transform"
       >
-        {cameraState === "capturing" ? <LoadingSpinner /> : <CameraIcon />}
+        {cameraState === "CAPTURING" ? <LoadingSpinner /> : <CameraIcon />}
       </button>
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </div>

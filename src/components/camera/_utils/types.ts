@@ -1,4 +1,26 @@
-import { BaseFileInfo } from "./useIdb";
+import { BaseFileType } from "./useIdb";
+
+interface FileType extends BaseFileType {
+  id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずstorageIdを使用する
+  contentType?: string;
+  size?: number;
+
+  filename?: string; // PUTで編集させる
+  version?: number; // PUTで編集された回数
+  key?: string | null; // S3 key　=> あればアップロード済み
+  createdAt?: string; // 作成日時
+  deletedAt?: string | null; // 削除日時
+  metadata?: {
+    status: ImagesetStatus; // imageSetのステータス　=> DRAFTのみ画面表示。SENTになったら非同期アップロードしてindexedDBからは削除する
+  };
+}
+
+type CameraState =
+  | "INITIALIZING"
+  | "SCANNING"
+  | "RECORDING"
+  | "CAPTURING"
+  | "SAVING";
 
 enum ImagesetStatus {
   DRAFT = "DRAFT",
@@ -7,25 +29,4 @@ enum ImagesetStatus {
   DELETED = "DELETED",
 }
 
-interface FileType extends BaseFileInfo {
-  filename?: string; // PUTで編集させる
-  version?: number; // PUTで編集された回数
-  extension?: string; // PUTで編集された拡張子
-  blob?: Blob; // Blobデータ
-
-  key?: string | null; // S3 key　=> あればアップロード済み
-  createdAt?: string; // 作成日時
-  updatedAt?: string; // 更新日時
-  deletedAt?: string | null; // 削除日時
-  status?: ImagesetStatus; // imageSetのステータス　=> DRAFTのみ画面表示。SENTになったら非同期アップロードしてindexedDBからは削除する
-}
-
-type CameraState =
-  | "initializing"
-  | "scanning"
-  | "recording"
-  | "capturing"
-  | "saving"
-  | "waiting";
-
-export { type FileType, ImagesetStatus, type CameraState };
+export { type FileType, type CameraState, ImagesetStatus };

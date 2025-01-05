@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ListGroup, ListGroupItem, Session } from "@/components";
 import Image from "next/image";
+import { session } from "@/components";
 
 type Item = {
   created_by: string;
@@ -17,11 +18,6 @@ type Item = {
 };
 
 export default function Page() {
-  // 仮
-  const session: Session = {
-    userId: "11111111-1111-1111-1111-111111111111",
-  };
-
   // サーバーサイドとクライアントサイドで同じメッセージを表示する ↓
   const [isClient, setIsClient] = useState(false);
   const loadingMessage = "Loading...";

@@ -6,12 +6,12 @@ import React, {
   Dispatch,
   SetStateAction,
 } from "react";
-import {CameraState} from "./_utils";
-import { Session } from "@/components";
+import { CameraState } from "./_utils";
+import { session } from "@/components";
 
 interface CameraContextProps {
-  imageSetName: string;
-  setImageSetName: Dispatch<SetStateAction<string>>;
+  storeName: string;
+  setStoreName: Dispatch<SetStateAction<string>>;
   stream: MediaStream | null;
   setStream: Dispatch<SetStateAction<MediaStream | null>>;
   cameraState: CameraState;
@@ -24,20 +24,17 @@ const CameraContext = createContext<CameraContextProps | undefined>(undefined);
 export const CameraProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  // 仮
-  const session: Session = {
-    userId: "11111111-1111-1111-1111-111111111111",
-  };
   const dbName = `user-${session.userId}`;
-  const [imageSetName, setImageSetName] = useState<string>("1");
+  const [storeName, setStoreName] = useState<string>("1");
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [cameraState, setCameraState] = useState<CameraState>("initializing");
+  const [cameraState, setCameraState] = useState<CameraState>("INITIALIZING");
 
   return (
+    // 以下の値変更は子孫の再レンダリングを伴う
     <CameraContext.Provider
       value={{
-        imageSetName,
-        setImageSetName,
+        storeName,
+        setStoreName,
         stream,
         setStream,
         cameraState,
