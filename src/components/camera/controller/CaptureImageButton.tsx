@@ -36,19 +36,21 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
           canvas.toBlob((blob) => resolve(blob), "image/png")
         );
         if (blob) {
-          const image: FileType & { blob: Blob } = {
-            storageId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
-            id: null,
-            path: null,
+          const image: FileType = {
+            idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
             blob: blob,
+            path: null,
+            // ------------------------------------------------- ↑ DBには不要
+            updatedAt: new Date().toISOString(),
+            // ---------------------------------- ↑ IdbFile | ↓ FileType ---
+            id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
             size: blob.size,
-            contentType: "image/png",
+            contentType: blob.type,
 
             filename: "", // PUTで編集させる
             version: 1, // PUTで編集された回数
             key: null, // S3 key　=> あればアップロード済み
             createdAt: new Date().toISOString(), // 作成日時
-            updatedAt: new Date().toISOString(), // 更新日時
             deletedAt: null, // 削除日時
             metadata: {
               status: ImagesetStatus.DRAFT,

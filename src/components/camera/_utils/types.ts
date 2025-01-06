@@ -1,7 +1,12 @@
-import { BaseFileType } from "./useIdb";
+import { IdbFile } from "./useIdb";
 
-interface FileType extends BaseFileType {
-  id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずstorageIdを使用する
+interface FileType extends IdbFile {
+  // idbId: string; // indexedDB用のID
+  // blob: Blob; // 画像データ
+  // path: string | null; // S3のパス
+  // updatedAt: string; // 更新日時
+
+  id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
   contentType?: string;
   size?: number;
 

@@ -21,8 +21,7 @@ interface Imageset {
 }
 
 const LocalGallery = () => {
-  const { cloudStorage, isUploading, contentTypeToExtension } =
-    useCloudStorage();
+  const { cloudStorage, contentTypeToExtension } = useCloudStorage();
   const { storeName, setStoreName, cameraState, setCameraState, dbName } =
     useCameraContext();
   const { idb, idbState } = useIdb<FileType>(dbName);
@@ -32,14 +31,19 @@ const LocalGallery = () => {
     status: ImagesetStatus.DRAFT,
     files: [],
   });
+  const isOnline = navigator.onLine;
   const [latestImagesets, setLatestImagesets] = useState<FileType[]>([]);
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
-  const isOnline = navigator.onLine;
+  const [isFetching, setIsFetching] = useState<boolean>(false);
+  const [isPosting, setIsPosting] = useState<string[]>([]);
+  const [isPutting, setIsPutting] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState<string[]>([]);
   const [syncAt, setSyncAt] = useState<Date | null>(null);
 
   // オンラインメソッド GET -----------------------------------------------------
-  const getCloudFiles = useCallback(
+  const getOnlineFiles = useCallback(
     async ({ params }: { params?: string } = {}): Promise<FileType[]> => {
+      setIsFetching(true);
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${storeName}${
@@ -50,22 +54,33 @@ const LocalGallery = () => {
           throw new Error(`Response not ok: ${response.status}`);
         }
 
-        // レスポンスbodyの各keyの末尾からstorageIdを取得し、blobをダウンロード
         const cloudFiles = await response.json().then(async (json) => {
+          // keyからblobをダウンロード
           const keys = json
-            .filter((file: FileType) => !file.deletedAt) // 削除済みファイルはkeysから除外
+            .filter((file: FileType) => !file.deletedAt) // 削除済みファイルはkeysから除外してblobは取得しない
             .map((file: FileType) => file.key);
           const blobs = await cloudStorage.download({ keys }).catch((error) => {
             console.error("Error downloading blobs:", error);
             return []; // エラーの場合は空の配列を返すか、適切な処理をする
           });
 
+          // ローカル用に整形
           const files = json.map((file: FileType) => {
-            file.storageId =
+            // 1. keyからidbIdを取得
+            file.idbId =
               file.key
                 ?.split("/")
                 .pop()
                 ?.replace(/\.[^/.]+$/, "") || "";
+            // 2. 日時を"JST"に変換
+            file.updatedAt = new Date(file.updatedAt).toLocaleString("ja-JP");
+            file.createdAt = file.createdAt
+              ? new Date(file.createdAt).toLocaleString("ja-JP")
+              : new Date().toLocaleString("ja-JP");
+            file.deletedAt = file.deletedAt
+              ? new Date(file.deletedAt).toLocaleString("ja-JP")
+              : null;
+            // 3. 削除済みファイルはblobを付与しない
             if (!file.deletedAt) {
               const blobIndex = keys.indexOf(file.key);
               if (blobIndex !== -1 && blobs[blobIndex]) {
@@ -78,44 +93,71 @@ const LocalGallery = () => {
           });
           return files;
         });
-        console.log("cloudFiles", cloudFiles);
-
         return cloudFiles;
       } catch (error) {
         console.error("Error fetching media:", error);
         return [];
+      } finally {
+        setIsFetching(false);
+      }
+    },
+    [storeName, cloudStorage]
+  );
+
+  // オンラインメソッド PUT -----------------------------------------------------
+  const putOnlineFile = useCallback(
+    async (file: FileType) => {
+      try {
+        if (!file.id || !file.version || !file.createdAt || !file.deletedAt)
+          return;
+        setIsPutting((prev) => [...prev, file.idbId]);
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}?name=${storeName}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            // 日時を"UTC"に変換して送信
+            body: JSON.stringify({
+              ...file,
+              updatedAt: new Date(file.updatedAt).toISOString(),
+              createdAt: new Date(file.createdAt).toISOString(),
+              deletedAt: new Date(file.deletedAt).toISOString(),
+            }),
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`Failed to update file: ${response.statusText}`);
+        }
+        setIsPutting((prev) => prev.filter((id) => id !== file.idbId));
+      } catch (error) {
+        console.error("Error updating files:", error);
+      } finally {
+        setIsPutting((prev) => prev.filter((id) => id !== file.idbId));
       }
     },
     [storeName]
   );
 
-  // オンラインメソッド POST -----------------------------------------------------
-  const autoUploadFiles = useCallback(async () => {
-    try {
-      const filesToUpload = imageset.files.filter((file) => {
-        // 基本的なチェック
-        if (file.key || file.id) return false;
-        // すでにアップロード中のファイルを除外
-        if (isUploading.includes(file.storageId)) return false;
-        // 重複チェック（例：ハッシュや内容による比較）
-        const isDuplicate = imageset.files.some(
-          (existingFile) =>
-            existingFile.key && existingFile.storageId === file.storageId
-        );
-        return !isDuplicate;
-      });
-      for (const file of filesToUpload) {
-        if (!file.contentType || !file.path || !file.storageId) continue;
-        // CloudStorageへアップロード
+  // オンラインメソッド POST(idを返す) ---------------------------------------
+  const postOnlineFile = useCallback(
+    async (file: FileType): Promise<string | undefined> => {
+      try {
+        if (!file.contentType || !file.path || !file.idbId) return;
+        setIsPosting((prev) => [...prev, file.idbId]);
+
+        // 1. CloudStorageへアップロード---------------
         const type = contentTypeToExtension[file.contentType];
+        // cloudStorageへアップロードして、keyを格納
         file.key = await cloudStorage.upload({
-          storagePath: `users/${session.userId}/${storeName}/${type.class}/${file.storageId}.${type.ext}`,
-          fileId: file.storageId,
+          storagePath: `users/${session.userId}/${storeName}/${type.class}/${file.idbId}.${type.ext}`,
+          fileId: file.idbId,
           filePath: file.path,
           contentType: file.contentType,
         });
 
-        // バックエンドへPOST
+        // 2. バックエンドへPOST-----------------------
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${storeName}`,
           {
@@ -123,132 +165,196 @@ const LocalGallery = () => {
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(file),
+            // 日時を"UTC"に変換して送信
+            body: JSON.stringify({
+              ...file,
+              updatedAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              deletedAt: null,
+            }),
           }
         );
         if (!response.ok) {
           throw new Error(`Failed to upload file: ${response.statusText}`);
         }
         const updatedFile = await response.json();
-        const updatedFileStorageId = updatedFile.key
-          ?.split("/")
-          .pop()
-          .replace(/\.[^/.]+$/, "");
-        const updatedFileId = updatedFile.id;
-        // imagesetの該当ファイルidを更新
-        setImageset((prev) => {
-          return {
-            ...prev,
-            files: prev.files.map((f) =>
-              f.storageId === updatedFileStorageId
-                ? { ...f, id: updatedFileId }
-                : f
-            ),
-          };
-        });
-        // debug
-        console.log("fileをアップロード", imageset.files);
+        return updatedFile.id;
+      } catch (error) {
+        console.error("Error uploading files:", error);
+      } finally {
+        setIsPosting((prev) => prev.filter((id) => id !== file.idbId));
       }
-    } catch (error) {
-      console.error("Error uploading files:", error);
-    }
-  }, [cloudStorage, imageset, storeName]);
+    },
+    [storeName, cloudStorage, contentTypeToExtension]
+  );
 
-  // オンラインメソッド PUT -----------------------------------------------------
-  const autoUpdateFiles = useCallback(async () => {
-    try {
-      if (!syncAt) return;
-      // updatedAtがsyncAtより新しく、かつ既にidがあるファイルを更新
-      const filesToUpdate = imageset.files.filter(
-        (file) => new Date(file.updatedAt) > syncAt && file.id !== null
-      );
-
-      for (const file of filesToUpdate) {
+  // オンラインメソッド DELETE --------------------------------------------------
+  const deleteOnlineFile = useCallback(
+    async (file: FileType) => {
+      try {
+        if (!file.id || !file.version || !file.updatedAt || !file.deletedAt)
+          throw new Error("Invalid file data");
+        setIsDeleting((prev) => [...prev, file.idbId]);
         await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}?name=${storeName}`,
+          `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/s?name=${storeName}`,
           {
-            method: "PUT",
+            method: "DELETE",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(file),
+            // 日時を"UTC"に変換して送信
+            body: JSON.stringify({
+              version: file.version,
+              updatedAt: new Date(file.updatedAt).toISOString(),
+              deletedAt: new Date(file.deletedAt).toISOString(),
+            }),
           }
         );
+      } catch (error) {
+        console.error("Error updating files:", error);
+      } finally {
+        setIsDeleting((prev) => prev.filter((id) => id !== file.idbId));
       }
-    } catch (error) {
-      console.error("Error updating files:", error);
-    }
-  }, [imageset, syncAt, storeName]);
-
-  // オンラインメソッド DELETE --------------------------------------------------
-  const deleteFile = useCallback(async (fileId: string) => {
-    try {
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE}/files/${fileId}/s?name=${storeName}`,
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    } catch (error) {
-      console.error("Error updating files:", error);
-    }
-  }, [storeName]);
+    },
+    [storeName]
+  );
 
   const getImageset = useCallback(async () => {
-    // debug
-    console.log("getImageset storeName", storeName);
     try {
-      const files = await idb.get(storeName);
+      const idbFiles = await idb.get(storeName);
       setImageset((prev) => ({
         ...prev,
-        files: Array.isArray(files) ? files : [],
+        files: Array.isArray(idbFiles) ? idbFiles : [],
       }));
 
       if (isOnline) {
-        const tmpCloudFiles = await getCloudFiles();
-        if (tmpCloudFiles.length === 0) return;
-
-        // syncメソッドはidbに存在しない、または更新されたファイルをidbにaddし、最新のファイルセットを返す
-        const updatedIdbFiles = await idb.sync(storeName, tmpCloudFiles);
-        if (
-          !updatedIdbFiles ||
-          !Array.isArray(updatedIdbFiles) ||
-          updatedIdbFiles.length === 0
-        )
-          return; // 更新されたファイルがない場合は何もしない
-
-        // // 削除済みのファイルを除外
-        // const activeUpdatedFiles = updatedIdbFiles.filter(
-        //   (file) => !file.deletedAt
-        // );
-
+        // cloudFilesの最新更新日時をセットしておく
+        const cloudFiles = await getOnlineFiles();
+        if (cloudFiles.length === 0) return;
         setSyncAt(
           new Date(
-            updatedIdbFiles.reduce((prev, current) =>
+            cloudFiles.reduce((prev, current) =>
               prev.updatedAt > current.updatedAt ? prev : current
             ).updatedAt
           )
         );
 
+        // syncメソッドはidbに存在しない、または更新されたファイルをidbにaddし、最新のファイルセットを返す
+        const syncedFiles = await idb.sync(storeName, cloudFiles);
+        if (!Array.isArray(syncedFiles) || syncedFiles.length === 0) return;
+
         setImageset((prev) => ({
           ...prev,
-          files: updatedIdbFiles,
+          files: syncedFiles,
         }));
       }
     } catch (error) {
       console.error("Error updating media:", error);
     }
-  }, [idb, storeName, getCloudFiles, isOnline]);
+  }, [idb, storeName, getOnlineFiles, isOnline]);
+
+  const autoUploadImageset = useCallback(async () => {
+    // 対象ファイルを抽出
+    const filesToUpload = imageset.files.filter((file) => {
+      // 1. 基本的なチェック -------------------------
+      if (file.key) return false;
+      // 2. すでにアップロード中のファイルを除外 ------
+      if (isPosting.includes(file.idbId)) return false;
+      // 3. 重複チェック（例：ハッシュや内容による比較）
+      const isDuplicate = imageset.files.some(
+        (existingFile) => existingFile.key && existingFile.idbId === file.idbId
+      );
+      return !isDuplicate;
+    });
+
+    // ひとつずつアップロード
+    for (const file of filesToUpload) {
+      try {
+        // 1. オンラインアップロード
+        const fileId = (await postOnlineFile(file)) ?? null;
+        // 2. imagesetのidのみ更新 ----------------
+        setImageset((prev) => {
+          return {
+            ...prev,
+            files: prev.files.map((f) =>
+              f.idbId === file.idbId ? { ...f, id: fileId } : f
+            ),
+          };
+        });
+        // 3. IDBのidのみ更新 ---------------------------------------
+        await idb.put(storeName, {
+          ...file,
+          id: fileId,
+          // updatedAt: new Date().toISOString(), // idのみ更新
+          // version: (file.version ?? 0) + 1, // idのみ更新
+        });
+      } catch (error) {
+        console.error(`Error uploading file with id ${file.idbId}:`, error);
+      }
+    }
+  }, [imageset, postOnlineFile, idb, storeName]);
+
+  const autoUpdateImageset = useCallback(async () => {
+    // syncAtがない（＝cloudfilesをダウンロードしていない）場合は更新しない
+    if (!syncAt) return;
+    // updatedAtがsyncAtより新しく、かつ既にidがあるファイルを更新
+    const filesToUpdate = imageset.files.filter(
+      (file) => new Date(file.updatedAt) > syncAt && file.id !== null
+    );
+
+    for (const file of filesToUpdate) {
+      try {
+        await putOnlineFile(file);
+      } catch (error) {
+        console.error(`Error updating file with id ${file.id}:`, error);
+      }
+    }
+  }, [imageset, syncAt, putOnlineFile]);
+
+  const deleteImage = useCallback(
+    async (file: FileType) => {
+      // 1. fileのversionとdeletedAtを更新
+      const targetFile = {
+        ...file,
+        deletedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        version: (file.version ?? 0) + 1,
+        blob: null,
+      };
+
+      // 2. imagesetの該当ファイルのdeletedAtを更新
+      setImageset((prev) => {
+        return {
+          ...prev,
+          files: prev.files.map((f) =>
+            f.idbId === targetFile.idbId ? targetFile : f
+          ),
+        };
+      });
+
+      try {
+        // 2. IDBの更新（未アップロードファイルを考慮して論理削除）
+        await idb.put(storeName, targetFile);
+
+        // 3. オンラインの場合、バックエンドの削除を実行
+        if (isOnline && targetFile.id) {
+          // バックエンドを削除
+          await deleteOnlineFile(targetFile);
+          // IDBを削除
+          await idb.delete(storeName, targetFile.idbId);
+        }
+      } catch (error) {
+        console.error("Error deleting file:", error);
+      }
+    },
+    [idb, storeName, isOnline, deleteOnlineFile]
+  );
 
   // TODO: 未使用
-  const getLatestImagesets = useCallback(async () => {
+  const getOnlineLatestImagesets = useCallback(async () => {
     try {
-      const stores = await idb.getStores();
-      console.log("stores", stores);
-      for (const store of stores) {
+      const idbStores = await idb.getStores();
+      for (const store of idbStores) {
         const idbLatestFile = (await idb.get(store, {
           updatedAt: "latest",
         })) as FileType;
@@ -257,7 +363,7 @@ const LocalGallery = () => {
         // オンラインならクラウドからファイルを取得
         if (isOnline) {
           // 最新更新ファイルのみを取得
-          const tmpCloudFile = await getCloudFiles({
+          const tmpCloudFile = await getOnlineFiles({
             params: `updatedAt=latest`,
           });
 
@@ -290,72 +396,18 @@ const LocalGallery = () => {
     }
   }, [
     idb,
-    getCloudFiles,
+    getOnlineFiles,
     isOnline,
     setSyncAt,
     setImageset,
     setLatestImagesets,
   ]);
 
-  const deleteImage = useCallback(
-    async (file: FileType) => {
-      try {
-        // debug
-        console.log("fileを削除", file);
-
-        // 1. fileのversionとdeletedAtを更新
-        const targetFile = {
-          ...file,
-          deletedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          version: (file.version ?? 0) + 1,
-          blob: null,
-        };
-
-        // 2. imagesetの該当ファイルのdeletedAtを更新
-        setImageset((prev) => {
-          return {
-            ...prev,
-            files: prev.files.map((f) =>
-              f.storageId === targetFile.storageId ? targetFile : f
-            ),
-          };
-        });
-
-        // 2. IDBの更新
-        if (targetFile) {
-          await idb.put(storeName, targetFile);
-        }
-
-        // 3. オンラインの場合、バックエンドの削除を実行
-        if (isOnline && targetFile.id) {
-          const response = await deleteFile(targetFile.id);
-          // if (!response.ok) {
-          //   throw new Error('Failed to delete file from backend');
-          // }
-        }
-
-        // カメラの状態はリセットしない
-        // setCameraState("INITIALIZING"); を削除
-      } catch (error) {
-        console.error("Error deleting file:", error);
-        // エラー時はUIを元に戻す
-        setImageset((prev) => ({
-          ...prev,
-          files: [...prev.files, file],
-        }));
-        // エラーをユーザーに通知する処理を追加
-      }
-    },
-    [idb, storeName, isOnline]
-  );
-
   useEffect(() => {
     const initialize = async () => {
-      // INITIALIZINGの場合のみ実行
       if (cameraState === "INITIALIZING") {
         await getImageset();
-        // getLatestImagesets();
+        // getOnlineLatestImagesets();
         setCameraState("SCANNING");
       }
     };
@@ -364,8 +416,6 @@ const LocalGallery = () => {
 
   useEffect(() => {
     const syncData = async () => {
-      // debug
-      console.log("CHANGE:imageset", imageset.files);
       if (
         imageset.files.length === 0 ||
         !isOnline ||
@@ -374,8 +424,8 @@ const LocalGallery = () => {
         return;
 
       const timeoutId = setTimeout(() => {
-        autoUploadFiles();
-        autoUpdateFiles();
+        autoUploadImageset();
+        autoUpdateImageset();
       }, 1000); // 1秒のデバウンス
       return () => clearTimeout(timeoutId);
     };
@@ -404,7 +454,7 @@ const LocalGallery = () => {
       </Modal>
 
       <section className="grid grid-cols-3 grid-rows-1 h-1/5 w-full items-center justify-between pt-2">
-        {idbState.isLoading ? (
+        {idbState.isLoading || isFetching ? (
           <div className="col-span-3 grid justify-center">
             <LoadingSpinner size="24px" />
           </div>
@@ -412,7 +462,7 @@ const LocalGallery = () => {
           <>
             <div className="col-span-2 row-start-1 flex items-center justify-center">
               <h1 className="font-bold text-center break-words">
-                setName: {storeName}
+                セット: {storeName}
               </h1>
               <button
                 onClick={() => setIsNameModalOpen(true)}
@@ -433,7 +483,7 @@ const LocalGallery = () => {
         {imageset.files
           .filter((file) => !file.deletedAt) // TODO：表示は更新日順かつ、削除済みファイルを除外
           .map((file) => (
-            <div key={file.storageId} className="relative h-full pt-3 pr-2">
+            <div key={file.idbId} className="relative h-full pt-3 pr-2">
               {file.contentType === "video/webm" ? (
                 <video
                   controls
@@ -443,30 +493,36 @@ const LocalGallery = () => {
               ) : (
                 <img
                   src={file.path ?? ""}
-                  alt={`Image ${file.storageId}`}
+                  alt={`Image ${file.idbId}`}
                   className="h-full w-full object-contain"
                 />
               )}
-              {idbState.isDeleting.includes(file.storageId) ||
-              idbState.isPosting.includes(file.storageId) ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-50">
-                  <LoadingSpinner />
-                </div>
-              ) : (
-                <div>
-                  <button
-                    onClick={() => deleteImage(file)}
-                    className="absolute top-0 right-0 rounded-full bg-white/80 p-1 z-10"
-                  >
-                    <CloseIcon />
-                  </button>
-                  {isUploading.includes(file.key ?? "") && (
-                    <div className="absolute top-0 left-0">
-                      <SyncIcon size="24" />
-                    </div>
-                  )}
-                </div>
-              )}
+              {
+                // 削除操作が不可な状態
+                idbState.isDeleting.includes(file.idbId) ||
+                idbState.isPosting.includes(file.idbId) ||
+                isDeleting.includes(file.idbId) ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-50">
+                    <LoadingSpinner />
+                  </div>
+                ) : (
+                  // 削除操作が可能な状態
+                  <div>
+                    <button
+                      onClick={() => deleteImage(file)}
+                      className="absolute top-0 right-0 rounded-full bg-white/80 p-1 z-10"
+                    >
+                      <CloseIcon />
+                    </button>
+                    {(isPosting.includes(file.idbId) ||
+                      isPutting.includes(file.idbId)) && (
+                      <div className="absolute top-0 left-0">
+                        <SyncIcon size="24" />
+                      </div>
+                    )}
+                  </div>
+                )
+              }
             </div>
           ))}
       </section>

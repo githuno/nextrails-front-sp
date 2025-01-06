@@ -165,6 +165,10 @@ class CloudStorageImpl implements CloudStorage {
     } catch (error) {
       console.error("Error uploading file:", error);
       throw error;
+    } finally {
+      this.updateState({
+        isUploading: this.state.isUploading.filter((id) => id !== fileId),
+      });
     }
   }
 }

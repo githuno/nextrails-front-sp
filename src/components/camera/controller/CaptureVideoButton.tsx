@@ -5,6 +5,7 @@ import {
   StopIcon,
   RecordIcon,
   ImagesetStatus,
+  FileType,
 } from "../_utils";
 import { useCameraContext } from "../CameraContext";
 
@@ -33,19 +34,21 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
       };
       mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedBlobsRef.current, { type: "video/webm" });
-        const video = {
-          storageId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
-          id: null,
-          path: null,
+        const video: FileType = {
+          idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
           blob: blob,
+          path: null,
+          // ------------------------------------------------- ↑ DBには不要
+          updatedAt: new Date().toISOString(),
+          // ---------------------------------- ↑ IdbFile | ↓ FileType ---
+          id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
           size: blob.size,
-          contentType: "video/webm",
+          contentType: blob.type,
 
           filename: "", // PUTで編集させる
           version: 1, // PUTで編集された回数
           key: null, // S3 key　=> あればアップロード済み
           createdAt: new Date().toISOString(), // 作成日時
-          updatedAt: new Date().toISOString(), // 更新日時
           deletedAt: null, // 削除日時
           metadata: {
             status: ImagesetStatus.DRAFT,
