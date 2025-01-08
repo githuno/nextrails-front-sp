@@ -222,31 +222,55 @@ const LocalGallery = () => {
   const getImageset = useCallback(async () => {
     try {
       const idbFiles = await idb.get(storeName);
+      // この時点ではsyncAtはnullのためauto関数は発火しない
       setImageset((prev) => ({
         ...prev,
         files: Array.isArray(idbFiles) ? idbFiles : [],
       }));
 
+      // SyncAtに(idbFilesの最終更新日時｜0)をセット
+      setSyncAt(
+        new Date(
+          Array.isArray(idbFiles) && idbFiles.length > 0
+            ? idbFiles.reduce((prev, current) =>
+                prev.updatedAt > current.updatedAt ? prev : current
+              ).updatedAt
+            : new Date(0).toISOString()
+        )
+      );
+
       if (isOnline) {
-        // cloudFilesの最新更新日時をセットしておく
         const cloudFiles = await getOnlineFiles();
-        if (cloudFiles.length === 0) return;
-        setSyncAt(
-          new Date(
-            cloudFiles.reduce((prev, current) =>
-              prev.updatedAt > current.updatedAt ? prev : current
-            ).updatedAt
-          )
-        );
-
-        // syncメソッドはidbに存在しない、または更新されたファイルをidbにaddし、最新のファイルセットを返す
-        const syncedFiles = await idb.sync(storeName, cloudFiles);
-        if (!Array.isArray(syncedFiles) || syncedFiles.length === 0) return;
-
-        setImageset((prev) => ({
-          ...prev,
-          files: syncedFiles,
-        }));
+        // cloudFilesがない場合はSyncAtを(0)で上書きして終了
+        // (ここまではidb側の最終更新日が入っているためuseIdbのputも発火しない)
+        if (cloudFiles.length === 0 || !Array.isArray(idbFiles)) {
+          setSyncAt(new Date(0));
+          return;
+        } else {
+          // syncメソッドは差分（＝存在しないor更新された）ファイルをidbに追加したうえで最新のidbファイルセットを返す
+          const syncedFiles = await idb.sync(storeName, cloudFiles);
+          // SyncAtを(cloudFilesの最終更新日時｜0)で上書き
+          // (ここまではidb側の最終更新日が入っているためuseIdbのputも発火しない)
+          setSyncAt(
+            new Date(
+              Array.isArray(cloudFiles) && cloudFiles.length > 0
+                ? cloudFiles.reduce((prev, current) =>
+                    prev.updatedAt > current.updatedAt ? prev : current
+                  ).updatedAt
+                : new Date(0).toISOString()
+            )
+          );
+          if (!Array.isArray(syncedFiles) || syncedFiles.length === 0) {
+            // 更新ファイルがない場合はSyncAtにはidb側の最終更新日時が入っているためここで終了
+            return;
+          } else {
+            // syncedFilesでimageset.filesを上書き→auto関数が発火する
+            setImageset((prev) => ({
+              ...prev,
+              files: syncedFiles,
+            }));
+          }
+        }
       }
     } catch (error) {
       console.error("Error updating media:", error);
@@ -254,6 +278,9 @@ const LocalGallery = () => {
   }, [idb, storeName, getOnlineFiles, isOnline]);
 
   const autoUploadImageset = useCallback(async () => {
+    // syncAtがない（＝cloudfilesをダウンロードしていない）場合は実行しない
+    if (!syncAt || !isOnline) return;
+
     // 対象ファイルを抽出
     const filesToUpload = imageset.files.filter((file) => {
       // 1. 基本的なチェック -------------------------
@@ -281,7 +308,7 @@ const LocalGallery = () => {
             ),
           };
         });
-        // 3. IDBのidのみ更新 ---------------------------------------
+        // 3. IDBのidのみ更新 ---------------------
         await idb.put(storeName, {
           ...file,
           id: fileId,
@@ -295,9 +322,10 @@ const LocalGallery = () => {
   }, [imageset, postOnlineFile, idb, storeName]);
 
   const autoUpdateImageset = useCallback(async () => {
-    // syncAtがない（＝cloudfilesをダウンロードしていない）場合は更新しない
-    if (!syncAt) return;
-    // updatedAtがsyncAtより新しく、かつ既にidがあるファイルを更新
+    // syncAtがない（＝cloudfilesをダウンロードしていない）場合は実行しない
+    if (!syncAt || !isOnline) return;
+
+    // POST済の更新ファイル（＝updatedAtがsyncAtより新しく、かつ既にidがあるファイル）をクラウド更新
     const filesToUpdate = imageset.files.filter(
       (file) => new Date(file.updatedAt) > syncAt && file.id !== null
     );
@@ -415,7 +443,7 @@ const LocalGallery = () => {
   }, [storeName, cameraState]);
 
   useEffect(() => {
-    const syncData = async () => {
+    const syncImageset = async () => {
       if (
         imageset.files.length === 0 ||
         !isOnline ||
@@ -429,7 +457,7 @@ const LocalGallery = () => {
       }, 1000); // 1秒のデバウンス
       return () => clearTimeout(timeoutId);
     };
-    syncData();
+    syncImageset();
   }, [imageset.files, isOnline]);
 
   return (

@@ -141,8 +141,13 @@ class Idb<T extends IdbFile> {
       );
       const files = allFiles.flat() as T[];
       for (const file of files) {
-        if (!file.blob) continue;
-        file.path = URL.createObjectURL(file.blob);
+        if (file.blob) {
+          const existingUrl = this.objectURLs.get(file.idbId);
+          if (existingUrl) URL.revokeObjectURL(existingUrl);
+          const newUrl = URL.createObjectURL(file.blob);
+          this.objectURLs.set(file.idbId, newUrl);
+          file.path = newUrl;
+        }
       }
       return files;
     } catch (error) {
@@ -171,19 +176,32 @@ class Idb<T extends IdbFile> {
             : latest;
         });
         if (latestFile.blob) {
-          latestFile.path = URL.createObjectURL(latestFile.blob);
+          const existingUrl = this.objectURLs.get(latestFile.idbId);
+          if (existingUrl) URL.revokeObjectURL(existingUrl);
+          const newUrl = URL.createObjectURL(latestFile.blob);
+          this.objectURLs.set(latestFile.idbId, newUrl);
+          latestFile.path = newUrl;
         }
         return latestFile;
       } else if (options?.idbId) {
         const file = (await store.get(options.idbId)) as T;
         if (!file.blob) return undefined;
-        file.path = URL.createObjectURL(file.blob);
+        // // CHECK: 一旦単体GETではpathの更新は行わない
+        // const existingUrl = this.objectURLs.get(file.idbId);
+        // if (existingUrl) URL.revokeObjectURL(existingUrl);
+        // const newUrl = URL.createObjectURL(file.blob);
+        // this.objectURLs.set(file.idbId, newUrl);
+        // file.path = newUrl;
         return file;
       } else {
         const files = (await store.getAll()) as T[];
         for (const file of files) {
           if (!file.blob) continue;
-          file.path = URL.createObjectURL(file.blob);
+          const existingUrl = this.objectURLs.get(file.idbId);
+          if (existingUrl) URL.revokeObjectURL(existingUrl);
+          const newUrl = URL.createObjectURL(file.blob);
+          this.objectURLs.set(file.idbId, newUrl);
+          file.path = newUrl;
         }
         return files;
       }
@@ -222,23 +240,27 @@ class Idb<T extends IdbFile> {
     }
   }
 
-  // syncメソッドはidbに存在しない、または更新されたファイルをidbにaddする
+  // syncメソッドは差分（＝存在しないor更新された）ファイルをidbに追加したうえで最新のidbファイルセットを返す
   async sync(storeName: string, files: T[]) {
     let newFiles: T[] = [];
     try {
       const db = await openDB(this.dbName);
       const tx = db.transaction(storeName, "readwrite");
       const store = tx.objectStore(storeName);
-      const existingFiles = (await store.get(storeName)) as T[];
-      newFiles = files.filter((file) => {
-        const existingFile = existingFiles?.find(
-          (existingFile) => existingFile.idbId === file.idbId
-        );
-        return (
-          !existingFile ||
-          new Date(file.updatedAt) > new Date(existingFile.updatedAt)
-        );
-      });
+      const existingFiles = await store.getAll();
+      if (!existingFiles) {
+        newFiles = files;
+      } else {
+        newFiles = files.filter((file) => {
+          const existingFile = existingFiles?.find(
+            (existingFile) => existingFile.idbId === file.idbId
+          );
+          return (
+            !existingFile || // 1. idbに存在しないファイル
+            new Date(file.updatedAt) > new Date(existingFile.updatedAt) // 2. idbのデータより新しいファイル
+          );
+        });
+      }
       this.updateState({
         isPosting: [
           ...this.state.isPosting,
@@ -246,7 +268,7 @@ class Idb<T extends IdbFile> {
         ],
       });
       for (const file of newFiles) {
-        await store.put(file); // putメソッドは、エントリが存在しない場合は追加し、存在する場合は更新する
+        await store.put(file); // putメソッドはエントリが存在しない場合は追加し、存在する場合は更新する
       }
       return this.get(storeName);
     } catch (error) {
@@ -336,3 +358,87 @@ const useIdb = <T extends IdbFile>(
 };
 
 export default useIdb;
+
+// https://claude.ai/chat/c05047a2-59cd-43c6-84c9-954c3acf483c
+// メモリ管理とリソース解放
+// ✅ ObjectURLの管理が改善され、createObjectURL前にrevokeObjectURLを実行するように修正
+// ✅ destroyStore, destroy メソッドでのリソース解放が適切に実装
+// ✅ get メソッドの各パターンでObjectURLの管理が統一的に処理
+
+// エラーハンドリングとロギング
+// ✅ 全てのメソッドで try-catch-finally が適切に実装
+// ✅ エラーログに関連情報（ストア名やID）が含まれている
+// 💡 改善案：カスタムエラークラスの導入を検討（より詳細なエラー区別のため）
+
+// 非同期処理
+// ✅ Promise の扱いが適切
+// ✅ トランザクションの使用が適切
+// 💡 改善案：並行処理時のデッドロック防止のためのタイムアウト機能の追加を検討
+
+// 型安全性
+// ✅ ジェネリック型の使用が適切
+// ✅ インターフェースの定義が明確
+// 💡 改善案：readonly プロパティの活用を検討（意図しない変更防止のため）
+
+// コードの一貫性と可読性
+// ⚠️ コメントの言語が日本語と英語が混在（統一を推奨）
+// ✅ メソッド名が目的を明確に表現
+// ✅ 状態管理のロジックが一貫
+
+// セキュリティ
+// ✅ DB操作の権限チェック（管理者用メソッドの明示）
+// 💡 改善案：重要な操作のログ記録機能の追加を検討
+
+// パフォーマンス
+// ⚠️ get メソッドの options.idbId での path 更新が無効化されている点の要確認
+// 💡 改善案：大量データ処理時のバッチ処理の導入を検討
+
+// 具体的な改善提案：
+
+// // 1. カスタムエラークラスの導入
+// class IdbError extends Error {
+//   constructor(
+//     message: string,
+//     public readonly storeName?: string,
+//     public readonly operation?: string
+//   ) {
+//     super(message);
+//     this.name = 'IdbError';
+//   }
+// }
+
+// // 2. タイムアウト機能の追加
+// private async withTimeout<T>(
+//   promise: Promise<T>,
+//   timeoutMs: number = 5000
+// ): Promise<T> {
+//   const timeoutPromise = new Promise((_, reject) => {
+//     setTimeout(() => reject(new Error('Operation timed out')), timeoutMs);
+//   });
+//   return Promise.race([promise, timeoutPromise]) as Promise<T>;
+// }
+
+// // 3. readonly プロパティの活用
+// export interface IdbFile {
+//   readonly idbId: string;
+//   readonly blob: Blob | null;
+//   path: string | null;
+//   readonly updatedAt: string;
+// }
+
+// // 4. ログ機能の強化
+// private log(operation: string, details: Record<string, any>) {
+//   console.log(`[IDB ${this.dbName}] ${operation}:`, details);
+// }
+
+// // その他の提案：
+// メソッドのドキュメンテーション強化
+// ユニットテストの追加（特にエッジケース）
+// バッチ処理用のメソッド追加
+// キャッシュ戦略の最適化
+// 監視機能の追加（パフォーマンスメトリクス等）
+
+// コード全体としては非常によく設計されていますが、
+// 上記の改善を加えることで、より堅牢で保守性の高いコードになると考えます。
+// 特に運用面での機能（ログ、モニタリング、エラーハンドリング）を強化することで、
+// 実運用環境での信頼性が向上するでしょう。
