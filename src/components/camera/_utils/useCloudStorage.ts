@@ -226,7 +226,6 @@ const contentTypeToExtension: Record<
   "text/plain": { ext: "txt", class: CloudStorageDir.DOCS },
 };
 
-// INFO：CloudStorageのインスタンスを返す
 const useCloudStorage = (
   storageOptions?: CloudStorageOptions // INFO：引数を使う場合はこちらを拡張する
 ): {
@@ -264,4 +263,4 @@ const useCloudStorage = (
   };
 };
 
-export default useCloudStorage;
+export { useCloudStorage };

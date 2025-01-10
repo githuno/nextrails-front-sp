@@ -1,12 +1,6 @@
 import React, { useRef } from "react";
-import {
-  useIdb,
-  LoadingSpinner,
-  CameraIcon,
-  FileType,
-  ImagesetStatus,
-} from "../_utils";
-import { useCameraContext } from "../CameraContext";
+import { useIdb, LoadingSpinner, CameraIcon } from "../_utils";
+import { useCameraContext, File, ImagesetState } from "../CameraContext";
 
 interface CaptureImageButtonProps {
   onSaved: () => void;
@@ -14,56 +8,68 @@ interface CaptureImageButtonProps {
 
 const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { stream, cameraState, setCameraState, storeName, dbName } =
+  const { stream, cameraState, setCameraState, dbName, imageset, setImageset } =
     useCameraContext();
   const { idb } = useIdb(dbName);
 
   const handleCaptureImage = async () => {
-    if (cameraState === "RECORDING") return;
+    if (!stream || !canvasRef.current) return;
     setCameraState("CAPTURING");
-    if (stream && canvasRef.current) {
-      const video = document.createElement("video");
-      video.srcObject = stream;
-      await video.play();
+    const currentImagesetName = imageset.name;
 
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext("2d");
-      if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const blob = await new Promise<Blob | null>((resolve) =>
-          canvas.toBlob((blob) => resolve(blob), "image/png")
-        );
-        if (blob) {
-          const image: FileType = {
-            idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
-            blob: blob,
-            path: null,
-            // ------------------------------------------------- ↑ DBには不要
-            updatedAt: new Date().toISOString(),
-            // ---------------------------------- ↑ IdbFile | ↓ FileType ---
-            id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
-            size: blob.size,
-            contentType: blob.type,
+    let savedImage: File;
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    await video.play(); // video要素を使用してストリームからフレームをキャプチャする
 
-            filename: "", // PUTで編集させる
-            version: 1, // PUTで編集された回数
-            key: null, // S3 key　=> あればアップロード済み
-            createdAt: new Date().toISOString(), // 作成日時
-            deletedAt: null, // 削除日時
-            metadata: {
-              status: ImagesetStatus.DRAFT,
-            },
-          };
-          await idb.post(storeName, image);
-          onSaved();
-        }
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    if (context) {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((blob) => resolve(blob), "image/png")
+      );
+      if (blob) {
+        const image: File = {
+          idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+          blob: blob,
+          path: null,
+          // ------------------------------------------------- ↑ DBには不要
+          updatedAt: new Date().toISOString(),
+          deletedAt: null, // 論理削除日時
+          // ---------------------------------- ↑ IdbFile | ↓ FileType ---
+          id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
+          size: blob.size,
+          contentType: blob.type,
+
+          filename: "", // PUTで編集させる
+          version: 1, // PUTで編集された回数
+          key: null, // S3 key　=> あればアップロード済み
+          createdAt: new Date().toISOString(), // 作成日時
+          metadata: {
+            status: ImagesetState.DRAFT,
+          },
+        };
+        savedImage = await idb.post(imageset.name, image);
       }
-      video.pause();
-      video.srcObject = null;
     }
-    setCameraState("INITIALIZING");
+    video.pause();
+    video.srcObject = null;
+
+    setCameraState("SCANNING");
+    setImageset((prev) => {
+      if (prev.name === currentImagesetName) {
+        return {
+          ...prev,
+          syncAt: prev.syncAt ?? new Date(0).toISOString(),
+          files: [...prev.files, savedImage!],
+        };
+      }
+      return prev;
+    });
+    onSaved();
   };
 
   return (

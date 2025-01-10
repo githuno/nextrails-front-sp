@@ -5,7 +5,6 @@ import { useModal } from "@/components";
 import { LoadingSpinner } from "../_utils";
 
 // TODO: バーコードスキャナーの実装したい
-// TODO: タブを離れた時にカメラを完全停止したい
 // TODO: カメラの切り替え機能を実装したい
 // TODO: AIモデルへのリアルタイムデータ送信機能を実装したい
 

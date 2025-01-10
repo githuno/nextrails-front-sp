@@ -1,23 +1,26 @@
 import { openDB, IDBPDatabase, deleteDB } from "idb";
 import { useState, useRef } from "react";
 
-export interface IdbFile {
+interface IdbFile {
   idbId: string;
   blob: Blob | null;
   path: string | null;
   updatedAt: string;
+  deletedAt?: string | null;
 }
 
 interface IdbState {
-  isLoading: boolean;
-  isPosting: string[];
-  isDeleting: string[];
+  isStoreLoading: string[]; // storeName配列
+  isStoreSyncing: string[]; // storeName配列
+  isPosting: string[]; // idbId配列
+  isDeleting: string[]; // idbId配列
 }
 
 class Idb<T extends IdbFile> {
   private dbName: string;
   private state: IdbState = {
-    isLoading: false,
+    isStoreLoading: [],
+    isStoreSyncing: [],
     isPosting: [],
     isDeleting: [],
   };
@@ -45,15 +48,12 @@ class Idb<T extends IdbFile> {
   }
 
   async destroy(): Promise<void> {
-    this.updateState({ isLoading: true });
     try {
       await deleteDB(this.dbName);
       this.revokeObjectURLs();
     } catch (error) {
       console.error("Error destroying database:", error);
       throw error;
-    } finally {
-      this.updateState({ isLoading: false });
     }
   }
 
@@ -81,7 +81,9 @@ class Idb<T extends IdbFile> {
   }
 
   async createStore(storeName: string): Promise<IDBPDatabase> {
-    this.updateState({ isLoading: true });
+    this.updateState({
+      isStoreLoading: [...this.state.isStoreLoading, storeName],
+    });
     try {
       const db = await openDB(this.dbName);
       if (!db.objectStoreNames.contains(storeName)) {
@@ -97,18 +99,24 @@ class Idb<T extends IdbFile> {
       console.error("Error create store:", storeName, error);
       throw error;
     } finally {
-      this.updateState({ isLoading: false });
+      this.updateState({
+        isStoreLoading: this.state.isStoreLoading.filter(
+          (name) => name !== storeName
+        ),
+      });
     }
   }
 
   async destroyStore(storeName: string): Promise<void> {
-    this.updateState({ isLoading: true });
+    this.updateState({
+      isStoreLoading: [...this.state.isStoreLoading, storeName],
+    });
     try {
       const db = await openDB(this.dbName);
       if (db.objectStoreNames.contains(storeName)) {
-        // store内のオブジェクトURLを破棄
         const tx = db.transaction(storeName, "readonly");
         const objects = await tx.objectStore(storeName).getAll();
+        // store内のオブジェクトURLを破棄
         objects.forEach((object: { idbId: string }) => {
           const url = this.objectURLs.get(object.idbId);
           if (url) {
@@ -123,13 +131,16 @@ class Idb<T extends IdbFile> {
       console.error("Error destroy store:", storeName, error);
       throw error;
     } finally {
-      this.updateState({ isLoading: false });
+      this.updateState({
+        isStoreLoading: this.state.isStoreLoading.filter(
+          (name) => name !== storeName
+        ),
+      });
     }
   }
 
   // 管理者のみ使用
   async getAll(): Promise<T[]> {
-    this.updateState({ isLoading: true });
     try {
       const db = await openDB(this.dbName);
       const tx = db.transaction(db.objectStoreNames, "readonly");
@@ -153,8 +164,6 @@ class Idb<T extends IdbFile> {
     } catch (error) {
       console.error("Error fetching all files:", error);
       throw error;
-    } finally {
-      this.updateState({ isLoading: false });
     }
   }
 
@@ -162,7 +171,9 @@ class Idb<T extends IdbFile> {
     storeName: string,
     options?: { idbId?: string; updatedAt?: "latest" }
   ): Promise<T | T[] | undefined> {
-    this.updateState({ isLoading: true });
+    this.updateState({
+      isStoreLoading: [...this.state.isStoreLoading, storeName],
+    });
     try {
       const db = await this.createStore(storeName); // storeがなければ作成される
       const tx = db.transaction(storeName, "readonly");
@@ -170,11 +181,14 @@ class Idb<T extends IdbFile> {
       if (options?.updatedAt === "latest") {
         const files = (await store.getAll()) as T[];
         if (files.length === 0) return undefined;
-        const latestFile = files.reduce((latest, file) => {
-          return new Date(file.updatedAt) > new Date(latest.updatedAt)
-            ? file
-            : latest;
-        });
+        const latestFile: T = files
+          .filter((file) => file.deletedAt === null) // 論理削除されていないファイルのみ
+          .reduce((latest, file) => {
+            // 最新のファイルを一つだけ取得
+            return new Date(file.updatedAt) > new Date(latest.updatedAt)
+              ? file
+              : latest;
+          }, files[0]);
         if (latestFile.blob) {
           const existingUrl = this.objectURLs.get(latestFile.idbId);
           if (existingUrl) URL.revokeObjectURL(existingUrl);
@@ -213,23 +227,29 @@ class Idb<T extends IdbFile> {
       }
       throw error;
     } finally {
-      this.updateState({ isLoading: false });
+      this.updateState({
+        isStoreLoading: this.state.isStoreLoading.filter(
+          (name) => name !== storeName
+        ),
+      });
     }
   }
 
   // INFO: IndexedDBでは、オブジェクトストア内のキーは一意である必要があり、同一のIDを持つファイルが存在することはありません。
   // もし同じIDで新しいファイルを追加しようとすると、既存のエントリが上書きされます。
-  async post(storeName: string, data: T): Promise<void> {
+  async post<T extends IdbFile>(storeName: string, data: T): Promise<T> {
+    if (!data.blob) throw new Error("Data blob is required");
     this.updateState({ isPosting: [...this.state.isPosting, data.idbId] });
     try {
-      const db = await openDB(this.dbName);
+      const db = await this.createStore(storeName);
       const tx = db.transaction(storeName, "readwrite");
       const store = tx.objectStore(storeName);
-      const newData = {
+      const newData: T = {
         ...data,
-        updatedAt: new Date().toISOString(),
+        path: URL.createObjectURL(data.blob),
       };
       await store.add(newData);
+      return newData;
     } catch (error) {
       console.error("Error post object:", error);
       throw error;
@@ -240,8 +260,73 @@ class Idb<T extends IdbFile> {
     }
   }
 
-  // syncメソッドは差分（＝存在しないor更新された）ファイルをidbに追加したうえで最新のidbファイルセットを返す
-  async sync(storeName: string, files: T[]) {
+  // syncStoresは存在しないストアを作成したうえで全てのストア名を返却する
+  async syncStores(storeNames: string[]): Promise<string[]> {
+    for (const storeName of storeNames) {
+      await this.createStore(storeName);
+    }
+    return this.getStores();
+  }
+
+  // syncLatestsは最新のファイルをidbに追加したうえで最新のidbファイルセットを返す
+  async syncLatests(
+    latests: { file: T; storeName: string }[]
+  ): Promise<(T & { storeName: string })[]> {
+    const results: (T & { storeName: string })[] = [];
+    if (latests.length === 0) {
+      // A. 同期するファイルがない場合
+      console.log("No files to sync");
+      const storeNames = await this.getStores();
+      for (const storeName of storeNames) {
+        const storeLatestFile = (await this.get(storeName, {
+          updatedAt: "latest",
+        })) as T;
+        if (storeLatestFile) {
+          results.push({
+            ...storeLatestFile,
+            storeName,
+          });
+        }
+      }
+    } else {
+      // B. 同期するファイルがある場合
+      for (const { file, storeName } of latests) {
+        const storeLatestFile = (await this.get(storeName, {
+          updatedAt: "latest",
+        })) as T;
+        if (
+          !file ||
+          !file.blob ||
+          !file.updatedAt || // ファイルが存在しないか、
+          (storeLatestFile && // idbにファイルが存在するのに、
+            new Date(file.updatedAt) <= new Date(storeLatestFile.updatedAt!)) // idbデータより古い場合
+        ) {
+          // ストア名だけ返す
+          results.push({
+            ...storeLatestFile,
+            storeName,
+          });
+        } else {
+          // ファイルを追加して返す
+          const newFile: T = await this.post(storeName, file);
+          results.push({
+            ...newFile,
+            storeName,
+          });
+        }
+      }
+    }
+    return results;
+  }
+
+  // syncメソッドは指定Storeの差分ファイル（＝存在しないor更新された）を同期したうえで最新のidbファイルセットを返す
+  async sync(
+    storeName: string,
+    files: T[]
+  ): Promise<(T & { storeName?: string })[]> {
+    this.updateState({
+      isStoreSyncing: [...this.state.isStoreSyncing, storeName],
+    });
     let newFiles: T[] = [];
     try {
       const db = await openDB(this.dbName);
@@ -270,7 +355,7 @@ class Idb<T extends IdbFile> {
       for (const file of newFiles) {
         await store.put(file); // putメソッドはエントリが存在しない場合は追加し、存在する場合は更新する
       }
-      return this.get(storeName);
+      return this.get(storeName) as Promise<T[]>;
     } catch (error) {
       console.error("Error sync object:", error);
       throw error;
@@ -278,6 +363,9 @@ class Idb<T extends IdbFile> {
       this.updateState({
         isPosting: this.state.isPosting.filter(
           (idbId) => !newFiles.some((file) => file.idbId === idbId)
+        ),
+        isStoreSyncing: this.state.isStoreSyncing.filter(
+          (name) => name !== storeName
         ),
       });
     }
@@ -294,7 +382,7 @@ class Idb<T extends IdbFile> {
         throw new Error(`File with idbId ${data.idbId} not found`);
       }
 
-      // 一部のみ更新可能
+      // 一部のみ更新可能とするため、念の為のチェックとして働く
       const updatedFile = {
         ...existingFile,
         ...data,
@@ -343,7 +431,8 @@ const useIdb = <T extends IdbFile>(
   dbName: string
 ): { idb: Idb<T>; idbState: IdbState } => {
   const [idbState, setIdbState] = useState<IdbState>({
-    isLoading: false,
+    isStoreLoading: [],
+    isStoreSyncing: [],
     isPosting: [],
     isDeleting: [],
   });
@@ -357,7 +446,7 @@ const useIdb = <T extends IdbFile>(
   return { idb: idbRef.current, idbState };
 };
 
-export default useIdb;
+export { useIdb, type IdbFile };
 
 // https://claude.ai/chat/c05047a2-59cd-43c6-84c9-954c3acf483c
 // メモリ管理とリソース解放

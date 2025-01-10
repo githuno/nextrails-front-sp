@@ -1,13 +1,6 @@
 import React, { useRef } from "react";
-import {
-  useIdb,
-  LoadingSpinner,
-  StopIcon,
-  RecordIcon,
-  ImagesetStatus,
-  FileType,
-} from "../_utils";
-import { useCameraContext } from "../CameraContext";
+import { useIdb, LoadingSpinner, StopIcon, RecordIcon } from "../_utils";
+import { useCameraContext, File, ImagesetState } from "../CameraContext";
 
 interface CaptureVideoButtonProps {
   onSaveCompleted: () => void;
@@ -16,13 +9,14 @@ interface CaptureVideoButtonProps {
 const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
   onSaveCompleted,
 }) => {
-  const { stream, cameraState, setCameraState, dbName, storeName } =
+  const { stream, cameraState, setCameraState, dbName, imageset, setImageset } =
     useCameraContext();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedBlobsRef = useRef<Blob[]>([]);
   const { idb } = useIdb(dbName);
 
   const handleStartRecording = () => {
+    const currentImagesetName = imageset.name;
     if (stream) {
       setCameraState("RECORDING");
       recordedBlobsRef.current = [];
@@ -34,7 +28,7 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
       };
       mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedBlobsRef.current, { type: "video/webm" });
-        const video: FileType = {
+        const video: File = {
           idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
           blob: blob,
           path: null,
@@ -51,11 +45,24 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
           createdAt: new Date().toISOString(), // 作成日時
           deletedAt: null, // 削除日時
           metadata: {
-            status: ImagesetStatus.DRAFT,
+            status: ImagesetState.DRAFT,
           },
         };
-        await idb.post(storeName, video);
-        setCameraState("INITIALIZING");
+        const savedVideo: File = await idb.post(imageset.name, video);
+
+        setCameraState("SCANNING");
+        setImageset(
+          (prev) => {
+            if (prev.name === currentImagesetName) {
+              return {
+                ...prev,
+                syncAt: prev.syncAt ?? new Date(0).toISOString(),
+                files: [...prev.files, savedVideo!],
+              };
+            }
+            return prev;
+          }
+        );
         onSaveCompleted();
       };
       mediaRecorder.start();

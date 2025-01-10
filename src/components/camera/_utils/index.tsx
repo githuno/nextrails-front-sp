@@ -1,6 +1,5 @@
-import useIdb from "./useIdb";
-import useCloudStorage from "./useCloudStorage";
-import { ImagesetStatus, FileType, CameraState } from "./types";
+import { useIdb, IdbFile } from "./useIdb";
+import { useCloudStorage } from "./useCloudStorage";
 import {
   LoadingSpinner,
   CloseIcon,
@@ -15,11 +14,9 @@ import {
 
 export {
   useIdb,
+  type IdbFile,
   useCloudStorage,
   LoadingSpinner,
-  ImagesetStatus,
-  type FileType,
-  type CameraState,
   CloseIcon,
   EditIcon,
   CameraIcon,

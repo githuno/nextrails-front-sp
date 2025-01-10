@@ -6,12 +6,54 @@ import React, {
   Dispatch,
   SetStateAction,
 } from "react";
-import { CameraState } from "./_utils";
 import { session } from "@/components";
+import { IdbFile } from "./_utils";
+
+type CameraState =
+  | "INITIALIZING"
+  | "SCANNING"
+  | "RECORDING"
+  | "CAPTURING"
+  | "SAVING";
+
+enum ImagesetState {
+  DRAFT = "DRAFT",
+  SENT = "SENT",
+  ARCHIVED = "ARCHIVED",
+  DELETED = "DELETED",
+}
+
+interface File extends IdbFile {
+  // idbId: string; // IDB用のID
+  // path: string | null; // IDB用のURL TODO: idbUrlに変更
+  // blob: Blob; // 画像データ
+  // updatedAt: string; // 更新日時
+  deletedAt?: string | null; // 論理削除日時
+  
+  createdAt?: string; // 作成日時
+  id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
+  contentType?: string;
+  size?: number;
+
+  filename?: string; // PUTで編集させる
+  version?: number; // PUTで編集された回数
+  key?: string | null; // S3 key　=> あればアップロード済み
+  metadata?: {
+    status: ImagesetState; // imageSetのステータス　=> DRAFTのみ画面表示。SENTになったら非同期アップロードしてindexedDBからは削除する
+  };
+}
+
+interface Imageset {
+  id: number;
+  name: string;
+  status: ImagesetState;
+  files: File[];
+  syncAt: string | null;
+}
 
 interface CameraContextProps {
-  storeName: string;
-  setStoreName: Dispatch<SetStateAction<string>>;
+  imageset: Imageset;
+  setImageset: Dispatch<SetStateAction<Imageset>>;
   stream: MediaStream | null;
   setStream: Dispatch<SetStateAction<MediaStream | null>>;
   cameraState: CameraState;
@@ -25,7 +67,13 @@ export const CameraProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const dbName = `user-${session.userId}`;
-  const [storeName, setStoreName] = useState<string>("1");
+  const [imageset, setImageset] = useState<Imageset>({
+    id: new Date().getTime(),
+    name: "1",
+    status: ImagesetState.DRAFT,
+    files: [],
+    syncAt: null,
+  });
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraState, setCameraState] = useState<CameraState>("INITIALIZING");
 
@@ -33,8 +81,8 @@ export const CameraProvider: React.FC<{ children: ReactNode }> = ({
     // 以下の値変更は子孫の再レンダリングを伴う
     <CameraContext.Provider
       value={{
-        storeName,
-        setStoreName,
+        imageset,
+        setImageset,
         stream,
         setStream,
         cameraState,
@@ -47,10 +95,18 @@ export const CameraProvider: React.FC<{ children: ReactNode }> = ({
   );
 };
 
-export const useCameraContext = (): CameraContextProps => {
+const useCameraContext = (): CameraContextProps => {
   const context = useContext(CameraContext);
   if (!context) {
     throw new Error("useCameraContext must be used within a CameraProvider");
   }
   return context;
+};
+
+export {
+  useCameraContext,
+  type File,
+  type Imageset,
+  type CameraState, // TODO: typeとenumを統一する
+  ImagesetState, // TODO: typeとenumを統一する
 };
