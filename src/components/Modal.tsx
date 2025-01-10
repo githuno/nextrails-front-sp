@@ -31,7 +31,7 @@ const useModal = () => {
 
 interface ModalProps extends HTMLAttributes<HTMLDialogElement> {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: () => void; // TODO: オプショナルに変更し、渡されなかったらcloseアイコンは表示しない
   children: ReactNode;
   anchorRef?: RefObject<HTMLElement>; // 基準位置を明示的に受け取る場合に使用
 }
