@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState, use } from "react";
 import jsQR from "jsqr";
 import { useCameraContext } from "../CameraContext";
 import { useModal } from "@/components";
@@ -6,6 +6,7 @@ import { LoadingSpinner } from "../_utils";
 
 // TODO: バーコードスキャナーの実装したい
 // TODO: カメラの切り替え機能を実装したい
+// TODO: 解像度を変更する機能を実装したい
 // TODO: AIモデルへのリアルタイムデータ送信機能を実装したい
 
 class QrScannerManager {
@@ -270,7 +271,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
       <video
         id="qr-scanner-video"
         ref={videoRef}
-        className={`h-full w-full rounded-lg ${
+        className={`h-full w-full object-cover rounded-lg ${
           cameraState === "CAPTURING" ? "brightness-75" : ""
         }`}
         autoPlay

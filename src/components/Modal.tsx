@@ -121,7 +121,7 @@ const Modal: FC<ModalProps> = ({
       {isOpen && <div className="fixed inset-0 bg-black/50" />}
 
       <dialog ref={dialogRef} className={`modal ${className}`} {...props}>
-        <div className="relative p-2">
+        <div className="relative p-2 h-full">
           {children}
 
           <button

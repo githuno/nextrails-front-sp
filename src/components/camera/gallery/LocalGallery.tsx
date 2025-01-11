@@ -540,7 +540,7 @@ const LocalGallery = () => {
   }, [imageset, isOnline]);
 
   return (
-    <div className="grid px-1 h-[25vh] items-center justify-center rounded-lg shadow-lg bg-white/80">
+    <div className="grid px-1 h-[23vh] items-center justify-center rounded-lg shadow-lg bg-white/80">
       <Modal
         isOpen={isNameModalOpen}
         onClose={() => setIsNameModalOpen(false)}
