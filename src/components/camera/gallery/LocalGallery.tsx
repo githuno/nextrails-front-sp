@@ -507,12 +507,14 @@ const LocalGallery = () => {
 
   useEffect(() => {
     const initialize = async () => {
-      await getImageset();
-      getLatestImagesets();
-      setCameraState("SCANNING");
+      if (cameraState === "INITIALIZING") {
+        await getImageset();
+        getLatestImagesets();
+        setCameraState("SCANNING");
+      }
     };
     initialize();
-  }, [imageset.name]);
+  }, [imageset.name, cameraState]);
 
   useEffect(() => {
     const syncImageset = async () => {
