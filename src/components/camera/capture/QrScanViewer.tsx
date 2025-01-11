@@ -14,12 +14,12 @@ class QrScannerManager {
   private canvasElement: HTMLCanvasElement | null = null;
   private scanInterval: number | null = null;
   private onQRCodeScanned: (data: string) => void;
-  private onStateChange: (state: "INITIALIZING" | "SCANNING") => void;
+  private onStateChange: (state: "INITIALIZING" | "SCANNING" | "CAPTURING") => void;
   private setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
 
   constructor(
     onQRCodeScanned: (data: string) => void,
-    onStateChange: (state: "INITIALIZING" | "SCANNING") => void,
+    onStateChange: (state: "INITIALIZING" | "SCANNING" | "CAPTURING") => void,
     setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>
   ) {
     this.onQRCodeScanned = onQRCodeScanned;
@@ -44,6 +44,25 @@ class QrScannerManager {
       console.error("Failed to initialize camera:", error);
       this.cleanup();
       throw error;
+    }
+  }
+
+  public pauseVideo(): void {
+    if (this.videoElement) {
+      this.videoElement.pause();
+      if (this.scanInterval !== null) {
+        window.clearInterval(this.scanInterval);
+        this.scanInterval = null;
+      }
+      this.onStateChange("CAPTURING");
+    }
+  }
+
+  public resumeVideo(): void {
+    if (this.videoElement) {
+      void this.videoElement.play();
+      this.startScanning();
+      this.onStateChange("SCANNING");
     }
   }
 
@@ -178,6 +197,16 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
 
   // TODO:各effectを一つにまとめる
   useEffect(() => {
+    if (!scannerRef.current) return;
+
+    if (cameraState === "CAPTURING" || cameraState === "SAVING") {
+      scannerRef.current.pauseVideo();
+    } else if (cameraState === "SCANNING") {
+      scannerRef.current.resumeVideo();
+    }
+  }, [cameraState]);
+
+  useEffect(() => {
     // ビデオとキャンバスが存在しない場合はリターン
     if (!videoRef.current || !canvasRef.current) {
       alert("Failed to initialize camera");
@@ -231,7 +260,13 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
           <LoadingSpinner size="72px" />
         </div>
       )}
-      <video ref={videoRef} className="rounded-lg" autoPlay playsInline muted />
+      <video 
+        ref={videoRef} 
+        className={`rounded-lg ${cameraState === "CAPTURING" ? "brightness-75" : ""}`} 
+        autoPlay 
+        playsInline 
+        muted 
+      />
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </>
   );
