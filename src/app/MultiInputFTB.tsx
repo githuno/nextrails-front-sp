@@ -118,7 +118,7 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        className="bg-transparent fixed bottom-[-20%]"
+        className="bg-transparent fixed bottom-[-25%]"
       >
         {selectedComponent}
       </Modal>

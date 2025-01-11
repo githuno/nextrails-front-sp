@@ -113,7 +113,11 @@ class QrScannerManager {
     try {
       // まずリアカメラを試す
       this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { exact: "environment" } },
+        video: {
+          // width: { ideal: 1920 }, // 1920px幅 のカメラを理想とする
+          // height: { ideal: 1080 }, // 1080px高さ のカメラを理想とする
+          facingMode: { exact: "environment" },
+        },
         audio: false,
       });
     } catch (err) {
@@ -266,7 +270,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
       <video
         id="qr-scanner-video"
         ref={videoRef}
-        className={`rounded-lg ${
+        className={`h-full w-full rounded-lg ${
           cameraState === "CAPTURING" ? "brightness-75" : ""
         }`}
         autoPlay
