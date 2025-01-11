@@ -30,10 +30,10 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
         const blob = new Blob(recordedBlobsRef.current, { type: "video/webm" });
         const video: File = {
           idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+          idbUrl: null,
           blob: blob,
-          path: null,
           // ------------------------------------------------- ↑ DBには不要
-          updatedAt: new Date().toISOString(),
+          updatedAt: Date.now(),
           // ---------------------------------- ↑ IdbFile | ↓ FileType ---
           id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
           size: blob.size,
@@ -42,7 +42,7 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
           filename: "", // PUTで編集させる
           version: 1, // PUTで編集された回数
           key: null, // S3 key　=> あればアップロード済み
-          createdAt: new Date().toISOString(), // 作成日時
+          createdAt: Date.now(), // 作成日時
           deletedAt: null, // 削除日時
           metadata: {
             status: ImagesetState.DRAFT,
@@ -56,7 +56,7 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
             if (prev.name === currentImagesetName) {
               return {
                 ...prev,
-                syncAt: prev.syncAt ?? new Date(0).toISOString(),
+                syncAt: prev.syncAt ?? new Date(0).getTime(),
                 files: [...prev.files, savedVideo!],
               };
             }

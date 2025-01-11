@@ -33,11 +33,11 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
       );
       if (blob) {
         const image: File = {
-          idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
+          idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""), // IDB用のIDを現在時刻から生成
+          idbUrl: null,
           blob: blob,
-          path: null,
           // ------------------------------------------------- ↑ DBには不要
-          updatedAt: new Date().toISOString(),
+          updatedAt: Date.now(),
           deletedAt: null, // 論理削除日時
           // ---------------------------------- ↑ IdbFile | ↓ FileType ---
           id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
@@ -47,7 +47,7 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
           filename: "", // PUTで編集させる
           version: 1, // PUTで編集された回数
           key: null, // S3 key　=> あればアップロード済み
-          createdAt: new Date().toISOString(), // 作成日時
+          createdAt: Date.now(), // 作成日時
           metadata: {
             status: ImagesetState.DRAFT,
           },
@@ -63,7 +63,7 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
       if (prev.name === currentImagesetName) {
         return {
           ...prev,
-          syncAt: prev.syncAt ?? new Date(0).toISOString(),
+          syncAt: prev.syncAt ?? new Date(0).getTime(),
           files: [...prev.files, savedImage!],
         };
       }

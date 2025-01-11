@@ -62,15 +62,7 @@ const LocalGallery = () => {
                 ?.split("/")
                 .pop()
                 ?.replace(/\.[^/.]+$/, "") || "";
-            // 2. 日時を"JST"に変換
-            file.updatedAt = new Date(file.updatedAt).toLocaleString("ja-JP");
-            file.createdAt = file.createdAt
-              ? new Date(file.createdAt).toLocaleString("ja-JP")
-              : new Date().toLocaleString("ja-JP");
-            file.deletedAt = file.deletedAt
-              ? new Date(file.deletedAt).toLocaleString("ja-JP")
-              : null;
-            // 3. 削除済みファイルはblobを付与しない ※idb上で削除されず、cloud上では削除されたファイルを考慮
+            // 2. 削除済みファイルはblobを付与しない ※idb上で削除されず、cloud上では削除されたファイルを考慮
             if (!file.deletedAt) {
               const blobIndex = keys.indexOf(file.key);
               if (blobIndex !== -1 && blobs[blobIndex]) {
@@ -121,6 +113,7 @@ const LocalGallery = () => {
 
               imageset.files = await Promise.all(
                 imageset.files.map(async (file: File) => {
+                  // blobをDLしてセット
                   const blobs = await cloudStorage
                     .download({ keys: [file.key ?? ""] })
                     .catch((error) => {
@@ -128,15 +121,7 @@ const LocalGallery = () => {
                       return [null]; // エラーの場合はnullを返すか、適切な処理をする
                     });
                   file.blob = blobs[0] as Blob;
-                  file.updatedAt = new Date(file.updatedAt).toLocaleString(
-                    "ja-JP"
-                  );
-                  file.createdAt = file.createdAt
-                    ? new Date(file.createdAt).toLocaleString("ja-JP")
-                    : new Date().toLocaleString("ja-JP");
-                  file.deletedAt = file.deletedAt
-                    ? new Date(file.deletedAt).toLocaleString("ja-JP")
-                    : null;
+                  // IDB用のidをセット
                   file.idbId =
                     file.key
                       ?.split("/")
@@ -176,13 +161,7 @@ const LocalGallery = () => {
             headers: {
               "Content-Type": "application/json",
             },
-            // 日時を"UTC"に変換して送信
-            body: JSON.stringify({
-              ...file,
-              updatedAt: new Date(file.updatedAt).toISOString(),
-              createdAt: new Date(file.createdAt).toISOString(),
-              deletedAt: new Date(file.deletedAt).toISOString(),
-            }),
+            body: JSON.stringify(file),
           }
         );
         if (!response.ok) {
@@ -208,7 +187,7 @@ const LocalGallery = () => {
       file: File;
     }): Promise<string | undefined> => {
       try {
-        if (!file.contentType || !file.path || !file.idbId) return;
+        if (!file.contentType || !file.idbUrl || !file.idbId) return;
         setIsPosting((prev) => [...prev, file.idbId]);
 
         // 1. CloudStorageへアップロード---------------
@@ -217,7 +196,7 @@ const LocalGallery = () => {
         file.key = await cloudStorage.upload({
           storagePath: `users/${session.userId}/${imagesetName}/${type.class}/${file.idbId}.${type.ext}`,
           fileId: file.idbId,
-          filePath: file.path,
+          filePath: file.idbUrl,
           contentType: file.contentType,
         });
 
@@ -229,13 +208,7 @@ const LocalGallery = () => {
             headers: {
               "Content-Type": "application/json",
             },
-            // 日時を"UTC"に変換して送信
-            body: JSON.stringify({
-              ...file,
-              updatedAt: new Date().toISOString(),
-              createdAt: new Date().toISOString(),
-              deletedAt: null,
-            }),
+            body: JSON.stringify(file),
           }
         );
         if (!response.ok) {
@@ -266,12 +239,7 @@ const LocalGallery = () => {
             headers: {
               "Content-Type": "application/json",
             },
-            // 日時を"UTC"に変換して送信
-            body: JSON.stringify({
-              version: file.version,
-              updatedAt: new Date(file.updatedAt).toISOString(),
-              deletedAt: new Date(file.deletedAt).toISOString(),
-            }),
+            body: JSON.stringify(file),
           }
         );
       } catch (error) {
@@ -304,7 +272,7 @@ const LocalGallery = () => {
           // B. オンラインでcloudFilesがない場合はsyncAtを0で更新（=auto関数が発火）
           setImageset((prev) =>
             prev.name === currentName
-              ? { ...prev, syncAt: new Date(0).toLocaleString() }
+              ? { ...prev, syncAt: new Date(0).getTime() }
               : prev
           );
           return;
@@ -380,8 +348,8 @@ const LocalGallery = () => {
           await idb.put(targetSet.name, {
             ...file,
             id: fileId,
-            // updatedAt: new Date().toISOString(), // idのみ更新
-            // version: (file.version ?? 0) + 1, // idのみ更新
+            // updatedAt: Date.now(), // -------------INFO: idのみ更新
+            // version: (file.version ?? 0) + 1, // --INFO: idのみ更新
           });
         } catch (error) {
           console.error(`Error uploading file with id ${file.idbId}:`, error);
@@ -399,7 +367,7 @@ const LocalGallery = () => {
       // 更新するファイルを抽出
       const filesToUpdate = targetSet.files.filter(
         (file) =>
-          new Date(file.updatedAt) > new Date(targetSet.syncAt!) && // 更新日がsyncAtより新しい
+          file.updatedAt > targetSet.syncAt! && // 更新日がsyncAtより新しい
           file.id !== null // かつidがある(=POST済)
       );
 
@@ -419,8 +387,8 @@ const LocalGallery = () => {
       // 1. fileのversionとdeletedAtを更新
       const targetFile = {
         ...file,
-        deletedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        deletedAt: Date.now(),
+        updatedAt: Date.now(),
         version: (file.version ?? 0) + 1,
         blob: null,
       };
@@ -638,12 +606,12 @@ const LocalGallery = () => {
               {file.contentType === "video/webm" ? (
                 <video
                   controls
-                  src={file.path ?? ""}
+                  src={file.idbUrl ?? ""}
                   className="h-full w-full object-contain"
                 />
               ) : (
                 <img
-                  src={file.path ?? ""}
+                  src={file.idbUrl ?? ""}
                   alt={`Image ${file.idbId}`}
                   className="h-full w-full object-contain"
                 />
@@ -694,7 +662,7 @@ const LocalGallery = () => {
             </h1>
             {files.length > 0 && (
               <img
-                src={files[0].path ?? ""}
+                src={files[0].idbUrl ?? ""}
                 alt={`Image ${files[0].idbId}`}
                 className="h-full w-full object-contain"
               />

@@ -25,12 +25,12 @@ enum ImagesetState {
 
 interface File extends IdbFile {
   // idbId: string; // IDB用のID
-  // path: string | null; // IDB用のURL TODO: idbUrlに変更
+  // idbUrl: string | null; // IDB用のURL TODO: idbUrlに変更
   // blob: Blob; // 画像データ
-  // updatedAt: string; // 更新日時
-  deletedAt?: string | null; // 論理削除日時
+  // updatedAt: number; // 更新日時
+  deletedAt?: number | null; // 論理削除日時
   
-  createdAt?: string; // 作成日時
+  createdAt?: number; // 作成日時
   id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
   contentType?: string;
   size?: number;
@@ -48,7 +48,7 @@ interface Imageset {
   name: string;
   status: ImagesetState;
   files: File[];
-  syncAt: string | null;
+  syncAt: number | null;
 }
 
 interface CameraContextProps {

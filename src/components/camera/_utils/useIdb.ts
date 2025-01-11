@@ -3,10 +3,10 @@ import { useState, useRef } from "react";
 
 interface IdbFile {
   idbId: string;
+  idbUrl: string | null;
   blob: Blob | null;
-  path: string | null;
-  updatedAt: string;
-  deletedAt?: string | null;
+  updatedAt: number;
+  deletedAt?: number | null;
 }
 
 interface IdbState {
@@ -157,7 +157,7 @@ class Idb<T extends IdbFile> {
           if (existingUrl) URL.revokeObjectURL(existingUrl);
           const newUrl = URL.createObjectURL(file.blob);
           this.objectURLs.set(file.idbId, newUrl);
-          file.path = newUrl;
+          file.idbUrl = newUrl;
         }
       }
       return files;
@@ -185,27 +185,25 @@ class Idb<T extends IdbFile> {
           .filter((file) => file.deletedAt === null) // 論理削除されていないファイルのみ
           .reduce((latest, file) => {
             // 最新のファイルを一つだけ取得
-            return new Date(file.updatedAt) > new Date(latest.updatedAt)
-              ? file
-              : latest;
+            return file.updatedAt > latest.updatedAt ? file : latest;
           }, files[0]);
         if (latestFile.blob) {
           const existingUrl = this.objectURLs.get(latestFile.idbId);
           if (existingUrl) URL.revokeObjectURL(existingUrl);
           const newUrl = URL.createObjectURL(latestFile.blob);
           this.objectURLs.set(latestFile.idbId, newUrl);
-          latestFile.path = newUrl;
+          latestFile.idbUrl = newUrl;
         }
         return latestFile;
       } else if (options?.idbId) {
         const file = (await store.get(options.idbId)) as T;
         if (!file.blob) return undefined;
-        // // CHECK: 一旦単体GETではpathの更新は行わない
+        // // CHECK: 一旦単体GETではidbUrlの更新は行わない
         // const existingUrl = this.objectURLs.get(file.idbId);
         // if (existingUrl) URL.revokeObjectURL(existingUrl);
         // const newUrl = URL.createObjectURL(file.blob);
         // this.objectURLs.set(file.idbId, newUrl);
-        // file.path = newUrl;
+        // file.idbUrl = newUrl;
         return file;
       } else {
         const files = (await store.getAll()) as T[];
@@ -215,7 +213,7 @@ class Idb<T extends IdbFile> {
           if (existingUrl) URL.revokeObjectURL(existingUrl);
           const newUrl = URL.createObjectURL(file.blob);
           this.objectURLs.set(file.idbId, newUrl);
-          file.path = newUrl;
+          file.idbUrl = newUrl;
         }
         return files;
       }
@@ -246,7 +244,7 @@ class Idb<T extends IdbFile> {
       const store = tx.objectStore(storeName);
       const newData: T = {
         ...data,
-        path: URL.createObjectURL(data.blob),
+        idbUrl: URL.createObjectURL(data.blob),
       };
       await store.add(newData);
       return newData;
@@ -299,7 +297,7 @@ class Idb<T extends IdbFile> {
           !file.blob ||
           !file.updatedAt || // ファイルが存在しないか、
           (storeLatestFile && // idbにファイルが存在するのに、
-            new Date(file.updatedAt) <= new Date(storeLatestFile.updatedAt!)) // idbデータより古い場合
+            file.updatedAt <= storeLatestFile.updatedAt) // idbデータより古い場合
         ) {
           // ストア名だけ返す
           results.push({
@@ -341,8 +339,8 @@ class Idb<T extends IdbFile> {
             (existingFile) => existingFile.idbId === file.idbId
           );
           return (
-            !existingFile || // 1. idbに存在しないファイル
-            new Date(file.updatedAt) > new Date(existingFile.updatedAt) // 2. idbのデータより新しいファイル
+            !existingFile || // ------------------------1. idbに存在しないファイル
+            file.updatedAt > existingFile.updatedAt // -2. idbのデータより新しいファイル
           );
         });
       }
@@ -387,9 +385,9 @@ class Idb<T extends IdbFile> {
         ...existingFile,
         ...data,
         idbId: existingFile.idbId, // idbIdは更新不可
-        path: existingFile.path, // pathは更新不可
+        idbUrl: existingFile.idbUrl, // idbUrlは更新不可
         blob: existingFile.blob, // blobは更新不可
-        updatedAt: new Date().toISOString(), // updatedAtを必須更新
+        updatedAt: Date.now(), // updatedAtを必須更新
       };
       await store.put(updatedFile);
     } catch (error) {
@@ -479,7 +477,7 @@ export { useIdb, type IdbFile };
 // 💡 改善案：重要な操作のログ記録機能の追加を検討
 
 // パフォーマンス
-// ⚠️ get メソッドの options.idbId での path 更新が無効化されている点の要確認
+// ⚠️ get メソッドの options.idbId での idbUrl 更新が無効化されている点の要確認
 // 💡 改善案：大量データ処理時のバッチ処理の導入を検討
 
 // 具体的な改善提案：
@@ -511,7 +509,7 @@ export { useIdb, type IdbFile };
 // export interface IdbFile {
 //   readonly idbId: string;
 //   readonly blob: Blob | null;
-//   path: string | null;
+//   idbUrl: string | null;
 //   readonly updatedAt: string;
 // }
 
