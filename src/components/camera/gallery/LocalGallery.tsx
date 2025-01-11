@@ -151,7 +151,7 @@ const LocalGallery = () => {
   const putOnlineFile = useCallback(
     async ({ imagesetName, file }: { imagesetName: string; file: File }) => {
       try {
-        if (!file.id || !file.version || !file.createdAt || !file.deletedAt)
+        if (!file.id || !file.version || !file.createdAt || !file.updatedAt)
           return;
         setIsPutting((prev) => [...prev, file.idbId]);
         const response = await fetch(
@@ -498,8 +498,13 @@ const LocalGallery = () => {
   }, [idbState]);
 
   useEffect(() => {
-    console.log("syncAt:", imageset.syncAt);
+    console.log("imageset.syncAt:", imageset.syncAt);
   }, [imageset.syncAt]);
+
+  useEffect(() => {
+    const activeFiles = imageset.files.filter(file => file.deletedAt === null);
+    console.log("active files:", activeFiles);
+  }, [imageset.files]);
 
   useEffect(() => {
     console.log("latestImageset:", latestImagesets);
