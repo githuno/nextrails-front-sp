@@ -14,13 +14,19 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
 
   const handleCaptureImage = async () => {
     if (!stream || !canvasRef.current) return;
+
+    // QrScannerManager の video 要素を取得
+    const video = document.getElementById(
+      "qr-scanner-video"
+    ) as HTMLVideoElement;
+    if (!video) {
+      console.error("Failed to find video element");
+      return;
+    }
+
     setCameraState("CAPTURING");
     const currentImagesetName = imageset.name;
-
     let savedImage: File;
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    await video.play(); // video要素を使用してストリームからフレームをキャプチャする
 
     const canvas = canvasRef.current;
     canvas.width = video.videoWidth;
@@ -55,8 +61,6 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
         savedImage = await idb.post(imageset.name, image);
       }
     }
-    video.pause();
-    video.srcObject = null;
 
     setCameraState("SCANNING");
     setImageset((prev) => {

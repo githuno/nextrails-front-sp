@@ -264,6 +264,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
         </div>
       )}
       <video
+        id="qr-scanner-video"
         ref={videoRef}
         className={`rounded-lg ${
           cameraState === "CAPTURING" ? "brightness-75" : ""
