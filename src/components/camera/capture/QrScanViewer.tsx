@@ -14,7 +14,9 @@ class QrScannerManager {
   private canvasElement: HTMLCanvasElement | null = null;
   private scanInterval: number | null = null;
   private onQRCodeScanned: (data: string) => void;
-  private onStateChange: (state: "INITIALIZING" | "SCANNING" | "CAPTURING") => void;
+  private onStateChange: (
+    state: "INITIALIZING" | "SCANNING" | "CAPTURING"
+  ) => void;
   private setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
 
   constructor(
@@ -196,10 +198,11 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
   const { registerBeforeOpen, registerBeforeClose } = useModal();
 
   // TODO:各effectを一つにまとめる
+
   useEffect(() => {
     if (!scannerRef.current) return;
-
-    if (cameraState === "CAPTURING" || cameraState === "SAVING") {
+    // キャプチャ中はビデオを一時停止
+    if (cameraState === "CAPTURING") {
       scannerRef.current.pauseVideo();
     } else if (cameraState === "SCANNING") {
       scannerRef.current.resumeVideo();
@@ -260,12 +263,14 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
           <LoadingSpinner size="72px" />
         </div>
       )}
-      <video 
-        ref={videoRef} 
-        className={`rounded-lg ${cameraState === "CAPTURING" ? "brightness-75" : ""}`} 
-        autoPlay 
-        playsInline 
-        muted 
+      <video
+        ref={videoRef}
+        className={`rounded-lg ${
+          cameraState === "CAPTURING" ? "brightness-75" : ""
+        }`}
+        autoPlay
+        playsInline
+        muted
       />
       <canvas ref={canvasRef} style={{ display: "none" }} />
     </>
