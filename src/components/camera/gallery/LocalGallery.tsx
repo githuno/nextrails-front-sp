@@ -269,10 +269,10 @@ const LocalGallery = () => {
         const cloudFiles = await getOnlineFiles(currentName);
         console.log("GET:cloudFiles:", cloudFiles);
         if (cloudFiles.length === 0 || !Array.isArray(idbFiles)) {
-          // B. オンラインでcloudFilesがない場合はsyncAtを0で更新（=auto関数が発火）
+          // B. オンラインでcloudFilesがない場合はsyncAtを1で更新（=auto関数が発火）
           setImageset((prev) =>
             prev.name === currentName
-              ? { ...prev, syncAt: new Date(0).getTime() }
+              ? { ...prev, syncAt: new Date(1).getTime() }
               : prev
           );
           return;
@@ -496,6 +496,10 @@ const LocalGallery = () => {
   useEffect(() => {
     console.log("idbState:", idbState);
   }, [idbState]);
+
+  useEffect(() => {
+    console.log("syncAt:", imageset.syncAt);
+  }, [imageset.syncAt]);
 
   useEffect(() => {
     console.log("latestImageset:", latestImagesets);
