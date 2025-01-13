@@ -2,11 +2,11 @@ import React, { useRef } from "react";
 import { useIdb, LoadingSpinner, StopIcon, RecordIcon } from "../_utils";
 import { useCameraContext, File, ImagesetState } from "../CameraContext";
 
-interface CaptureVideoButtonProps {
+interface RecordVideoButtonProps {
   onSaveCompleted: () => void;
 }
 
-const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
+const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
   onSaveCompleted,
 }) => {
   const { stream, cameraState, setCameraState, dbName, imageset, setImageset } =
@@ -51,18 +51,16 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
         const savedVideo: File = await idb.post(imageset.name, video);
 
         setCameraState("SCANNING");
-        setImageset(
-          (prev) => {
-            if (prev.name === currentImagesetName) {
-              return {
-                ...prev,
-                syncAt: prev.syncAt ?? new Date(0).getTime(),
-                files: [...prev.files, savedVideo!],
-              };
-            }
-            return prev;
+        setImageset((prev) => {
+          if (prev.name === currentImagesetName) {
+            return {
+              ...prev,
+              syncAt: prev.syncAt ?? new Date(0).getTime(),
+              files: [...prev.files, savedVideo!],
+            };
           }
-        );
+          return prev;
+        });
         onSaveCompleted();
       };
       mediaRecorder.start();
@@ -100,4 +98,4 @@ const CaptureVideoButton: React.FC<CaptureVideoButtonProps> = ({
   );
 };
 
-export { CaptureVideoButton };
+export { RecordVideoButton };

@@ -16,7 +16,7 @@ import {
 import { Modal } from "@/components";
 import { useCloudImg } from "./useCloudImg";
 
-const LocalGallery = () => {
+const ImageGallery = () => {
   const { imageset, setImageset, cameraState, setCameraState, dbName } =
     useCameraContext();
   const { idb, idbState } = useIdb<File>(dbName);
@@ -494,4 +494,4 @@ const LocalGallery = () => {
   );
 };
 
-export { LocalGallery };
+export { ImageGallery };

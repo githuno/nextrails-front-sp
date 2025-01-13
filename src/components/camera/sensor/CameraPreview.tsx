@@ -12,7 +12,7 @@ import { LoadingSpinner } from "../_utils";
 // TODO: 解像度を変更する機能を実装したい
 // TODO: AIモデルへのリアルタイムデータ送信機能を実装したい
 
-class QrScannerManager {
+class CameraPreviewManager {
   private stream: MediaStream | null = null;
   private videoElement: HTMLVideoElement | null = null;
   private canvasElement: HTMLCanvasElement | null = null;
@@ -194,15 +194,15 @@ class QrScannerManager {
   }
 }
 
-interface QrScanViewerProps {
+interface CameraPreviewProps {
   onQRCodeScanned: (data: string) => void;
 }
 
-const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
+const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
   const { cameraState, setCameraState, setStream } = useCameraContext();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const scannerRef = useRef<QrScannerManager | null>(null);
+  const scannerRef = useRef<CameraPreviewManager | null>(null);
   const { registerBeforeOpen, registerBeforeClose } = useModal();
 
   // TODO:各effectを一つにまとめる
@@ -224,7 +224,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
       return;
     }
     // スキャンマネージャーをインスタンス化
-    scannerRef.current = new QrScannerManager(
+    scannerRef.current = new CameraPreviewManager(
       onQRCodeScanned,
       setCameraState,
       setStream
@@ -286,7 +286,7 @@ const QrScanViewer: React.FC<QrScanViewerProps> = ({ onQRCodeScanned }) => {
   );
 };
 
-export { QrScanViewer };
+export { CameraPreview };
 
 // 【Barcode Detection API】
 // https://developer.mozilla.org/en-US/docs/Web/API/Barcode_Detection_API
