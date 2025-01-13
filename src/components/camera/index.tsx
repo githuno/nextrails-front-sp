@@ -27,3 +27,9 @@ const Camera: React.FC = () => (
 );
 
 export default Camera;
+
+// TODO: カルーセルの実装
+// TODO: ServiceWorker（イベント）の実装
+// → useCloudImgによるオンラインアップデートは、ServiceWorkerで行う？
+// → 画像が3枚以上の場合にトーストでDRAFT変更を促す
+// TODO: CameraPreviewに変更、RecordVideoButtonに変更、ImageGalleryに変更、sensor, controls, galleryに分割

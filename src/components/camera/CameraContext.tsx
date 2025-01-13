@@ -25,11 +25,11 @@ enum ImagesetState {
 
 interface File extends IdbFile {
   // idbId: string; // IDB用のID
-  // idbUrl: string | null; // IDB用のURL TODO: idbUrlに変更
+  // idbUrl: string | null; // IDB用のURL
   // blob: Blob; // 画像データ
   // updatedAt: number; // 更新日時
   deletedAt?: number | null; // 論理削除日時
-  
+
   createdAt?: number; // 作成日時
   id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
   contentType?: string;

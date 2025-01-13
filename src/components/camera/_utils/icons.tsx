@@ -1,11 +1,17 @@
 import React from "react";
 
+// TODO: リファクタリング→https://react-svgr.com/playground/で変換
+// TODO: publicに置く場合とパフォーマンス比較
+
 interface IconProps {
   size?: string;
   color?: string;
 }
 
-const LoadingSpinner: React.FC<IconProps> = ({ size = "36px", color = "#09f" }) => {
+const LoadingSpinner: React.FC<IconProps> = ({
+  size = "36px",
+  color = "#09f",
+}) => {
   return (
     <div className="spinner" style={{ width: size, height: size }}>
       <style jsx>{`
@@ -25,7 +31,10 @@ const LoadingSpinner: React.FC<IconProps> = ({ size = "36px", color = "#09f" }) 
   );
 };
 
-const CloseIcon: React.FC<IconProps> = ({ size = "24px", color = "#000000" }) => {
+const CloseIcon: React.FC<IconProps> = ({
+  size = "24px",
+  color = "#000000",
+}) => {
   return (
     <svg
       className="hover:w-7 hover:h-7 transition-transform"
@@ -44,7 +53,10 @@ const CloseIcon: React.FC<IconProps> = ({ size = "24px", color = "#000000" }) =>
   );
 };
 
-const EditIcon: React.FC<IconProps> = ({ size = "16px", color = "#4B4B4B" }) => (
+const EditIcon: React.FC<IconProps> = ({
+  size = "16px",
+  color = "#4B4B4B",
+}) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -78,7 +90,10 @@ const EditIcon: React.FC<IconProps> = ({ size = "16px", color = "#4B4B4B" }) => 
   </svg>
 );
 
-const CameraIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) => (
+const CameraIcon: React.FC<IconProps> = ({
+  size = "40px",
+  color = "#4B4B4B",
+}) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -111,7 +126,10 @@ const CameraIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) =
   </svg>
 );
 
-const RecordIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) => (
+const RecordIcon: React.FC<IconProps> = ({
+  size = "40px",
+  color = "#4B4B4B",
+}) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -149,7 +167,10 @@ const RecordIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) =
   </svg>
 );
 
-const StopIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) => (
+const StopIcon: React.FC<IconProps> = ({
+  size = "32px",
+  color = "#4B4B4B",
+}) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -173,7 +194,10 @@ const StopIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) => 
   </svg>
 );
 
-const MenuIcon: React.FC<IconProps> = ({ size = "24px", color = "#4B4B4B" }) => (
+const MenuIcon: React.FC<IconProps> = ({
+  size = "24px",
+  color = "#4B4B4B",
+}) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -236,8 +260,10 @@ const MenuIcon: React.FC<IconProps> = ({ size = "24px", color = "#4B4B4B" }) => 
   </svg>
 );
 
-
-const PictureIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) => (
+const PictureIcon: React.FC<IconProps> = ({
+  size = "32px",
+  color = "#4B4B4B",
+}) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -270,7 +296,11 @@ const PictureIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) 
   </svg>
 );
 
-const SyncIcon: React.FC<IconProps & {isSpinning?: boolean}> = ({ size = "32px", color = "#4B4B4B", isSpinning = true }) => (
+const SyncIcon: React.FC<IconProps & { isSpinning?: boolean }> = ({
+  size = "32px",
+  color = "#4B4B4B",
+  isSpinning = true,
+}) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -279,7 +309,12 @@ const SyncIcon: React.FC<IconProps & {isSpinning?: boolean}> = ({ size = "32px",
     x="0px"
     y="0px"
     viewBox="0 0 512 512"
-    style={{ width: size, height: size, opacity: 1, animationDirection: "reverse" }}
+    style={{
+      width: size,
+      height: size,
+      opacity: 1,
+      animationDirection: "reverse",
+    }}
     className={isSpinning ? "animate-spin" : ""}
     xmlSpace="preserve"
   >
@@ -301,5 +336,14 @@ const SyncIcon: React.FC<IconProps & {isSpinning?: boolean}> = ({ size = "32px",
   </svg>
 );
 
-
-export { LoadingSpinner, CloseIcon, EditIcon, CameraIcon, RecordIcon, StopIcon, MenuIcon, PictureIcon, SyncIcon };
+export {
+  LoadingSpinner,
+  CloseIcon,
+  EditIcon,
+  CameraIcon,
+  RecordIcon,
+  StopIcon,
+  MenuIcon,
+  PictureIcon,
+  SyncIcon,
+};
