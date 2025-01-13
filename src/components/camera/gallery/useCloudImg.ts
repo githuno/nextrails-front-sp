@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useCloudStorage } from "../_utils";
 import { File, Imageset } from "../CameraContext";
 import { session } from "@/components";
@@ -16,18 +16,24 @@ class Cloud {
     string,
     { class: string; ext: string }
   >;
-  public state: CloudState;
+  private state: CloudState = {
+    isFilesFetching: false,
+    isPosting: [],
+    isPutting: [],
+    isDeleting: [],
+  };
+  private setState: React.Dispatch<React.SetStateAction<CloudState>>;
 
-  constructor() {
+  constructor(setState: React.Dispatch<React.SetStateAction<CloudState>>) {
     const { cloudStorage, contentTypeToExtension } = useCloudStorage();
     this.cloudStorage = cloudStorage;
     this.contentTypeToExtension = contentTypeToExtension;
-    this.state = {
-      isFilesFetching: false,
-      isPosting: [],
-      isPutting: [],
-      isDeleting: [],
-    };
+    this.setState = setState;
+  }
+
+  private updateState(newState: Partial<CloudState>) {
+    this.state = { ...this.state, ...newState };
+    this.setState(this.state);
   }
 
   // imagesetsを取得する
@@ -99,7 +105,7 @@ class Cloud {
   // imageset.filesを取得する
   public getFiles = useCallback(
     async (imagesetName: string): Promise<File[]> => {
-      this.state.isFilesFetching = true;
+      this.updateState({ isFilesFetching: true });
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}`
@@ -149,7 +155,7 @@ class Cloud {
         console.error("Error fetching media:", error);
         return [];
       } finally {
-        this.state.isFilesFetching = false;
+        this.updateState({ isFilesFetching: false });
       }
     },
     []
@@ -158,7 +164,7 @@ class Cloud {
   // imageset.fileを更新する
   public putFile = useCallback(
     async ({ imagesetName, file }: { imagesetName: string; file: File }) => {
-      this.state.isPutting.push(file.idbId);
+      this.updateState({ isPutting: [...this.state.isPutting, file.idbId] });
       try {
         if (!file.id || !file.version || !file.createdAt || !file.updatedAt)
           return;
@@ -178,9 +184,9 @@ class Cloud {
       } catch (error) {
         console.error("Error updating files:", error);
       } finally {
-        this.state.isPutting = this.state.isPutting.filter(
-          (id) => id !== file.idbId
-        );
+        this.updateState({
+          isPutting: this.state.isPutting.filter((id) => id !== file.idbId),
+        });
       }
     },
     []
@@ -195,7 +201,7 @@ class Cloud {
       imagesetName: string;
       file: File;
     }): Promise<string | undefined> => {
-      this.state.isPosting.push(file.idbId);
+      this.updateState({ isPosting: [...this.state.isPosting, file.idbId] });
       try {
         if (!file.contentType || !file.idbUrl || !file.idbId) return;
 
@@ -228,9 +234,9 @@ class Cloud {
       } catch (error) {
         console.error("Error uploading files:", error);
       } finally {
-        this.state.isPosting = this.state.isPosting.filter(
-          (id) => id !== file.idbId
-        );
+        this.updateState({
+          isPosting: this.state.isPosting.filter((id) => id !== file.idbId),
+        });
       }
     },
     []
@@ -239,7 +245,7 @@ class Cloud {
   // imageset.fileを論理削除する
   public deleteFile = useCallback(
     async ({ imagesetName, file }: { imagesetName: string; file: File }) => {
-      this.state.isDeleting.push(file.idbId);
+      this.updateState({ isDeleting: [...this.state.isDeleting, file.idbId] });
       try {
         if (!file.id || !file.version || !file.updatedAt || !file.deletedAt)
           throw new Error("Invalid file data");
@@ -256,9 +262,9 @@ class Cloud {
       } catch (error) {
         console.error("Error updating files:", error);
       } finally {
-        this.state.isDeleting = this.state.isDeleting.filter(
-          (id) => id !== file.idbId
-        );
+        this.updateState({
+          isDeleting: this.state.isDeleting.filter((id) => id !== file.idbId),
+        });
       }
     },
     []
@@ -266,8 +272,14 @@ class Cloud {
 }
 
 const useCloudImg = () => {
-  const cloud = new Cloud();
-  const cloudState = cloud.state;
+  const [cloudState, setCloudState] = useState<CloudState>({
+    isFilesFetching: false,
+    isPosting: [],
+    isPutting: [],
+    isDeleting: [],
+  });
+  const cloud = new Cloud(setCloudState);
+
   return { cloud, cloudState };
 };
 

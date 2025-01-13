@@ -170,23 +170,23 @@ const ImageGallery = () => {
         blob: null,
       };
 
-      // 2. imagesetの該当ファイルのdeletedAtを更新
-      setImageset((prev) =>
-        prev.name === imagesetName
-          ? {
-              ...prev,
-              files: prev.files.map((f) =>
-                f.idbId === targetFile.idbId ? targetFile : f
-              ),
-            }
-          : prev
-      );
-
       try {
         // 2. IDBの更新（未アップロードファイルを考慮して論理削除）
         await idb.put(imageset.name, targetFile);
 
-        // 3. オンラインの場合、バックエンドの削除を実行
+        // 3. imagesetの該当ファイルのdeletedAtを更新
+        setImageset((prev) =>
+          prev.name === imagesetName
+            ? {
+                ...prev,
+                files: prev.files.map((f) =>
+                  f.idbId === targetFile.idbId ? targetFile : f
+                ),
+              }
+            : prev
+        );
+
+        // 4. オンラインの場合、バックエンドの削除を実行
         if (isOnline && targetFile.id) {
           // バックエンドを削除
           await cloud.deleteFile({ file: targetFile, imagesetName });
