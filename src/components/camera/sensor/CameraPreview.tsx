@@ -64,7 +64,6 @@ class CameraPreviewManager {
       // 1秒後にビデオを再生
       setTimeout(() => {
         if (this.videoElement) {
-          console.log("⚡️Resume video");
           this.videoElement.play();
           this.startScanning(); // スキャンを再開
         }
