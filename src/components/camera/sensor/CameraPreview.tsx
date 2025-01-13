@@ -60,15 +60,15 @@ class CameraPreviewManager {
         window.clearInterval(this.scanInterval);
         this.scanInterval = null;
       }
-      this.onStateChange("CAPTURING");
-    }
-  }
 
-  public resumeVideo(): void {
-    if (this.videoElement) {
-      void this.videoElement.play();
-      this.startScanning();
-      this.onStateChange("SCANNING");
+      // 1秒後にビデオを再生
+      setTimeout(() => {
+        if (this.videoElement) {
+          console.log("⚡️Resume video");
+          this.videoElement.play();
+          this.startScanning(); // スキャンを再開
+        }
+      }, 1000); // 1秒 (1000ミリ秒)
     }
   }
 
@@ -212,8 +212,6 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
     // キャプチャ中はビデオを一時停止
     if (cameraState === "CAPTURING") {
       scannerRef.current.pauseVideo();
-    } else if (cameraState === "SCANNING") {
-      scannerRef.current.resumeVideo();
     }
   }, [cameraState]);
 
