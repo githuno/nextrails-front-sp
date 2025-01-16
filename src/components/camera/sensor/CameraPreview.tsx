@@ -18,18 +18,13 @@ class CameraPreviewManager {
   private canvasElement: HTMLCanvasElement | null = null;
   private scanInterval: number | null = null;
   private onQRCodeScanned: (data: string) => void;
-  private onStateChange: (
-    state: "INITIALIZING" | "SCANNING" | "CAPTURING"
-  ) => void;
   private setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>;
 
   constructor(
     onQRCodeScanned: (data: string) => void,
-    onStateChange: (state: "INITIALIZING" | "SCANNING" | "CAPTURING") => void,
     setStream: React.Dispatch<React.SetStateAction<MediaStream | null>>
   ) {
     this.onQRCodeScanned = onQRCodeScanned;
-    this.onStateChange = onStateChange;
     this.setStream = setStream;
   }
 
@@ -39,35 +34,13 @@ class CameraPreviewManager {
   ): Promise<void> {
     this.videoElement = videoElement;
     this.canvasElement = canvasElement;
-    this.onStateChange("INITIALIZING");
-
     try {
       await this.getSensor();
       await this.waitForVideoReady();
-      this.startScanning();
-      this.onStateChange("SCANNING");
     } catch (error) {
       console.error("Failed to initialize camera:", error);
       this.cleanup();
       throw error;
-    }
-  }
-
-  public pauseVideo(): void {
-    if (this.videoElement) {
-      this.videoElement.pause();
-      if (this.scanInterval !== null) {
-        window.clearInterval(this.scanInterval);
-        this.scanInterval = null;
-      }
-
-      // 1秒後にビデオを再生
-      setTimeout(() => {
-        if (this.videoElement) {
-          this.videoElement.play();
-          this.startScanning(); // スキャンを再開
-        }
-      }, 1000); // 1秒 (1000ミリ秒)
     }
   }
 
@@ -170,8 +143,15 @@ class CameraPreviewManager {
     }
   }
 
-  private startScanning(): void {
+  public startScanning(): void {
     this.scanInterval = window.setInterval(() => this.scanQRCode(), 300);
+  }
+
+  public pauseScanning(): void {
+    if (this.scanInterval !== null) {
+      window.clearInterval(this.scanInterval);
+      this.scanInterval = null;
+    }
   }
 
   public cleanup(): void {
@@ -189,7 +169,6 @@ class CameraPreviewManager {
     this.videoElement = null;
     this.canvasElement = null;
     this.setStream(null);
-    this.onStateChange("INITIALIZING");
   }
 }
 
@@ -204,35 +183,36 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
   const scannerRef = useRef<CameraPreviewManager | null>(null);
   const { registerBeforeOpen, registerBeforeClose } = useModal();
 
-  // TODO:各effectを一つにまとめる
-
+  // スキャン開始/停止
   useEffect(() => {
     if (!scannerRef.current) return;
-    // キャプチャ中はビデオを一時停止
-    if (cameraState === "CAPTURING") {
-      scannerRef.current.pauseVideo();
+    if (cameraState === "SCANNING") {
+      scannerRef.current.startScanning();
+    } else if (cameraState === "CAPTURING") {
+      scannerRef.current.pauseScanning();
     }
   }, [cameraState]);
 
+  // TODO:各effectを一つにまとめる
+
   useEffect(() => {
+    // 初期化
+    setCameraState("INITIALIZING");
     // ビデオとキャンバスが存在しない場合はリターン
     if (!videoRef.current || !canvasRef.current) {
       alert("Failed to initialize camera");
       return;
     }
     // スキャンマネージャーをインスタンス化
-    scannerRef.current = new CameraPreviewManager(
-      onQRCodeScanned,
-      setCameraState,
-      setStream
-    );
+    scannerRef.current = new CameraPreviewManager(onQRCodeScanned, setStream);
     // スキャンマネージャーを初期化
     void scannerRef.current
       .initialize(videoRef.current, canvasRef.current)
       .catch((error) => {
         console.error("Failed to initialize QR scanner:", error);
-        setCameraState("INITIALIZING");
       });
+    // スキャン開始
+    setCameraState("SCANNING");
     // アンマウント時にクリーンアップ
     return () => {
       scannerRef.current?.cleanup();
@@ -251,10 +231,12 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
     // ウィンドウが開かれる前にカメラを再起動
     return registerBeforeOpen(async () => {
       if (videoRef.current && canvasRef.current && scannerRef.current) {
+        setCameraState("INITIALIZING");
         await scannerRef.current.initialize(
           videoRef.current,
           canvasRef.current
         );
+        setCameraState("SCANNING");
         return true;
       }
       return false;
@@ -269,7 +251,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
         </div>
       )}
       <video
-        id="qr-scanner-video"
+        id="preview-video"
         ref={videoRef}
         className={`h-full w-full object-cover rounded-lg ${
           cameraState === "CAPTURING" ? "brightness-75" : ""
@@ -278,7 +260,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
         playsInline
         muted
       />
-      <canvas ref={canvasRef} style={{ display: "none" }} />
+      <canvas id="preview-canvas" ref={canvasRef} className="hidden" />
     </>
   );
 };
