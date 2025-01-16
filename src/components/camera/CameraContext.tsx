@@ -13,8 +13,8 @@ type CameraState =
   | "INITIALIZING"
   | "SCANNING"
   | "RECORDING"
-  | "CAPTURING"
-  | "SAVING";
+  | "REC_SAVING"
+  | "CAPTURING";
 
 enum ImagesetState {
   DRAFT = "DRAFT",

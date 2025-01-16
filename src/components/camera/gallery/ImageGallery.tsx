@@ -148,6 +148,8 @@ const ImageGallery = () => {
           file.id !== null // かつidがある(=POST済)
       );
 
+      // TODO:ファイルがない場合はcloud,ローカルでsyncAtを更新して終了
+
       for (const file of filesToUpdate) {
         try {
           await cloud.putFile({ file, imagesetName: targetSet.name });
@@ -302,13 +304,15 @@ const ImageGallery = () => {
 
   useEffect(() => {
     const syncImageset = async () => {
+      // 以下条件下では同期しない
       if (
-        !isOnline ||
-        !imageset.syncAt ||
-        cameraState === "INITIALIZING" ||
-        imageset.files.length === 0
+        !isOnline || // オフラインの場合
+        !imageset.syncAt || // syncAtがない場合
+        cameraState !== "SCANNING" || // SCANNING状態でない場合
+        imageset.files.length === 0 // ファイルがない場合
       )
         return;
+      // 1秒後に同期処理を実行
       const timeoutId = setTimeout(() => {
         autoUploadImageset(imageset);
         autoUpdateImageset(imageset);
@@ -373,12 +377,14 @@ const ImageGallery = () => {
               <h1 className="font-bold text-center break-words">
                 セット: {imageset.name}
               </h1>
-              <button
-                onClick={() => setIsNameModalOpen(true)}
-                className="ml-2 p-1 bg-transparent hover:bg-gray-200 rounded-full transition-colors"
-              >
-                <EditIcon />
-              </button>
+              {cameraState === "SCANNING" && ( // 編集可能なのはSCANNING時のみ
+                <button
+                  onClick={() => setIsNameModalOpen(true)}
+                  className="ml-2 p-1 bg-transparent hover:bg-gray-200 rounded-full transition-colors"
+                >
+                  <EditIcon />
+                </button>
+              )}
             </div>
             {/* TODO: 削除済みを除外する */}
             <p className="text-center break-words">

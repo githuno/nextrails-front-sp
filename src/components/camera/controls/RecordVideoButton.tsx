@@ -71,7 +71,7 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
   const handleStopRecording = () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
-      setCameraState("SAVING");
+      setCameraState("REC_SAVING");
     }
   };
 
@@ -83,10 +83,10 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
             ? handleStopRecording
             : handleStartRecording
         }
-        disabled={cameraState === "SAVING"}
+        disabled={cameraState === "REC_SAVING"}
         className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-red-200 to-white shadow-inner hover:shadow-lg transition-transform"
       >
-        {cameraState === "SAVING" ? (
+        {cameraState === "REC_SAVING" ? (
           <LoadingSpinner />
         ) : cameraState === "RECORDING" ? (
           <StopIcon />
