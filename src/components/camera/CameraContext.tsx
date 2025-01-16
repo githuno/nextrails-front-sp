@@ -28,16 +28,16 @@ interface File extends IdbFile {
   // idbUrl: string | null; // IDB用のURL
   // blob: Blob; // 画像データ
   // updatedAt: number; // 更新日時
-  deletedAt?: number | null; // 論理削除日時
+  deletedAt: number | null; // 論理削除日時
 
-  createdAt?: number; // 作成日時
+  createdAt: number; // 作成日時
   id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
-  contentType?: string;
-  size?: number;
+  contentType: string;
+  size: number;
 
   filename?: string; // PUTで編集させる
-  version?: number; // PUTで編集された回数
-  key?: string | null; // S3 key　=> あればアップロード済み
+  version: number; // PUTで編集された回数
+  key: string | null; // S3 key　=> あればアップロード済み
   metadata?: {
     status: ImagesetState; // imageSetのステータス　=> DRAFTのみ画面表示。SENTになったら非同期アップロードしてindexedDBからは削除する
   };
@@ -68,7 +68,7 @@ export const CameraProvider: React.FC<{ children: ReactNode }> = ({
 }) => {
   const dbName = `user-${session.userId}`;
   const [imageset, setImageset] = useState<Imageset>({
-    id: new Date().getTime(),
+    id: Date.now(),
     name: "1",
     status: ImagesetState.DRAFT,
     files: [],
