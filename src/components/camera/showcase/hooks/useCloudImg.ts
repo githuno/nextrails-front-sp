@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { useCloudStorage } from "../_utils";
-import { File, Imageset } from "../CameraContext";
+import { useCloudStorage } from "../../_utils";
+import { File, Imageset } from "../../CameraContext";
 import { session } from "@/components";
 
 interface CloudState {
@@ -104,17 +104,24 @@ class Cloud {
 
   // imageset.filesを取得する
   public getFiles = useCallback(
-    async (imagesetName: string): Promise<File[]> => {
+    async (
+      imagesetName: string,
+      options?: { params: string }
+    ): Promise<File[]> => {
       this.updateState({ isFilesFetching: true });
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}`
+          `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}${
+            options ? `&${options.params}` : ""
+          }`
         );
         if (!response.ok) {
           throw new Error(`Response not ok: ${response.status}`);
         }
 
         const cloudFiles: File[] = await response.json().then(async (json) => {
+          // TODO: 未削除の全ファイル＋syncAt以降に削除されたファイルが返ってくる
+
           // 1. keyを取得
           const keys = json
             .filter((file: File) => !file.deletedAt) // 削除済みファイルはkeysから除外してblobは取得しない
@@ -279,8 +286,9 @@ const useCloudImg = () => {
     isDeleting: [],
   });
   const cloud = new Cloud(setCloudState);
+  const isOnline = navigator.onLine;
 
-  return { cloud, cloudState };
+  return { cloud, cloudState, isOnline };
 };
 
 export { useCloudImg };

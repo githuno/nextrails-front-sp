@@ -56,8 +56,7 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
       if (prev.name === currentImagesetName) {
         return {
           ...prev,
-          syncAt: prev.syncAt ?? new Date(0).getTime(),
-          files: [...prev.files, tempImage],
+          files: [tempImage, ...prev.files],
         };
       }
       return prev;

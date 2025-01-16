@@ -55,8 +55,7 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
           if (prev.name === currentImagesetName) {
             return {
               ...prev,
-              syncAt: prev.syncAt ?? new Date(0).getTime(),
-              files: [...prev.files, savedVideo!],
+              files: [savedVideo!, ...prev.files],
             };
           }
           return prev;

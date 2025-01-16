@@ -34,12 +34,10 @@ class Idb<T extends IdbFile> {
     this.dbName = dbName;
     this.setState = setState;
   }
-
   private updateState(newState: Partial<IdbState>) {
     this.state = { ...this.state, ...newState };
     this.setState(this.state);
   }
-
   private revokeObjectURLs() {
     this.objectURLs.forEach((url) => {
       URL.revokeObjectURL(url);
@@ -47,7 +45,7 @@ class Idb<T extends IdbFile> {
     this.objectURLs.clear();
   }
 
-  async destroy(): Promise<void> {
+  async destroyDb(): Promise<void> {
     try {
       await deleteDB(this.dbName);
       this.revokeObjectURLs();
@@ -57,7 +55,7 @@ class Idb<T extends IdbFile> {
     }
   }
 
-  async debug(): Promise<void> {
+  async debugDb(): Promise<void> {
     console.log("Debugging database");
     try {
       const db = await openDB(this.dbName);
@@ -139,8 +137,8 @@ class Idb<T extends IdbFile> {
     }
   }
 
-  // 管理者のみ使用
-  async getAll(): Promise<T[]> {
+  // ギャラリー画面で使用
+  async getDbAllFile(): Promise<T[]> {
     try {
       const db = await openDB(this.dbName);
       const tx = db.transaction(db.objectStoreNames, "readonly");
@@ -169,7 +167,13 @@ class Idb<T extends IdbFile> {
 
   async get(
     storeName: string,
-    options?: { idbId?: string; updatedAt?: "latest" }
+    options?: {
+      idbId?: string;
+      date?: {
+        key: keyof T; // ソートに使用するキー（updatedAt, createdAtなど）
+        order: "latest" | "asc" | "desc";
+      };
+    }
   ): Promise<T | T[] | undefined> {
     this.updateState({
       isStoreLoading: [...this.state.isStoreLoading, storeName],
@@ -178,15 +182,19 @@ class Idb<T extends IdbFile> {
       const db = await this.createStore(storeName); // storeがなければ作成される
       const tx = db.transaction(storeName, "readonly");
       const store = tx.objectStore(storeName);
-      if (options?.updatedAt === "latest") {
+      if (options?.date?.order === "latest") {
+        // INFO: 最新のファイルを一つだけ取得する場合
         const files = (await store.getAll()) as T[];
         if (files.length === 0) return undefined;
+
         const latestFile: T = files
           .filter((file) => file.deletedAt === null) // 論理削除されていないファイルのみ
           .reduce((latest, file) => {
-            // 最新のファイルを一つだけ取得
-            return file.updatedAt > latest.updatedAt ? file : latest;
+            const currentValue = file[options.date!.key];
+            const latestValue = latest[options.date!.key];
+            return currentValue > latestValue ? file : latest;
           }, files[0]);
+
         if (latestFile.blob) {
           const existingUrl = this.objectURLs.get(latestFile.idbId);
           if (existingUrl) URL.revokeObjectURL(existingUrl);
@@ -196,6 +204,7 @@ class Idb<T extends IdbFile> {
         }
         return latestFile;
       } else if (options?.idbId) {
+        // INFO: 特定のファイルを取得する場合
         const file = (await store.get(options.idbId)) as T;
         if (!file.blob) return undefined;
         // // CHECK: 一旦単体GETではidbUrlの更新は行わない
@@ -206,6 +215,7 @@ class Idb<T extends IdbFile> {
         // file.idbUrl = newUrl;
         return file;
       } else {
+        // INFO: 全てのファイルを取得する場合
         const files = (await store.getAll()) as T[];
         for (const file of files) {
           if (!file.blob) continue;
@@ -214,6 +224,21 @@ class Idb<T extends IdbFile> {
           const newUrl = URL.createObjectURL(file.blob);
           this.objectURLs.set(file.idbId, newUrl);
           file.idbUrl = newUrl;
+        }
+        // ソート設定がある場合は指定されたキーでソート
+        if (options?.date?.order === "asc" || options?.date?.order === "desc") {
+          const { key, order } = options.date;
+          files.sort((a, b) => {
+            const valueA = a[key];
+            const valueB = b[key];
+            return order === "desc"
+              ? valueA > valueB // 降順
+                ? -1
+                : 1
+              : valueA > valueB // 昇順
+              ? 1
+              : -1;
+          });
         }
         return files;
       }
@@ -267,17 +292,21 @@ class Idb<T extends IdbFile> {
   }
 
   // syncLatestsは最新のファイルをidbに追加したうえで最新のidbファイルセットを返す
-  async syncLatests(
-    latests: { file: T; storeName: string }[]
-  ): Promise<(T & { storeName: string })[]> {
+  async syncLatests({
+    dateKey,
+    set,
+  }: {
+    dateKey: keyof T;
+    set: { file: T; storeName: string }[];
+  }): Promise<(T & { storeName: string })[]> {
     const results: (T & { storeName: string })[] = [];
-    if (latests.length === 0) {
+    if (set.length === 0) {
       // A. 同期するファイルがない場合
       console.log("No files to sync");
       const storeNames = await this.getStores();
       for (const storeName of storeNames) {
         const storeLatestFile = (await this.get(storeName, {
-          updatedAt: "latest",
+          date: { key: dateKey, order: "latest" },
         })) as T;
         if (storeLatestFile) {
           results.push({
@@ -288,16 +317,16 @@ class Idb<T extends IdbFile> {
       }
     } else {
       // B. 同期するファイルがある場合
-      for (const { file, storeName } of latests) {
+      for (const { file, storeName } of set) {
         const storeLatestFile = (await this.get(storeName, {
-          updatedAt: "latest",
+          date: { key: dateKey, order: "latest" },
         })) as T;
         if (
           !file ||
           !file.blob ||
-          !file.updatedAt || // ファイルが存在しないか、
+          !file[dateKey] || // ファイルが存在しないか、
           (storeLatestFile && // idbにファイルが存在するのに、
-            file.updatedAt <= storeLatestFile.updatedAt) // idbデータより古い場合
+            file[dateKey] <= storeLatestFile[dateKey]) // idbデータより古い場合
         ) {
           // ストア名だけ返す
           results.push({
@@ -320,7 +349,8 @@ class Idb<T extends IdbFile> {
   // syncメソッドは指定Storeの差分ファイル（＝存在しないor更新された）を同期したうえで最新のidbファイルセットを返す
   async sync(
     storeName: string,
-    files: T[]
+    files: T[],
+    options?: { dateKey: keyof T; order: "asc" | "desc" }
   ): Promise<(T & { storeName?: string })[]> {
     this.updateState({
       isStoreSyncing: [...this.state.isStoreSyncing, storeName],
@@ -352,6 +382,11 @@ class Idb<T extends IdbFile> {
       });
       for (const file of newFiles) {
         await store.put(file); // putメソッドはエントリが存在しない場合は追加し、存在する場合は更新する
+      }
+      if (options?.dateKey && options.order) {
+        return this.get(storeName, {
+          date: { key: options.dateKey, order: options.order },
+        }) as Promise<T[]>;
       }
       return this.get(storeName) as Promise<T[]>;
     } catch (error) {
