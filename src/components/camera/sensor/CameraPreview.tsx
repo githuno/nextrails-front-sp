@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, use } from "react";
+import React, { useRef, useEffect } from "react";
 import jsQR from "jsqr";
 import { useCameraContext } from "../CameraContext";
 import { useModal } from "@/components";
@@ -177,7 +177,7 @@ interface CameraPreviewProps {
 }
 
 const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
-  const { cameraState, setCameraState, setStream } = useCameraContext();
+  const { cameraState, setCameraState, setStream, imageset } = useCameraContext();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scannerRef = useRef<CameraPreviewManager | null>(null);
@@ -217,7 +217,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
     return () => {
       scannerRef.current?.cleanup();
     };
-  }, []);
+  }, [imageset.name]); // TODO: これも不要にしたい
 
   useEffect(() => {
     // ウィンドウが閉じられる前にクリーンアップ
@@ -236,6 +236,7 @@ const CameraPreview: React.FC<CameraPreviewProps> = ({ onQRCodeScanned }) => {
           videoRef.current,
           canvasRef.current
         );
+        // スキャン開始
         setCameraState("SCANNING");
         return true;
       }

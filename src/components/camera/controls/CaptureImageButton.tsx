@@ -75,6 +75,7 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
     if (blob) {
       const savedImage: File = await idb.post(imageset.name, {
         ...tempImage,
+        idbUrl: null, // 一時的な dataUrl は削除
         blob: blob,
         size: blob.size,
       });

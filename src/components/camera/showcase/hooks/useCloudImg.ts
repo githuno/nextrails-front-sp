@@ -55,7 +55,7 @@ class Cloud {
                 return null; // imagesetがundefinedの場合はnullを返す
               }
               // 1. syncAtプロパティを追加
-              imageset.syncAt = null;
+              // imageset.syncAt = 0; 責務外と思われるためコメントアウト
               // 2. filesプロパティが存在しない場合や、値が配列でない場合に空の配列を設定
               imageset.files = Array.isArray(imageset.files)
                 ? imageset.files
@@ -120,11 +120,9 @@ class Cloud {
         }
 
         const cloudFiles: File[] = await response.json().then(async (json) => {
-          // TODO: 未削除の全ファイル＋syncAt以降に削除されたファイルが返ってくる
-
           // 1. keyを取得
           const keys = json
-            .filter((file: File) => !file.deletedAt) // 削除済みファイルはkeysから除外してblobは取得しない
+            .filter((file: File) => !file.deletedAt || !file.idbUrl) // 削除済みorIDB保存済みファイルはkeysから除外してblobは取得しない
             .map((file: File) => file.key);
 
           // 2. keyからblobをダウンロード

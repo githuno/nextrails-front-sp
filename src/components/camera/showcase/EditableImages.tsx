@@ -1,19 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useIdb, LoadingSpinner, CloseIcon, SyncIcon } from "../_utils";
-import {
-  useCameraContext,
-  File,
-  Imageset,
-  ImagesetState,
-} from "../CameraContext";
+import { useCameraContext, File } from "../CameraContext";
 import { useCloudImg } from "./hooks/useCloudImg";
 
 const EditableImages = () => {
-  const { imageset, setImageset, cameraState, setCameraState, dbName } =
-    useCameraContext();
+  const { imageset, setImageset, cameraState, dbName } = useCameraContext();
   const { idb, idbState } = useIdb<File>(dbName);
   const { cloud, cloudState, isOnline } = useCloudImg();
 
+  const [isBusy, setIsBusy] = useState<string[]>([]);
   const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false);
 
   const getImageset = useCallback(async () => {
@@ -23,8 +18,8 @@ const EditableImages = () => {
       const idbFiles = await idb.get(imageset.name, {
         date: { key: "updatedAt", order: "desc" },
       });
-      let idbUpdatedAt: number = 0;
-      let params = "deletedAt_null=true"; // 削除されていないファイルのみ取得
+      let idbUpdatedAt = 0;
+      let params = "deletedAt_null=true&updatedAt_sort=desc"; // 削除されていないファイルのみ取得
       if (Array.isArray(idbFiles) && idbFiles.length > 0) {
         // idbファイルが存在する場合
         setImageset((prev) =>
@@ -47,7 +42,9 @@ const EditableImages = () => {
         // --- B. オンラインでcloudFilesがない場合はsyncAtを1で更新（=auto関数が発火）
         if (cloudFiles.length === 0 || !Array.isArray(idbFiles)) {
           setImageset((prev) =>
-            prev.name === currentName ? { ...prev, syncAt: 1 } : prev
+            prev.name === currentName
+              ? { ...prev, syncAt: idbUpdatedAt ?? 1 }
+              : prev
           );
           return;
 
@@ -77,94 +74,130 @@ const EditableImages = () => {
     }
   }, [idb, cloud, isOnline, imageset.name]);
 
-  const autoUploadImageset = useCallback(
-    async (targetSet: Imageset) => {
-      // syncAtがない（＝cloudfilesをダウンロードしていない）場合は実行しない
-      if (!targetSet.syncAt || !isOnline) return;
+  const autoPostImage = useCallback(
+    async ({
+      setName,
+      file,
+      syncAt,
+    }: {
+      file: File;
+      setName: string;
+      syncAt: number;
+    }) => {
+      if (
+        file.id || // idがある（＝POSTされている）
+        file.size === 0 || // サイズが0
+        syncAt === 0 || // syncAtが0（＝cloudfilesをダウンロードしていない）
+        isBusy.includes(file.idbId)
+      )
+        return; // 上記条件下では処理しない
+      setIsBusy((prev) => [...prev, file.idbId]);
+      console.log("autoPOST:file:", file);
 
-      // 対象ファイルを抽出
-      let filesToUpload = targetSet.files.filter((file) => {
-        // 1. 基本的なチェック -------------------------
-        if (file.key) return false;
-        // 2. すでにアップロード中のファイルを除外 ------
-        if (cloudState.isPosting.includes(file.idbId)) return false;
-        // 3. 重複チェック（例：ハッシュや内容による比較）
-        const isDuplicate = imageset.files.some(
-          (existingFile) =>
-            existingFile.key && existingFile.idbId === file.idbId
-        );
-        return !isDuplicate;
-      });
+      // INFO:アップロードはidbの作成までコントローラーで行う
 
-      if (filesToUpload.length === 0) return;
-
-      // 更新日順に並べ替え（古い順）
-      filesToUpload = filesToUpload.sort(
-        (a, b) =>
-          new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
-      );
-
-      // ひとつずつアップロード
-      for (const file of filesToUpload) {
-        try {
-          // 1. オンラインアップロード
+      try {
+        if (isOnline) {
+          // 1-1. オンラインアップロード
           const fileId =
-            (await cloud.postFile({ file, imagesetName: targetSet.name })) ??
-            null;
-          // 2. imagesetのsyncAtと該当ファイルのidのみ更新
+            (await cloud.postFile({ file, imagesetName: setName })) ?? null;
+          if (!fileId) throw new Error("Failed to upload file");
+          // 1-2. ファイルを更新 ※idのみ更新（バージョンはあげない）
+          const newFile = { ...file, id: fileId };
+
+          // 2. imagesetのsyncAtと該当ファイルの更新
           setImageset((prev) =>
-            prev.name === targetSet.name
+            prev.name === setName
               ? {
                   ...prev,
                   files: prev.files.map((f) =>
-                    f.idbId === file.idbId ? { ...f, id: fileId } : f
+                    f.idbId === file.idbId ? newFile : f
                   ),
                   syncAt: file.updatedAt,
                 }
               : prev
           );
           // 3. IDBのidのみ更新
-          await idb.put(targetSet.name, {
-            ...file,
-            id: fileId,
-            // updatedAt: Date.now(), // -------------INFO: idのみ更新
-            // version: (file.version ?? 0) + 1, // --INFO: idのみ更新
-          });
-        } catch (error) {
-          console.error(`Error uploading file with id ${file.idbId}:`, error);
+          await idb.put(setName, newFile);
         }
+      } catch (error) {
+        console.error(`Error uploading file with id ${file.idbId}:`, error);
+      } finally {
+        setIsBusy((prev) => prev.filter((id) => id !== file.idbId));
       }
     },
-    [imageset, cloud, idb, isOnline]
+    [cloud, idb, isBusy]
   );
 
-  const autoUpdateImageset = useCallback(
-    async (targetSet: Imageset) => {
-      // syncAtがない（＝cloudfilesをダウンロードしていない）場合は実行しない
-      if (!targetSet.syncAt || !isOnline) return;
+  const autoPutImage = useCallback(
+    async ({
+      setName,
+      file,
+      syncAt,
+    }: {
+      file: File;
+      setName: string;
+      syncAt: number;
+    }) => {
+      if (
+        !file.id || // idがない（＝POSTされていない）
+        file.size === 0 || // サイズが0
+        file.updatedAt <= syncAt || // 更新日がsyncAt以前
+        isBusy.includes(file.idbId) // すでにアップロード中
+      )
+        return; // 上記条件下では処理しない
+      setIsBusy((prev) => [...prev, file.idbId]);
+      console.log("autoPUT:file:", file);
 
-      // 更新するファイルを抽出
-      const filesToUpdate = targetSet.files.filter(
-        (file) =>
-          file.updatedAt > targetSet.syncAt! && // 更新日がsyncAtより新しい
-          file.id !== null // かつidがある(=POST済)
-      );
+      // 1. IDBの更新
+      await idb.put(setName, file);
 
-      // TODO:ファイルがない場合はcloud,ローカルでsyncAtを更新して終了
-
-      for (const file of filesToUpdate) {
-        try {
-          await cloud.putFile({ file, imagesetName: targetSet.name });
-        } catch (error) {
-          console.error(`Error updating file with id ${file.id}:`, error);
+      try {
+        if (isOnline) {
+          // 2. オンラインアップデート
+          await cloud.putFile({ file, imagesetName: setName });
+          // 3. imagesetのsyncAtを更新
+          setImageset((prev) =>
+            prev.name === setName
+              ? {
+                  ...prev,
+                  syncAt: file.updatedAt,
+                }
+              : prev
+          );
         }
+      } catch (error) {
+        console.error(`Error updating file with id ${file.idbId}:`, error);
+      } finally {
+        setIsBusy((prev) => prev.filter((id) => id !== file.idbId));
       }
     },
-    [imageset, cloud]
+    [cloud, isBusy]
+  );
+
+  const autoCleanup = useCallback(
+    async ({ setName, syncAt }: { setName: string; syncAt: number }) => {
+      if (syncAt === 0) return;
+      // 1. imagesetのクリーニング(deletedAtがsyncAtより古いfileを削除)
+      setImageset((prev) =>
+        prev.name === setName
+          ? {
+              ...prev,
+              files: prev.files.filter(
+                (file) => !(file.deletedAt && file.deletedAt < syncAt)
+              ),
+            }
+          : prev
+      );
+      // 2. IDBのクリーニング
+      idb.cleanup(setName, { until: syncAt });
+    },
+    [imageset.name]
   );
 
   const deleteImage = useCallback(
-    async ({ imagesetName, file }: { imagesetName: string; file: File }) => {
+    async ({ setName, file }: { setName: string; file: File }) => {
+      if (isBusy.includes(file.idbId)) return;
       // 1. fileのversionとdeletedAtを更新
       const targetFile = {
         ...file,
@@ -173,29 +206,37 @@ const EditableImages = () => {
         version: file.version + 1,
         blob: null,
       };
+      // 2. IDBの更新（未アップロードファイルを考慮して論理削除）
+      await idb.put(imageset.name, targetFile);
+
+      // 3. imagesetの該当ファイルを更新
+      setImageset((prev) =>
+        prev.name === setName
+          ? {
+              ...prev,
+              files: prev.files.map((f) =>
+                f.idbId === targetFile.idbId ? targetFile : f
+              ),
+            }
+          : prev
+      );
 
       try {
-        // 2. IDBの更新（未アップロードファイルを考慮して論理削除）
-        await idb.put(imageset.name, targetFile);
-
-        // 3. imagesetの該当ファイルのdeletedAtを更新
-        setImageset((prev) =>
-          prev.name === imagesetName
-            ? {
-                ...prev,
-                files: prev.files.map((f) =>
-                  f.idbId === targetFile.idbId ? targetFile : f
-                ),
-              }
-            : prev
-        );
-
         // 4. オンラインの場合、バックエンドの削除を実行
         if (isOnline && targetFile.id) {
           // バックエンドを削除
-          await cloud.deleteFile({ file: targetFile, imagesetName });
+          await cloud.deleteFile({ file: targetFile, imagesetName: setName });
           // IDBを削除
           await idb.delete(imageset.name, targetFile.idbId);
+          // imagesetの削除
+          setImageset((prev) =>
+            prev.name === setName
+              ? {
+                  ...prev,
+                  files: prev.files.filter((f) => f.idbId !== targetFile.idbId),
+                }
+              : prev
+          );
         }
       } catch (error) {
         console.error("Error deleting file:", error);
@@ -204,59 +245,75 @@ const EditableImages = () => {
     [imageset.name, idb, cloud, isOnline]
   );
 
-  // useEffect(() => {
-  //   console.log("cameraState:", cameraState);
-  // }, [cameraState]);
-
-  // useEffect(() => {
-  //   console.log("idbState:", idbState);
-  // }, [idbState]);
-
-  // useEffect(() => {
-  //   console.log("imageset.syncAt:", imageset.syncAt);
-  // }, [imageset.syncAt]);
-
-  // useEffect(() => {
-  //   const activeFiles = imageset.files.filter(
-  //     (file) => file.deletedAt === null
-  //   );
-  //   console.log("active files:", activeFiles);
-  // }, [imageset.files]);
+  useEffect(() => {
+    console.log("cameraState:", cameraState);
+  }, [cameraState]);
 
   useEffect(() => {
+    console.log("imageset.syncAt:", imageset.syncAt);
+  }, [imageset.syncAt]);
+
+  useEffect(() => {
+    console.log("imageset.files:", imageset.files);
+  }, [imageset.files]);
+
+  useEffect(() => {
+    // 開くたびに初期化
     const initialize = async () => {
       if (cameraState === "INITIALIZING") {
         await getImageset();
-        setCameraState("SCANNING");
+        autoCleanup({ setName: imageset.name, syncAt: imageset.syncAt });
       }
     };
     initialize();
   }, [imageset.name, cameraState]);
 
   useEffect(() => {
-    const syncImageset = async () => {
-      // 以下条件下では同期しない
+    const autoUpdate = async () => {
       if (
-        !isOnline || // オフラインの場合
-        !imageset.syncAt || // syncAtがない場合
+        imageset.syncAt === 0 || // syncAtが0の場合
         cameraState !== "SCANNING" || // SCANNING状態でない場合
         imageset.files.length === 0 // ファイルがない場合
       )
-        return;
-      // 1秒後に同期処理を実行
+        return; // 上記条件下では処理しない
+
+      // syncAtより新しいファイルを抽出
+      const filesToUpdate = imageset.files.filter(
+        (file) => file.updatedAt > imageset.syncAt
+      );
+      if (filesToUpdate.length === 0) return; // 更新がない場合は処理しない
+      const fileToUpdate = filesToUpdate[filesToUpdate.length - 1];
+      // debug
+      console.log("filesToUpdate:", filesToUpdate);
+      console.log("imageset.syncAt:", imageset.syncAt);
+
+      // デバウンス後に同期処理を実行
       const timeoutId = setTimeout(() => {
-        autoUploadImageset(imageset);
-        autoUpdateImageset(imageset);
-      }, 1000); // 1秒のデバウンス
+        if (!fileToUpdate.id) {
+          // ファイルにidがない場合のみautoPostを実行
+          autoPostImage({
+            setName: imageset.name,
+            file: fileToUpdate,
+            syncAt: imageset.syncAt,
+          });
+        } else {
+          // ファイルにidがある場合のみautoPutを実行
+          autoPutImage({
+            setName: imageset.name,
+            file: fileToUpdate,
+            syncAt: imageset.syncAt,
+          });
+        }
+      }, 500); // 0.5秒のデバウンス
       return () => clearTimeout(timeoutId);
     };
-    syncImageset();
+    autoUpdate();
   }, [imageset, isOnline, cameraState]);
 
   return (
     <>
       {imageset.files
-        .filter((file) => !file.deletedAt) // TODO：表示は更新日順かつ、削除済みファイルを除外
+        .filter((file) => !file.deletedAt)
         .map((file) => (
           <div key={file.idbId} className="relative h-full pt-3 pr-2">
             {/* TODO: カルーセルではsrcのサイズが大きいときの最適化が必要 */}
@@ -275,8 +332,8 @@ const EditableImages = () => {
             )}
             {
               // 削除操作が不可な状態
+              idbState.isUpdating.includes(file.idbId) ||
               idbState.isDeleting.includes(file.idbId) ||
-              idbState.isPosting.includes(file.idbId) ||
               cloudState.isDeleting.includes(file.idbId) ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <LoadingSpinner />
@@ -286,7 +343,7 @@ const EditableImages = () => {
                 <div>
                   <button
                     onClick={() =>
-                      deleteImage({ file, imagesetName: imageset.name })
+                      deleteImage({ file, setName: imageset.name })
                     }
                     className="absolute top-0 right-0 rounded-full bg-white/80 p-1 z-10"
                   >

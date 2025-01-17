@@ -40,7 +40,7 @@ const Showcase = () => {
             name: store,
             status: ImagesetState.DRAFT,
             files: [],
-            syncAt: null,
+            syncAt: 0,
           }));
         tmpLatestSets = [...cloudLatestSets, ...diffSets];
         setLatestImagesets([...tmpLatestSets]);
@@ -95,9 +95,6 @@ const Showcase = () => {
       // getLatestImagesets();
       setIsRequireGet(false); // TODO：今のところこれないと無限ループになる
     }
-    return () => {
-      setIsRequireGet(true);
-    };
   }, [cameraState, getLatestImagesets, isRequireGet]);
 
   return (
@@ -121,7 +118,7 @@ const Showcase = () => {
                   name: newName,
                   status: ImagesetState.DRAFT,
                   files: [],
-                  syncAt: null,
+                  syncAt: 0,
                 });
               }
               setIsNameModalOpen(false);
@@ -213,7 +210,7 @@ const Showcase = () => {
                 name: "1",
                 status: ImagesetState.DRAFT,
                 files: [],
-                syncAt: null,
+                syncAt: 0,
               });
               idb.destroyDb();
               setCameraState("INITIALIZING");

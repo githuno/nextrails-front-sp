@@ -26,7 +26,7 @@ enum ImagesetState {
 interface File extends IdbFile {
   // idbId: string; // IDB用のID
   // idbUrl: string | null; // IDB用のURL
-  // blob: Blob; // 画像データ
+  // blob: Blob | null; // 画像データ
   // updatedAt: number; // 更新日時
   deletedAt: number | null; // 論理削除日時
 
@@ -48,9 +48,13 @@ interface Imageset {
   name: string;
   status: ImagesetState;
   files: File[];
-  syncAt: number | null;
+  syncAt: number;
 }
 
+// TODO: setCameraState, setStreamはCameraPreviewに持たせる。←単一責務としてsetアクションはコンポーネントに持たせる
+// state参照はできるようにする
+// 追加で、コンテキストを通してcameraManagerのメソッドを使えるようにする。cam.initialize(), .scan(), .scanStop(), .record(), .recordStop(), .capture()
+// CameraManagerはCameraContextレイヤーでクラス化する
 interface CameraContextProps {
   imageset: Imageset;
   setImageset: Dispatch<SetStateAction<Imageset>>;
@@ -72,7 +76,7 @@ export const CameraProvider: React.FC<{ children: ReactNode }> = ({
     name: "1",
     status: ImagesetState.DRAFT,
     files: [],
-    syncAt: null,
+    syncAt: 0,
   });
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraState, setCameraState] = useState<CameraState>("INITIALIZING");
