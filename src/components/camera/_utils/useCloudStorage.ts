@@ -10,7 +10,7 @@ interface CloudStorageState {
   isUploading: string[];
 }
 
-interface CloudStorage {
+interface CloudStorageManager {
   upload(params: {
     storagePath: string;
     fileId: string;
@@ -21,7 +21,7 @@ interface CloudStorage {
 }
 
 // INFO：CloudStorageの実装
-class CloudStorageImpl implements CloudStorage {
+class CloudStorageImpl implements CloudStorageManager {
   private state: CloudStorageState = {
     isUploading: [],
   };
@@ -229,7 +229,7 @@ const contentTypeToExtension: Record<
 const useCloudStorage = (
   storageOptions?: CloudStorageOptions // INFO：引数を使う場合はこちらを拡張する
 ): {
-  cloudStorage: CloudStorage;
+  cloudStorage: CloudStorageManager;
   isUploading: string[];
   extensionToContentType: typeof extensionToContentType;
   contentTypeToExtension: typeof contentTypeToExtension;

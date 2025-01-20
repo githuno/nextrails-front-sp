@@ -1,41 +1,49 @@
 import React from "react";
-import { useIdb, LoadingSpinner, CameraIcon } from "../_utils";
-import { useCameraContext, File, ImagesetState } from "../CameraContext";
+import { useImageset, File, ImagesetState } from "@/components/camera";
+import {
+  useIdb,
+  LoadingSpinner,
+  CameraIcon,
+  useCamera,
+} from "@/components/camera/_utils";
+
+const base64ToBlob = (
+  base64: string,
+  contentType: string = "image/png"
+): Blob => {
+  const byteCharacters = atob(base64.split(",")[1]);
+  const byteNumbers = new Array(byteCharacters.length)
+    .fill(0)
+    .map((_, i) => byteCharacters.charCodeAt(i));
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: contentType });
+};
+// const base64ToBlob = async (base64: string): Promise<Blob> => {
+//   const response = await fetch(base64);
+//   return await response.blob();
+// };
 
 interface CaptureImageButtonProps {
   onSaved: () => void;
 }
 
 const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
-  const { cameraState, setCameraState, dbName, imageset, setImageset } =
-    useCameraContext();
+  const { camera, cameraState } = useCamera();
+  const { dbName, imageset, setImageset } = useImageset();
   const { idb } = useIdb(dbName);
 
-  const handleCaptureImage = async () => {
-    // 画像セット名を取得
-    const currentImagesetName = imageset.name;
-
-    // Preview の video 要素を取得して非表示に
-    const video = document.getElementById("preview-video") as HTMLVideoElement;
-    video.style.display = "none";
-    // Preview の canvas 要素を取得して表示 ※scanQRCode()でcontext.drawImageしているため描画済みcanvasを使用可能
-    const canvas = document.getElementById(
-      "preview-canvas"
-    ) as HTMLCanvasElement;
-    canvas.style.display = "block";
-    // 両要素が取得できない場合はエラー
-    if (!video || !canvas) {
-      console.error("Failed to find video & canvas element");
+  const handleCaptureImage = async (url: string | null) => {
+    if (!url) {
+      console.error("Capture failed: URL is null");
       return;
     }
-
-    // capture開始
-    setCameraState("CAPTURING");
+    // 画像セット名を取得
+    const currentImagesetName = imageset.name;
 
     // 一時的に dataUrl を idbUrl として設定
     const tempImage: File = {
       idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""), // IDB用のIDを現在時刻から生成
-      idbUrl: canvas.toDataURL("image/png"),
+      idbUrl: url,
       blob: null,
       updatedAt: Date.now(),
       deletedAt: null, // 論理削除日時
@@ -62,48 +70,42 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
       return prev;
     });
 
-    // 1秒後にスキャン状態に戻す
-    setTimeout(() => {
-      setCameraState("SCANNING");
-      video.style.display = "block";
-      canvas.style.display = "none";
-    }, 1000);
+    const blob = base64ToBlob(url);
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob((blob) => resolve(blob), "image/png")
-    );
-    if (blob) {
-      const savedImage: File = await idb.post(imageset.name, {
-        ...tempImage,
-        idbUrl: null, // 一時的な dataUrl は削除
-        blob: blob,
-        size: blob.size,
-      });
-      setImageset((prev) => {
-        if (prev.name === currentImagesetName) {
-          return {
-            ...prev,
-            files: prev.files.map((file) =>
-              file.idbId === tempImage.idbId ? savedImage : file
-            ),
-          };
-        }
-        return prev;
-      });
-      onSaved();
-    }
+    // IDBに保存
+    const savedImage: File = await idb.post(imageset.name, {
+      ...tempImage,
+      idbUrl: null, // 一時的な dataUrl は削除
+      blob: blob,
+      size: blob.size,
+    });
+    // 戻り値でimagesetを更新
+    setImageset((prev) => {
+      if (prev.name === currentImagesetName) {
+        return {
+          ...prev,
+          files: prev.files.map((file) =>
+            file.idbId === tempImage.idbId ? savedImage : file
+          ),
+        };
+      }
+      return prev;
+    });
+    onSaved();
   };
 
   return (
-    <div className="flex items-center justify-center w-16 h-16 rounded-full shadow-md">
-      <button
-        onClick={handleCaptureImage}
-        disabled={cameraState === "CAPTURING"}
-        className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-blue-200 to-white shadow-inner hover:shadow-lg transition-transform"
-      >
-        {cameraState === "CAPTURING" ? <LoadingSpinner /> : <CameraIcon />}
-      </button>
-    </div>
+    camera && (
+      <div className="flex items-center justify-center w-16 h-16 rounded-full shadow-md">
+        <button
+          onClick={async () => await camera.capture(handleCaptureImage)}
+          disabled={cameraState.isCapturing}
+          className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-blue-200 to-white shadow-inner hover:shadow-lg transition-transform"
+        >
+          {cameraState.isCapturing ? <LoadingSpinner /> : <CameraIcon />}
+        </button>
+      </div>
+    )
   );
 };
 

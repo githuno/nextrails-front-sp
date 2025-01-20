@@ -16,7 +16,7 @@ interface IdbState {
   isDeleting: string[]; // idbId配列
 }
 
-class Idb<T extends IdbFile> {
+class IdbManager<T extends IdbFile> {
   private dbName: string;
   private state: IdbState = {
     isStoreLoading: [],
@@ -282,7 +282,9 @@ class Idb<T extends IdbFile> {
       throw error;
     } finally {
       this.updateState({
-        isUpdating: this.state.isUpdating.filter((idbId) => idbId !== data.idbId),
+        isUpdating: this.state.isUpdating.filter(
+          (idbId) => idbId !== data.idbId
+        ),
       });
     }
   }
@@ -436,7 +438,9 @@ class Idb<T extends IdbFile> {
       throw error;
     } finally {
       this.updateState({
-        isUpdating: this.state.isUpdating.filter((idbId) => idbId !== data.idbId),
+        isUpdating: this.state.isUpdating.filter(
+          (idbId) => idbId !== data.idbId
+        ),
       });
     }
   }
@@ -508,7 +512,7 @@ class Idb<T extends IdbFile> {
 
 const useIdb = <T extends IdbFile>(
   dbName: string
-): { idb: Idb<T>; idbState: IdbState } => {
+): { idb: IdbManager<T>; idbState: IdbState } => {
   const [idbState, setIdbState] = useState<IdbState>({
     isStoreLoading: [],
     isStoreSyncing: [],
@@ -516,10 +520,10 @@ const useIdb = <T extends IdbFile>(
     isDeleting: [],
   });
 
-  const idbRef = useRef<Idb<T> | null>(null);
+  const idbRef = useRef<IdbManager<T> | null>(null);
 
   if (!idbRef.current) {
-    idbRef.current = new Idb<T>(dbName, setIdbState);
+    idbRef.current = new IdbManager<T>(dbName, setIdbState);
   }
 
   return { idb: idbRef.current, idbState };

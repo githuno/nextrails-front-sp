@@ -1,5 +1,6 @@
 import { useIdb, IdbFile } from "./useIdb";
 import { useCloudStorage } from "./useCloudStorage";
+import { CameraContextProvider, useCamera } from "./useCameraContext";
 import {
   LoadingSpinner,
   CloseIcon,
@@ -25,4 +26,6 @@ export {
   SyncIcon,
   MenuIcon,
   PictureIcon,
+  CameraContextProvider,
+  useCamera,
 };

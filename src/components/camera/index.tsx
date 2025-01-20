@@ -1,11 +1,81 @@
-import React from "react";
-import { CameraPreview } from "./sensor/CameraPreview";
+import React, { createContext, useState } from "react";
+import { CameraPreview } from "./preview/CameraPreview";
 import { Controller } from "./controls";
 import { Showcase } from "./showcase";
-import { CameraProvider, useCameraContext } from "./CameraContext";
-// import { useEffect } from "react";
+import { CameraContextProvider, IdbFile } from "./_utils";
+import { session } from "@/components";
 
-const CameraContent: React.FC = () => {
+// ----------------------------------------------------------------------------- ImagesetType
+interface File extends IdbFile {
+  // idbId: string; // IDB用のID
+  // idbUrl: string | null; // IDB用のURL
+  // blob: Blob | null; // 画像データ
+  // updatedAt: number; // 更新日時
+  deletedAt: number | null; // 論理削除日時
+
+  createdAt: number; // 作成日時
+  id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
+  contentType: string;
+  size: number;
+
+  filename?: string; // PUTで編集させる
+  version: number; // PUTで編集された回数
+  key: string | null; // S3 key　=> あればアップロード済み
+  metadata?: {
+    status: ImagesetState; // imageSetのステータス　=> DRAFTのみ画面表示。SENTになったら非同期アップロードしてindexedDBからは削除する
+  };
+}
+
+enum ImagesetState {
+  DRAFT = "DRAFT",
+  SENT = "SENT",
+  ARCHIVED = "ARCHIVED",
+  DELETED = "DELETED",
+}
+
+interface Imageset {
+  id: number;
+  name: string;
+  status: ImagesetState;
+  files: File[];
+  syncAt: number;
+}
+
+// ----------------------------------------------------------------------------- ImagesetContext
+interface ImagesetContextProps {
+  dbName: string;
+  imageset: Imageset;
+  setImageset: React.Dispatch<React.SetStateAction<Imageset>>;
+  onQrScanned: (data: string) => void;
+}
+const ImagesetContext = createContext<ImagesetContextProps | undefined>(
+  undefined
+);
+const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  // 以下の値変更は子孫の再レンダリングを伴う
+  const dbName = `user-${session.userId}`;
+  const [imageset, setImageset] = useState<Imageset>({
+    id: Date.now(),
+    name: "1",
+    status: ImagesetState.DRAFT,
+    files: [],
+    syncAt: 0,
+  });
+  const onQrScanned = (data: string) => alert(data);
+
+  return (
+    <ImagesetContext.Provider
+      value={{ dbName, imageset, setImageset, onQrScanned }}
+    >
+      {children}
+    </ImagesetContext.Provider>
+  );
+};
+
+// ----------------------------------------------------------------------------- ImagesetContent
+const ImagesetContent: React.FC = () => {
   // const { imageset } = useCameraContext();
   // useEffect(() => {
   //   if ("serviceWorker" in navigator && "PushManager" in window) {
@@ -47,7 +117,7 @@ const CameraContent: React.FC = () => {
   //     alert("Service Worker not ready");
   //   }
   // };
-
+  
   return (
     <>
       {/* <button
@@ -61,7 +131,7 @@ const CameraContent: React.FC = () => {
         Call Hello Function
       </button> */}
       <div className="flex h-full w-full justify-center">
-        <CameraPreview onQRCodeScanned={(data) => alert(data)} />
+        <CameraPreview />
       </div>
       <div className="fixed bottom-[5%] left-0 w-full p-4">
         <Controller />
@@ -73,13 +143,31 @@ const CameraContent: React.FC = () => {
   );
 };
 
+// ----------------------------------------------------------------------------- Camera
 const Camera: React.FC = () => (
-  <CameraProvider>
-    <CameraContent />
-  </CameraProvider>
+  <CameraContextProvider>
+    <ImagesetContextProvider>
+      <ImagesetContent />
+    </ImagesetContextProvider>
+  </CameraContextProvider>
 );
-
 export default Camera;
+
+const useImageset = (): ImagesetContextProps => {
+  const context = React.useContext(ImagesetContext);
+  if (context === undefined) {
+    throw new Error(
+      "useImageset must be used within a ImagesetContextProvider"
+    );
+  }
+  return context;
+};
+export {
+  useImageset,
+  type File,
+  type Imageset, // TODO: typeとenumを統一する
+  ImagesetState, // TODO: typeとenumを統一する
+};
 
 // TODO: カルーセルの実装
 // TODO: ServiceWorker（イベント）の実装

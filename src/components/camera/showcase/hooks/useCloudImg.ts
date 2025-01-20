@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { useCloudStorage } from "../../_utils";
-import { File, Imageset } from "../../CameraContext";
+import { useCloudStorage } from "@/components/camera/_utils";
+import { File, Imageset } from "@/components/camera";
 import { session } from "@/components";
 
 interface CloudState {

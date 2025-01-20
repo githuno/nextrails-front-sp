@@ -1,10 +1,17 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useIdb, LoadingSpinner, CloseIcon, SyncIcon } from "../_utils";
-import { useCameraContext, File } from "../CameraContext";
+import { useImageset, File } from "@/components/camera";
+import {
+  useCamera,
+  useIdb,
+  LoadingSpinner,
+  CloseIcon,
+  SyncIcon,
+} from "@/components/camera/_utils";
 import { useCloudImg } from "./hooks/useCloudImg";
 
 const EditableImages = () => {
-  const { imageset, setImageset, cameraState, dbName } = useCameraContext();
+  const { cameraState } = useCamera();
+  const { imageset, setImageset, dbName } = useImageset();
   const { idb, idbState } = useIdb<File>(dbName);
   const { cloud, cloudState, isOnline } = useCloudImg();
 
@@ -260,7 +267,7 @@ const EditableImages = () => {
   useEffect(() => {
     // 開くたびに初期化
     const initialize = async () => {
-      if (cameraState === "INITIALIZING") {
+      if (cameraState.isInitializing) {
         await getImageset();
         autoCleanup({ setName: imageset.name, syncAt: imageset.syncAt });
       }
@@ -272,7 +279,7 @@ const EditableImages = () => {
     const autoUpdate = async () => {
       if (
         imageset.syncAt === 0 || // syncAtが0の場合
-        cameraState !== "SCANNING" || // SCANNING状態でない場合
+        !cameraState.isScanning || // SCANNING状態でない場合
         imageset.files.length === 0 // ファイルがない場合
       )
         return; // 上記条件下では処理しない

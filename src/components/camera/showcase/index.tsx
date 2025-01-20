@@ -1,18 +1,23 @@
-import { EditableImages } from "./EditableImages";
 import React, { useCallback, useEffect, useState } from "react";
-import { useIdb, LoadingSpinner, EditIcon } from "../_utils";
+import { Modal } from "@/components";
 import {
-  useCameraContext,
+  useImageset,
   File,
   Imageset,
   ImagesetState,
-} from "../CameraContext";
-import { Modal } from "@/components";
+} from "@/components/camera";
+import {
+  useCamera,
+  useIdb,
+  LoadingSpinner,
+  EditIcon,
+} from "@/components/camera/_utils";
 import { useCloudImg } from "./hooks/useCloudImg";
+import { EditableImages } from "./EditableImages";
 
 const Showcase = () => {
-  const { imageset, setImageset, cameraState, setCameraState, dbName } =
-    useCameraContext();
+  const { cameraState } = useCamera();
+  const { imageset, setImageset, dbName } = useImageset();
   const { idb, idbState } = useIdb<File>(dbName);
   const { cloud } = useCloudImg();
 
@@ -91,7 +96,7 @@ const Showcase = () => {
   }, [idb, cloud, isOnline, setLatestImagesets]);
 
   useEffect(() => {
-    if (cameraState === "SCANNING" && isRequireGet) {
+    if (cameraState.isScanning && isRequireGet) {
       // getLatestImagesets();
       setIsRequireGet(false); // TODO：今のところこれないと無限ループになる
     }
@@ -112,7 +117,6 @@ const Showcase = () => {
               const formData = new FormData(e.currentTarget);
               const newName = formData.get("storeName") as string;
               if (newName !== imageset.name) {
-                setCameraState("INITIALIZING");
                 setImageset({
                   id: Date.now(),
                   name: newName,
@@ -152,7 +156,7 @@ const Showcase = () => {
               <h1 className="font-bold text-center break-words">
                 セット: {imageset.name}
               </h1>
-              {cameraState === "SCANNING" && ( // 編集可能なのはSCANNING時のみ
+              {cameraState.isScanning && ( // 編集可能なのはSCANNING時のみ
                 <button
                   onClick={() => setIsNameModalOpen(true)}
                   className="ml-2 p-1 bg-transparent hover:bg-gray-200 rounded-full transition-colors"
@@ -213,7 +217,6 @@ const Showcase = () => {
                 syncAt: 0,
               });
               idb.destroyDb();
-              setCameraState("INITIALIZING");
             }}
           >
             destroyDB
