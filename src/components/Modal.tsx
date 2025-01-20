@@ -12,17 +12,12 @@ import {
 import { createPortal } from "react-dom";
 import { CloseIcon } from "./camera/_utils";
 
-type BeforeOpenHandler = () => Promise<boolean>;
-type BeforeCloseHandler = () => Promise<boolean>;
-
 interface ModalContextType {
-  registerBeforeOpen: (handler: BeforeOpenHandler) => () => void;
-  registerBeforeClose: (handler: BeforeCloseHandler) => () => void;
+  isOpen: boolean;
 }
 
 const ModalContext = createContext<ModalContextType>({
-  registerBeforeOpen: () => () => {},
-  registerBeforeClose: () => () => {},
+  isOpen: false,
 });
 
 const useModal = () => {
@@ -45,34 +40,8 @@ const Modal: FC<ModalProps> = ({
   ...props
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const beforeOpenHandlers = useRef<BeforeOpenHandler[]>([]);
-  const beforeCloseHandlers = useRef<BeforeCloseHandler[]>([]);
-
-  const registerBeforeOpen = (handler: BeforeOpenHandler) => {
-    beforeOpenHandlers.current.push(handler);
-    return () => {
-      beforeOpenHandlers.current = beforeOpenHandlers.current.filter(
-        (h) => h !== handler
-      );
-    };
-  };
-
-  const registerBeforeClose = (handler: BeforeCloseHandler) => {
-    beforeCloseHandlers.current.push(handler);
-    return () => {
-      beforeCloseHandlers.current = beforeCloseHandlers.current.filter(
-        (h) => h !== handler
-      );
-    };
-  };
 
   const handleOpen = async () => {
-    // ダイアログを開く前に実行する処理
-    for (const handler of beforeOpenHandlers.current) {
-      const canOpen = await handler();
-      if (!canOpen) return;
-    }
-
     if (dialogRef.current) {
       // ダイアログを開く
       dialogRef.current.showModal();
@@ -82,12 +51,6 @@ const Modal: FC<ModalProps> = ({
   };
 
   const handleClose = async () => {
-    // ダイアログを閉じる前に実行する処理
-    for (const handler of beforeCloseHandlers.current) {
-      const canClose = await handler();
-      if (!canClose) return;
-    }
-
     if (dialogRef.current) {
       // ダイアログを閉じる
       dialogRef.current?.close();
@@ -99,13 +62,7 @@ const Modal: FC<ModalProps> = ({
     onClose();
   };
 
-  const contextValue = useMemo(
-    () => ({
-      registerBeforeOpen,
-      registerBeforeClose,
-    }),
-    []
-  );
+  const contextValue = useMemo(() => ({ isOpen }), [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
