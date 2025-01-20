@@ -36,7 +36,6 @@ interface CameraConfig {
 interface CameraCallbacks {
   onQRCodeScanned?: (data: string) => void;
   onCaptureComplete?: (url: string | null) => void;
-  // onCaptureComplete?: (blob: Blob | null) => void;
   onRecordComplete?: (blob: Blob) => void;
   onError?: (error: Error) => void;
 }
@@ -164,8 +163,8 @@ class CameraManager {
       // まずPREFERRED_CAMERA（デフォルト：リアカメラ）を試す
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1920 }, // 1920px幅 のカメラを理想とする
-          height: { ideal: 1080 }, // 1080px高さ のカメラを理想とする
+          // width: { ideal: 1920 }, // 1920px幅 のカメラを理想とする
+          // height: { ideal: 1080 }, // 1080px高さ のカメラを理想とする
           facingMode: { exact: this.config.PREFERRED_CAMERA },
         },
         audio: false,
@@ -400,6 +399,7 @@ class CameraManager {
     this.mediaRecorder.stop();
   }
 
+  // 不要
   public async setPreviewElements(
     videoElement: HTMLVideoElement,
     canvasElement: HTMLCanvasElement
@@ -442,7 +442,7 @@ class CameraManager {
     }));
   }
 
-  // サンプル
+  // 不要：サンプル
   public setVideoToBlock = async (): Promise<void> => {
     if (!this.videoElement) return;
     console.log("block", this.videoElement);
