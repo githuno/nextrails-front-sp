@@ -355,10 +355,10 @@ class CameraManager {
     requestAnimationFrame(drawFrame);
 
     setTimeout(() => {
-      // 1秒後にビデオを再生する
+      // 1秒後にビデオを再生してstateを更新
       this.videoElement?.play();
+      this.setState((prev) => ({ ...prev, isCapturing: false }));
     }, 1000);
-    this.setState((prev) => ({ ...prev, isCapturing: false }));
   }
 
   public startRecord(): void {
