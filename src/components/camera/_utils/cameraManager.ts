@@ -1,20 +1,20 @@
 import jsQR from "jsqr";
 
 // TODO: バーコードスキャナーの実装したい
-// TODO: カメラの前面・背面切り替え機能を実装したい
 // TODO: カメラのフラッシュ機能を実装したい
 // TODO: カメラのズーム機能を実装したい
 // TODO: 撮影時・スキャン時のシャッター音・バイブレーションを実装したい
 // TODO: 解像度を変更する機能を実装したい
 // TODO: AIモデルへのリアルタイムデータ送信機能を実装したい
-// Web Workers for QR scanning
-// Stream Processing Pipeline
-// Device capability detection
-// Error recovery mechanisms
-// Performance optimizations for video processing
-// カメラデバイスの切り替え機能
-// 利用可能なカメラデバイスの列挙
-// ビデオ制約のカスタマイズ機能
+// TODO: Web Workers for QR scanning
+// TODO: Stream Processing Pipeline
+// TODO: Device capability detection
+// TODO: Error recovery mechanisms
+// TODO: Performance optimizations for video processing
+// TODO: カメラデバイスの切り替え機能
+// TODO: 利用可能なカメラデバイスの列挙
+// TODO: カメラの前面・背面切り替え機能を実装したい
+// TODO: ビデオ制約のカスタマイズ機能
 
 interface CameraState {
   isInitializing: boolean;

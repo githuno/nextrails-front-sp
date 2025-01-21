@@ -469,6 +469,7 @@ class IdbManager<T extends IdbFile> {
     }
   }
 
+  // cleanupメソッドは指定条件に一致するファイルを全削除する
   async cleanup(
     storeName: string,
     options?: {
@@ -488,11 +489,11 @@ class IdbManager<T extends IdbFile> {
       let untilAt = options?.until ?? Date.now();
       let limited = Math.min(options?.limit ?? files.length, files.length);
       for (const file of files) {
-        if (
-          limited > 0 &&
-          file[key] >= sinceAt &&
-          file[key] <= untilAt &&
-          file.deletedAt !== null
+        if ( // <削除条件>
+          limited > 0 && // 指定数量まで削除
+          file[key] >= sinceAt && // 指定日時以降のファイル
+          file[key] <= untilAt && // 指定日時以前のファイル
+          file.deletedAt !== null // 論理削除されたファイル
         ) {
           await store.delete(file.idbId);
           const url = this.objectURLs.get(file.idbId);

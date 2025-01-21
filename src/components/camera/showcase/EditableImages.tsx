@@ -221,9 +221,7 @@ const EditableImages = () => {
         prev.name === setName
           ? {
               ...prev,
-              files: prev.files.map((f) =>
-                f.idbId === targetFile.idbId ? targetFile : f
-              ),
+              files: prev.files.filter((f) => f.idbId !== targetFile.idbId),
             }
           : prev
       );
@@ -235,15 +233,6 @@ const EditableImages = () => {
           await cloud.deleteFile({ file: targetFile, imagesetName: setName });
           // IDBを削除
           await idb.delete(imageset.name, targetFile.idbId);
-          // imagesetの削除
-          setImageset((prev) =>
-            prev.name === setName
-              ? {
-                  ...prev,
-                  files: prev.files.filter((f) => f.idbId !== targetFile.idbId),
-                }
-              : prev
-          );
         }
       } catch (error) {
         console.error("Error deleting file:", error);
@@ -275,6 +264,8 @@ const EditableImages = () => {
     initialize();
   }, [imageset.name, cameraState]);
 
+  // TODO: imagesetにないがIDBにはある（削除）ファイルについての処理
+  // TODO: imagesetにあるがIDBにはないファイルについての処理
   useEffect(() => {
     const autoUpdate = async () => {
       if (
