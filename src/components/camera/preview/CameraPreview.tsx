@@ -21,7 +21,6 @@ const CameraPreview = () => {
         camera.startQrScan(onQrScanned);
       } else if (!isOpen && camera) {
         // モーダルが閉じられたらクリーンアップ
-        console.log("Cleanup camera", camera);
         await camera.cleanup();
       }
     };

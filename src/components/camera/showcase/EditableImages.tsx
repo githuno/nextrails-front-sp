@@ -7,7 +7,7 @@ import {
   CloseIcon,
   SyncIcon,
 } from "@/components/camera/_utils";
-import { useCloudImg } from "./hooks/useCloudImg";
+import { useCloudImg, ShouldDo } from "./hooks/useCloudImg";
 
 const EditableImages = () => {
   const { cameraState } = useCamera();
@@ -15,298 +15,263 @@ const EditableImages = () => {
   const { idb, idbState } = useIdb<File>(dbName);
   const { cloud, cloudState, isOnline } = useCloudImg();
 
-  const [isBusy, setIsBusy] = useState<string[]>([]);
+  const [isSyncing, setIsSyncing] = useState<string[]>([]);
   const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false);
 
-  const getImageset = useCallback(async () => {
+  const getImages = useCallback(async () => {
     const currentName = imageset.name;
+    setIsSyncing([...isSyncing, currentName]);
     try {
+      let params = "deletedAt_null=true&updatedAt_sort=desc"; // 削除されていないファイルを全部取得
       // IDBから降順でファイルを取得
       const idbFiles = await idb.get(imageset.name, {
         date: { key: "updatedAt", order: "desc" },
       });
-      let idbUpdatedAt = 0;
-      let params = "deletedAt_null=true&updatedAt_sort=desc"; // 削除されていないファイルのみ取得
+      // debug
+      console.log("GET! idbFiles:", idbFiles);
+      // IDBファイルが存在する場合
       if (Array.isArray(idbFiles) && idbFiles.length > 0) {
-        // idbファイルが存在する場合
         setImageset((prev) =>
-          // セット名が変更されていない場合は更新
+          // セット名が変更されている場合は更新しない
           prev.name === currentName ? { ...prev, files: idbFiles } : prev
         );
-        idbUpdatedAt = idbFiles[0].updatedAt;
-        params = `updatedAt_over=${idbUpdatedAt}&updatedAt_sort=desc`; // 更新日時がidbの最新ファイルより新しい(削除含む)ファイルを取得
+        // IDBの同期済みファイルのうちで最新更新日時を取得
+        const idbSyncedAt =
+          idbFiles.filter((file) => !file.shouldSync).shift()?.updatedAt ?? 0;
+        params = `updatedAt_over=${idbSyncedAt}&updatedAt_sort=desc`; // 更新日時がidbの最新ファイルより新しい(削除含む)ファイルを取得
       }
-
-      if (!isOnline) {
-        // --- A. オフラインであればidbfilesの有無にかかわらず終了（=auto関数も発火不要）
-        return;
-      } else {
-        const cloudFiles = await cloud.getFiles(currentName, {
-          params: params,
-        });
-        // debug
-        console.log("GET:cloudFiles:", cloudFiles);
-        // --- B. オンラインでcloudFilesがない場合はsyncAtを1で更新（=auto関数が発火）
-        if (cloudFiles.length === 0 || !Array.isArray(idbFiles)) {
-          setImageset((prev) =>
-            prev.name === currentName
-              ? { ...prev, syncAt: idbUpdatedAt ?? 1 }
-              : prev
-          );
-          return;
-
-          // - C. オンラインでcloudFilesがある場合は同期（=auto関数が発火）
-        } else {
-          const syncedFiles = await idb.sync(currentName, cloudFiles, {
-            dateKey: "updatedAt",
-            order: "desc",
-          });
-          // debug
-          console.log("GET:syncedFiles:", syncedFiles);
-          setImageset((prev) =>
-            prev.name === currentName
-              ? {
-                  ...prev,
-                  files: syncedFiles,
-                  syncAt: cloudFiles[0].updatedAt,
-                }
-              : prev
-          );
-        }
-      }
-      // debug
-      console.log("GET imageset:", imageset);
+      // クラウドからファイルを取得
+      await syncFromImages({ setName: imageset.name, params });
     } catch (error) {
       console.error("Error updating media:", error);
+    } finally {
+      setIsSyncing((prev) => prev.filter((name) => name !== currentName));
     }
   }, [idb, cloud, isOnline, imageset.name]);
 
-  const autoPostImage = useCallback(
-    async ({
-      setName,
-      file,
-      syncAt,
-    }: {
-      file: File;
-      setName: string;
-      syncAt: number;
-    }) => {
-      if (
-        file.id || // idがある（＝POSTされている）
-        file.size === 0 || // サイズが0
-        syncAt === 0 || // syncAtが0（＝cloudfilesをダウンロードしていない）
-        isBusy.includes(file.idbId)
-      )
-        return; // 上記条件下では処理しない
-      setIsBusy((prev) => [...prev, file.idbId]);
-      console.log("autoPOST:file:", file);
+  const localCleanup = useCallback(async (imagesetName: string) => {
+    const targetFiles = imageset.files.filter(
+      (file) => file.deletedAt && !file.shouldSync // 削除済みかつ同期不要ファイル
+    );
+    // debug
+    console.log("targetFiles:", targetFiles);
+    try {
+      for (const file of targetFiles) {
+        await idb.delete(imagesetName, file.idbId); // IDBの削除済みファイルを削除
+        setImageset((prev) =>
+          prev.name === imagesetName
+            ? {
+                ...prev,
+                files: prev.files.filter((file) => !file.deletedAt),
+              }
+            : prev
+        );
+      }
+    } catch (error) {
+      console.error("Error cleaning up media:", error);
+    }
+  }, [idb, imageset.files]);
 
-      // INFO:アップロードはidbの作成までコントローラーで行う
-
+  const syncFromImages = useCallback(
+    async ({ setName, params }: { setName: string; params: string }) => {
+      if (!isOnline) return;
       try {
-        if (isOnline) {
-          // 1-1. オンラインアップロード
-          const fileId =
-            (await cloud.postFile({ file, imagesetName: setName })) ?? null;
-          if (!fileId) throw new Error("Failed to upload file");
-          // 1-2. ファイルを更新 ※idのみ更新（バージョンはあげない）
-          const newFile = { ...file, id: fileId };
-
-          // 2. imagesetのsyncAtと該当ファイルの更新
-          setImageset((prev) =>
-            prev.name === setName
-              ? {
-                  ...prev,
-                  files: prev.files.map((f) =>
-                    f.idbId === file.idbId ? newFile : f
-                  ),
-                  syncAt: file.updatedAt,
-                }
-              : prev
-          );
-          // 3. IDBのidのみ更新
-          await idb.put(setName, newFile);
-        }
+        const cloudFiles = await cloud.getFiles(setName, {
+          params: params,
+        });
+        if (cloudFiles.length === 0 || !Array.isArray(cloudFiles)) return;
+        // debug
+        console.log("GET! cloudFiles:", cloudFiles);
+        // cloudFilesがある場合はIDBに同期してimagesetにセット
+        const syncedFiles = await idb.sync(setName, cloudFiles, {
+          dateKey: "updatedAt",
+          order: "desc",
+        });
+        setImageset((prev) =>
+          prev.name === setName
+            ? {
+                ...prev,
+                files: syncedFiles,
+              }
+            : prev
+        );
+        // debug
+        console.log("GET! syncedFiles:", syncedFiles);
       } catch (error) {
-        console.error(`Error uploading file with id ${file.idbId}:`, error);
-      } finally {
-        setIsBusy((prev) => prev.filter((id) => id !== file.idbId));
+        console.error(`Error updating media with ${setName}:`, error);
       }
     },
-    [cloud, idb, isBusy]
+    [cloud, idb]
   );
 
-  const autoPutImage = useCallback(
-    async ({
-      setName,
-      file,
-      syncAt,
-    }: {
-      file: File;
-      setName: string;
-      syncAt: number;
-    }) => {
+  const syncToImage = useCallback(
+    async ({ setName, file }: { file: File; setName: string }) => {
+      const method = cloud.shouldDo(file);
       if (
-        !file.id || // idがない（＝POSTされていない）
-        file.size === 0 || // サイズが0
-        file.updatedAt <= syncAt || // 更新日がsyncAt以前
-        isBusy.includes(file.idbId) // すでにアップロード中
+        !isOnline ||
+        method === ShouldDo.NOT ||
+        isSyncing.includes(file.idbId)
       )
-        return; // 上記条件下では処理しない
-      setIsBusy((prev) => [...prev, file.idbId]);
-      console.log("autoPUT:file:", file);
+        return;
+      setIsSyncing((prev) => [...prev, file.idbId]);
 
-      // 1. IDBの更新
-      await idb.put(setName, file);
+      // debug
+      console.log("autoSync! method,file:", method, file);
+
+      // 同期済みとして新しいファイルを作成
+      let newFile: File = { ...file, shouldSync: false };
 
       try {
-        if (isOnline) {
-          // 2. オンラインアップデート
-          await cloud.putFile({ file, imagesetName: setName });
-          // 3. imagesetのsyncAtを更新
-          setImageset((prev) =>
-            prev.name === setName
-              ? {
-                  ...prev,
-                  syncAt: file.updatedAt,
-                }
-              : prev
-          );
+        switch (method) {
+          case ShouldDo.POST:
+            newFile = await cloud.postFile({ file, imagesetName: setName });
+            newFile.idbUrl = file.idbUrl;
+            await idb.put(setName, newFile);
+            break;
+          case ShouldDo.PUT:
+            await cloud.putFile({ file, imagesetName: setName });
+            await idb.put(setName, newFile);
+            break;
+          case ShouldDo.DELETE:
+            await cloud.deleteFile({ file, imagesetName: setName });
+            await idb.delete(setName, file.idbId); // IDBの物理削除
+            break;
+          default:
+            break;
         }
+        // imagesetの該当fileを更新
+        setImageset((prev) =>
+          prev.name === setName
+            ? {
+                ...prev,
+                files:
+                  method !== ShouldDo.DELETE
+                    ? prev.files.map((f) =>
+                        f.idbId === newFile.idbId ? newFile : f
+                      )
+                    : prev.files.filter((f) => f.idbId !== newFile.idbId),
+              }
+            : prev
+        );
       } catch (error) {
         console.error(`Error updating file with id ${file.idbId}:`, error);
       } finally {
-        setIsBusy((prev) => prev.filter((id) => id !== file.idbId));
+        setIsSyncing((prev) => prev.filter((id) => id !== file.idbId));
       }
     },
-    [cloud, isBusy]
+    [cloud, idb, isSyncing]
   );
 
-  const autoCleanup = useCallback(
-    async ({ setName, syncAt }: { setName: string; syncAt: number }) => {
-      if (syncAt === 0) return;
-      // 1. imagesetのクリーニング(deletedAtがsyncAtより古いfileを削除)
+  const handleLocalDelete = useCallback(
+    async ({ setName, file }: { setName: string; file: File }) => {
+      if (isSyncing.includes(file.idbId)) return;
+      // 1. fileのversionとdeletedAtを更新して定義
+      const deleteFile = {
+        ...file,
+        deletedAt: Date.now(),
+        updatedAt: Date.now(),
+        shouldSync: true,
+        version: file.version + 1,
+        blob: null,
+      };
+      // 2. IDBの論理削除
+      await idb.put(imageset.name, deleteFile);
+
+      // 3. imagesetの該当ファイルを論理削除
       setImageset((prev) =>
         prev.name === setName
           ? {
               ...prev,
-              files: prev.files.filter(
-                (file) => !(file.deletedAt && file.deletedAt < syncAt)
+              files: prev.files.map((f) =>
+                f.idbId === deleteFile.idbId ? deleteFile : f
               ),
             }
           : prev
       );
-      // 2. IDBのクリーニング
-      idb.cleanup(setName, { until: syncAt });
-    },
-    [imageset.name]
-  );
-
-  const deleteImage = useCallback(
-    async ({ setName, file }: { setName: string; file: File }) => {
-      if (isBusy.includes(file.idbId)) return;
-      // 1. fileのversionとdeletedAtを更新
-      const targetFile = {
-        ...file,
-        deletedAt: Date.now(),
-        updatedAt: Date.now(),
-        version: file.version + 1,
-        blob: null,
-      };
-      // 2. IDBの更新（未アップロードファイルを考慮して論理削除）
-      await idb.put(imageset.name, targetFile);
-
-      // 3. imagesetの該当ファイルを更新
-      setImageset((prev) =>
-        prev.name === setName
-          ? {
-              ...prev,
-              files: prev.files.filter((f) => f.idbId !== targetFile.idbId),
-            }
-          : prev
-      );
-
-      try {
-        // 4. オンラインの場合、バックエンドの削除を実行
-        if (isOnline && targetFile.id) {
-          // バックエンドを削除
-          await cloud.deleteFile({ file: targetFile, imagesetName: setName });
-          // IDBを削除
-          await idb.delete(imageset.name, targetFile.idbId);
-        }
-      } catch (error) {
-        console.error("Error deleting file:", error);
-      }
     },
     [imageset.name, idb, cloud, isOnline]
   );
 
+  const handleLocalUpdate = useCallback(
+    async ({ setName, file }: { setName: string; file: File }) => {
+      if (isSyncing.includes(file.idbId)) return;
+      const targetFile = {
+        ...file,
+        updatedAt: Date.now(),
+        shouldSync: true,
+        version: file.version + 1,
+      };
+      // 1. IDBの更新
+      await idb.put(setName, targetFile);
+      // 2. imagesetの更新
+      setImageset((prev) =>
+        prev.name === setName
+          ? {
+              ...prev,
+              files: prev.files.map((f) =>
+                f.idbId === targetFile.idbId ? targetFile : f
+              ),
+            }
+          : prev
+      );
+    },
+    [idb, isSyncing]
+  );
+
+  // debug ---------------------------------------------------------------------
   useEffect(() => {
     console.log("cameraState:", cameraState);
   }, [cameraState]);
-
-  useEffect(() => {
-    console.log("imageset.syncAt:", imageset.syncAt);
-  }, [imageset.syncAt]);
-
   useEffect(() => {
     console.log("imageset.files:", imageset.files);
   }, [imageset.files]);
+  // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    // 開くたびに初期化
     const initialize = async () => {
       if (cameraState.isInitializing) {
-        await getImageset();
-        autoCleanup({ setName: imageset.name, syncAt: imageset.syncAt });
+        await getImages();
+        localCleanup(imageset.name);
       }
     };
     initialize();
-  }, [imageset.name, cameraState]);
+  }, [imageset.name, cameraState.isInitializing]);
 
-  // TODO: imagesetにないがIDBにはある（削除）ファイルについての処理
-  // TODO: imagesetにあるがIDBにはないファイルについての処理
   useEffect(() => {
-    const autoUpdate = async () => {
+    const autoSync = async () => {
       if (
-        imageset.syncAt === 0 || // syncAtが0の場合
         !cameraState.isScanning || // SCANNING状態でない場合
-        imageset.files.length === 0 // ファイルがない場合
+        imageset.files.length === 0 || // ファイルがない場合
+        isSyncing.includes(imageset.name) // 同期中の場合
       )
         return; // 上記条件下では処理しない
 
-      // syncAtより新しいファイルを抽出
-      const filesToUpdate = imageset.files.filter(
-        (file) => file.updatedAt > imageset.syncAt
-      );
-      if (filesToUpdate.length === 0) return; // 更新がない場合は処理しない
-      const fileToUpdate = filesToUpdate[filesToUpdate.length - 1];
-      // debug
-      console.log("filesToUpdate:", filesToUpdate);
-      console.log("imageset.syncAt:", imageset.syncAt);
+      // 未同期ファイルの最古ファイルを抽出
+      const fileToUpdate = imageset.files
+        .filter((file) => file.shouldSync)
+        .pop();
+      if (!fileToUpdate) return; // 更新がない場合は処理しない
 
-      // デバウンス後に同期処理を実行
+      // 前回の同期日時を取得
+      const prevSyncedAt =
+        imageset.files.filter((file) => !file.shouldSync).shift()?.updatedAt ??
+        0;
+      // 前回の同期以降に更新されたファイルを取得
+      const params = `updatedAt_over=${prevSyncedAt}&updatedAt_sort=desc`;
+
+      // TODO: リクエストが多くなるので最適化が必要
       const timeoutId = setTimeout(() => {
-        if (!fileToUpdate.id) {
-          // ファイルにidがない場合のみautoPostを実行
-          autoPostImage({
-            setName: imageset.name,
-            file: fileToUpdate,
-            syncAt: imageset.syncAt,
-          });
-        } else {
-          // ファイルにidがある場合のみautoPutを実行
-          autoPutImage({
-            setName: imageset.name,
-            file: fileToUpdate,
-            syncAt: imageset.syncAt,
-          });
-        }
-      }, 500); // 0.5秒のデバウンス
+        // 1. 未同期ファイルを同期（local→cloud）
+        syncToImage({ setName: imageset.name, file: fileToUpdate });
+        // 2. 差分更新ファイルを取得（cloud→local）
+        syncFromImages({ setName: imageset.name, params });
+        // 3. 論理削除済みファイルを物理削除
+        localCleanup(imageset.name);
+      }, 500); // 0.5秒のデバウンス後に上記処理を実行
       return () => clearTimeout(timeoutId);
     };
-    autoUpdate();
-  }, [imageset, isOnline, cameraState]);
+    autoSync();
+  }, [isOnline, imageset.files, cameraState.isScanning]);
 
   return (
     <>
@@ -341,7 +306,7 @@ const EditableImages = () => {
                 <div>
                   <button
                     onClick={() =>
-                      deleteImage({ file, setName: imageset.name })
+                      handleLocalDelete({ file, setName: imageset.name })
                     }
                     className="absolute top-0 right-0 rounded-full bg-white/80 p-1 z-10"
                   >

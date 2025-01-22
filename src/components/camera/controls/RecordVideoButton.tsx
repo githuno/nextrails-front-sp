@@ -35,21 +35,19 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
     const currentImagesetName = imageset.name;
 
     const video: File = {
+      id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
+      key: null, // S3 key　=> あればアップロード済み
       idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
       idbUrl: null,
       blob: blob,
-      // ------------------------------------------------- ↑ DBには不要
       updatedAt: Date.now(),
-      // ---------------------------------- ↑ IdbFile | ↓ FileType ---
-      id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
+      deletedAt: null, // 削除日時
+      createdAt: Date.now(), // 作成日時
+      shouldSync: true, // 同期すべきか
       size: blob.size,
       contentType: blob.type,
-
       filename: "", // PUTで編集させる
       version: 1, // PUTで編集された回数
-      key: null, // S3 key　=> あればアップロード済み
-      createdAt: Date.now(), // 作成日時
-      deletedAt: null, // 削除日時
       metadata: {
         status: ImagesetState.DRAFT,
       },

@@ -45,7 +45,6 @@ const Showcase = () => {
             name: store,
             status: ImagesetState.DRAFT,
             files: [],
-            syncAt: 0,
           }));
         tmpLatestSets = [...cloudLatestSets, ...diffSets];
         setLatestImagesets([...tmpLatestSets]);
@@ -71,7 +70,6 @@ const Showcase = () => {
                 id: imageset.id,
                 name: storeName,
                 status: ImagesetState.DRAFT,
-                syncAt: syncedLatestFile.updatedAt,
                 files: [file as File],
               }
             : imageset;
@@ -122,7 +120,6 @@ const Showcase = () => {
                   name: newName,
                   status: ImagesetState.DRAFT,
                   files: [],
-                  syncAt: 0,
                 });
               }
               setIsNameModalOpen(false);
@@ -214,7 +211,6 @@ const Showcase = () => {
                 name: "1",
                 status: ImagesetState.DRAFT,
                 files: [],
-                syncAt: 0,
               });
               idb.destroyDb();
             }}

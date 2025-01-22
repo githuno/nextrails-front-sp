@@ -42,16 +42,17 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
 
     // 一時的に dataUrl を idbUrl として設定
     const tempImage: File = {
+      id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
+      key: null, // S3 key　=> あればアップロード済み
       idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""), // IDB用のIDを現在時刻から生成
       idbUrl: url,
       blob: null,
       updatedAt: Date.now(),
       deletedAt: null, // 論理削除日時
-      id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
+      createdAt: Date.now(), // 作成日時
+      shouldSync: true, // 同期すべきか
       size: 0,
       contentType: "image/png",
-      key: null, // S3 key　=> あればアップロード済み
-      createdAt: Date.now(), // 作成日時
       filename: "", // PUTで編集させる
       version: 1, // PUTで編集された回数
       metadata: {

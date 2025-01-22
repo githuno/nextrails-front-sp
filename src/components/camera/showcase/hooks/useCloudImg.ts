@@ -10,6 +10,14 @@ interface CloudState {
   isDeleting: string[]; // file.idbIdを削除中
 }
 
+enum Method {
+  NOT = 0,
+  GET = 1,
+  POST = 2,
+  PUT = 3,
+  DELETE = 4,
+}
+
 class Cloud {
   private cloudStorage: ReturnType<typeof useCloudStorage>["cloudStorage"];
   private contentTypeToExtension: Record<
@@ -36,7 +44,7 @@ class Cloud {
     this.setState(this.state);
   }
 
-  // imagesetsを取得する
+  // imagesetsを取得して返す
   public getImagesets = useCallback(
     async ({ params }: { params?: string }): Promise<Imageset[]> => {
       try {
@@ -54,9 +62,7 @@ class Cloud {
               if (!imageset) {
                 return null; // imagesetがundefinedの場合はnullを返す
               }
-              // 1. syncAtプロパティを追加
-              // imageset.syncAt = 0; 責務外と思われるためコメントアウト
-              // 2. filesプロパティが存在しない場合や、値が配列でない場合に空の配列を設定
+              // 1. filesプロパティが存在しない場合や、値が配列でない場合に空の配列を設定
               imageset.files = Array.isArray(imageset.files)
                 ? imageset.files
                 : [];
@@ -64,10 +70,10 @@ class Cloud {
                 return imageset;
               }
 
-              // 3. filesプロパティの各要素にblobをセット
+              // 2. filesプロパティの各要素にblobをセット
               imageset.files = await Promise.all(
                 imageset.files.map(async (file: File) => {
-                  // 3-1. blobをDLしてセット
+                  // 2-1. blobをDLしてセット
                   const blobs: (Blob | null)[] = await this.cloudStorage
                     .download({ keys: [file.key ?? ""] })
                     .catch((error: Error): (Blob | null)[] => {
@@ -76,13 +82,15 @@ class Cloud {
                     });
                   file.blob = blobs[0] as Blob;
 
-                  // 3-2. IDB用のidをセット
+                  // 2-2. IDB用のidをセット
                   file.idbId =
                     file.key
                       ?.split("/")
                       .pop()
                       ?.replace(/\.[^/.]+$/, "") || "";
-                  // 3-3. 削除済みファイルについてはそもそもcloudから返ってこないため考慮不要
+                  // 2-3. 同期不要フラグをセット
+                  file.shouldSync = false;
+                  // 2-4. 削除済みファイルについてはそもそもcloudから返ってこないため考慮不要
                   //
                   return file;
                 })
@@ -102,7 +110,7 @@ class Cloud {
     []
   );
 
-  // imageset.filesを取得する
+  // imageset.filesを取得して返す
   public getFiles = useCallback(
     async (
       imagesetName: string,
@@ -141,7 +149,9 @@ class Cloud {
                 ?.split("/")
                 .pop()
                 ?.replace(/\.[^/.]+$/, "") || "";
-            // 3-2. 削除済みファイルはblobを付与しない ※idb上で削除されず、cloud上では削除されたファイルを考慮
+            // 3-2. 同期不要フラグをセット
+            file.shouldSync = false;
+            // 3-3. 削除済みファイルはblobを付与しない ※idb上で削除されず、cloud上では削除されたファイルを考慮
             if (!file.deletedAt) {
               const blobIndex = keys.indexOf(file.key);
               if (blobIndex !== -1 && blobs[blobIndex]) {
@@ -168,7 +178,13 @@ class Cloud {
 
   // imageset.fileを更新する
   public putFile = useCallback(
-    async ({ imagesetName, file }: { imagesetName: string; file: File }) => {
+    async ({
+      imagesetName,
+      file,
+    }: {
+      imagesetName: string;
+      file: File;
+    }): Promise<void> => {
       this.updateState({ isPutting: [...this.state.isPutting, file.idbId] });
       try {
         if (!file.id || !file.version || !file.createdAt || !file.updatedAt)
@@ -197,7 +213,7 @@ class Cloud {
     []
   );
 
-  // imageset.fileを追加してidを返す
+  // imageset.fileを追加して返す
   public postFile = useCallback(
     async ({
       imagesetName,
@@ -205,10 +221,12 @@ class Cloud {
     }: {
       imagesetName: string;
       file: File;
-    }): Promise<string | undefined> => {
+    }): Promise<File> => {
       this.updateState({ isPosting: [...this.state.isPosting, file.idbId] });
       try {
-        if (!file.contentType || !file.idbUrl || !file.idbId) return;
+        if (!file.contentType || !file.idbUrl || !file.idbId) {
+          throw new Error("Invalid file data");
+        }
 
         // 1. CloudStrageにアップロードしてkeyを取得
         const type = this.contentTypeToExtension[file.contentType];
@@ -219,7 +237,7 @@ class Cloud {
           contentType: file.contentType,
         });
 
-        // 2. Cloudにファイルを登録してidを取得
+        // 2. CloudにファイルをPOST
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}`,
           {
@@ -234,10 +252,19 @@ class Cloud {
           throw new Error(`Failed to upload file: ${response.statusText}`);
         }
         const updatedFile = await response.json();
-        // 3. 発行されたidを返す
-        return updatedFile.id;
+        // 3-1. keyからidbIdを取得
+        updatedFile.idbId =
+          updatedFile.key
+            ?.split("/")
+            .pop()
+            ?.replace(/\.[^/.]+$/, "") || "";
+        // 3-2. 同期不要フラグを立てる
+        updatedFile.shouldSync = false;
+        // 4. 更新されたファイルを返す
+        return updatedFile as File;
       } catch (error) {
         console.error("Error uploading files:", error);
+        return Promise.reject(error);
       } finally {
         this.updateState({
           isPosting: this.state.isPosting.filter((id) => id !== file.idbId),
@@ -249,7 +276,13 @@ class Cloud {
 
   // imageset.fileを論理削除する
   public deleteFile = useCallback(
-    async ({ imagesetName, file }: { imagesetName: string; file: File }) => {
+    async ({
+      imagesetName,
+      file,
+    }: {
+      imagesetName: string;
+      file: File;
+    }): Promise<void> => {
       this.updateState({ isDeleting: [...this.state.isDeleting, file.idbId] });
       try {
         if (!file.id || !file.version || !file.updatedAt || !file.deletedAt)
@@ -274,6 +307,15 @@ class Cloud {
     },
     []
   );
+
+  // Fileの状態に応じて処理を分岐
+  public shouldDo = (file: File): Method => {
+    if (file.size === 0 || !file.shouldSync) return Method.NOT; // ファイルのサイズプロパティが0（まだIDBに保存されていない仮ファイル）
+    if (file.deletedAt) return Method.DELETE;
+    if (file.id && file.version) return Method.PUT;
+    if (!file.id) return Method.POST;
+    return Method.NOT;
+  };
 }
 
 const useCloudImg = () => {
@@ -289,4 +331,4 @@ const useCloudImg = () => {
   return { cloud, cloudState, isOnline };
 };
 
-export { useCloudImg };
+export { useCloudImg, Method as ShouldDo };

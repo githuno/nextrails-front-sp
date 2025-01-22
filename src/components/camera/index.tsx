@@ -1,4 +1,4 @@
-import React, { createContext, useState } from "react";
+import React, { createContext, useEffect, useState } from "react";
 import { CameraPreview } from "./preview/CameraPreview";
 import { Controller } from "./controls";
 import { Showcase } from "./showcase";
@@ -12,8 +12,8 @@ interface File extends IdbFile {
   // blob: Blob | null; // 画像データ
   // updatedAt: number; // 更新日時
   deletedAt: number | null; // 論理削除日時
-
   createdAt: number; // 作成日時
+  shouldSync: boolean; // 同期済みかどうか
   id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
   contentType: string;
   size: number;
@@ -38,7 +38,6 @@ interface Imageset {
   name: string;
   status: ImagesetState;
   files: File[];
-  syncAt: number;
 }
 
 // ----------------------------------------------------------------------------- ImagesetContext
@@ -61,7 +60,6 @@ const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
     name: "1",
     status: ImagesetState.DRAFT,
     files: [],
-    syncAt: 0,
   });
   const onQrScanned = (data: string) => alert(data);
 
@@ -76,60 +74,60 @@ const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
 
 // ----------------------------------------------------------------------------- ImagesetContent
 const ImagesetContent: React.FC = () => {
-  // const { imageset } = useCameraContext();
-  // useEffect(() => {
-  //   if ("serviceWorker" in navigator && "PushManager" in window) {
-  //     console.log("Service Worker and Push is supported");
+  const { imageset } = useImageset();
+  useEffect(() => {
+    if ("serviceWorker" in navigator && "PushManager" in window) {
+      console.log("Service Worker and Push is supported");
 
-  //     navigator.serviceWorker
-  //       .register("/sw.js", {
-  //         scope: "/",
-  //         updateViaCache: "none",
-  //         type: "module",
-  //       })
-  //       .then((reg) => {
-  //         console.log("⚡️Service Worker registered", reg);
-  //         const sw = reg.installing || reg.waiting || reg.active;
-  //         console.log("sw-state:", sw?.state);
-  //         sw?.addEventListener("statechange", () => {
-  //           console.log("change sw-state:", sw?.state);
-  //         });
-  //       })
-  //       .catch((err) => {
-  //         console.log("Service Worker registration failed: ", err);
-  //       });
+      navigator.serviceWorker
+        .register("/sw.js", {
+          scope: "/",
+          updateViaCache: "none",
+          type: "module",
+        })
+        .then((reg) => {
+          console.log("⚡️Service Worker registered", reg);
+          const sw = reg.installing || reg.waiting || reg.active;
+          console.log("sw-state:", sw?.state);
+          sw?.addEventListener("statechange", () => {
+            console.log("change sw-state:", sw?.state);
+          });
+        })
+        .catch((err) => {
+          console.log("Service Worker registration failed: ", err);
+        });
 
-  //     navigator.serviceWorker.addEventListener("message", (event) => {
-  //       if (event.data && event.data.type === "ALERT_IMAGESET_FILES") {
-  //         alert(event.data.message);
-  //       }
-  //     });
-  //   }
-  // }, []);
+      navigator.serviceWorker.addEventListener("message", (event) => {
+        if (event.data && event.data.type === "ALERT_IMAGESET_FILES") {
+          alert(event.data.message);
+        }
+      });
+    }
+  }, []);
 
-  // const handleButtonClick = () => {
-  //   if (navigator.serviceWorker.controller) {
-  //     navigator.serviceWorker.controller.postMessage({
-  //       type: "CHECK_IMAGESET_FILES",
-  //       imageset: imageset,
-  //     });
-  //   } else {
-  //     alert("Service Worker not ready");
-  //   }
-  // };
-  
+  const handleButtonClick = () => {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: "CHECK_IMAGESET_FILES",
+        imageset: imageset,
+      });
+    } else {
+      alert("Service Worker not ready");
+    }
+  };
+
   return (
     <>
-      {/* <button
+      <button
         id="callHelloButton"
         onClick={() => {
           handleButtonClick();
           console.log("click");
         }}
-        className="fixed top-1 z-50 right-1 p-2 bg-blue-500 text-white rounded-md"
+        className="fixed top-1 z-50 left-1 p-2 bg-blue-500 text-white rounded-md"
       >
         Call Hello Function
-      </button> */}
+      </button>
       <div className="flex h-full w-full justify-center">
         <CameraPreview />
       </div>

@@ -377,8 +377,8 @@ class IdbManager<T extends IdbFile> {
             (existingFile) => existingFile.idbId === file.idbId
           );
           return (
-            !existingFile || // ------------------------1. idbに存在しないファイル
-            file.updatedAt > existingFile.updatedAt // -2. idbのデータより新しいファイル
+            (!existingFile && !file.deletedAt) || // -------------------1. idbに存在しない未削除ファイル
+            (existingFile && file.updatedAt > existingFile.updatedAt) // -2. idbのデータより新しいファイル
           );
         });
       }
@@ -419,10 +419,12 @@ class IdbManager<T extends IdbFile> {
       const tx = db.transaction(storeName, "readwrite");
       const store = tx.objectStore(storeName);
       const existingFile = (await store.get(data.idbId)) as T;
-      if (!existingFile || existingFile.deletedAt) {
-        return; // 存在しないファイルまたは削除済みファイルは更新しない
-      }
-      if (existingFile.updatedAt >= data.updatedAt) return; // 更新日時が既存ファイル以前の場合は更新しない
+      if (
+        !existingFile || // IDBに存在しないファイル
+        existingFile.deletedAt || // IDB内で論理削除済みファイル
+        data.updatedAt < existingFile.updatedAt // 更新日時が既存ファイル未満
+      )
+        return; // 上記条件では更新せずに終了
 
       // 一部のみ更新可能とするため、念の為のチェックとして働く
       const updatedFile = {
@@ -489,7 +491,8 @@ class IdbManager<T extends IdbFile> {
       let untilAt = options?.until ?? Date.now();
       let limited = Math.min(options?.limit ?? files.length, files.length);
       for (const file of files) {
-        if ( // <削除条件>
+        if (
+          // <削除条件>
           limited > 0 && // 指定数量まで削除
           file[key] >= sinceAt && // 指定日時以降のファイル
           file[key] <= untilAt && // 指定日時以前のファイル
