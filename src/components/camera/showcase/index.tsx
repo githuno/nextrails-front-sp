@@ -101,7 +101,7 @@ const Showcase = () => {
   }, [cameraState, getLatestImagesets, isRequireGet]);
 
   return (
-    <div className="grid px-1 h-[23vh] items-center justify-center rounded-lg shadow-lg bg-white/80">
+    <div className="grid grid-rows-5 px-2 pt-2 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
       <Modal
         isOpen={isNameModalOpen}
         onClose={() => setIsNameModalOpen(false)}
@@ -142,7 +142,7 @@ const Showcase = () => {
         </div>
       </Modal>
 
-      <section className="grid grid-cols-3 grid-rows-1 h-1/5 w-full items-center justify-between pt-2">
+      <section className="row-start-1 grid grid-cols-3 w-full place-content-center">
         {idbState.isStoreLoading.includes(imageset.name) ? (
           <div className="col-span-3 grid justify-center">
             <LoadingSpinner size="24px" />
@@ -170,7 +170,7 @@ const Showcase = () => {
         )}
       </section>
 
-      <section className="relative grid grid-cols-3 grid-rows-1 h-4/5 w-full items-center justify-center gap-2">
+      <section className="row-span-4 relative grid w-full place-content-center gap-2">
         <EditableImages />
       </section>
 
