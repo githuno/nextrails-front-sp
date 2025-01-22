@@ -1,5 +1,5 @@
 import React, { ReactNode, useEffect, useRef, useState } from "react";
-import { PrevIcon, ForwardIcon } from "./Icons";
+import { PrevIcon, NextIcon } from "./Icons";
 
 interface CarouselProps {
   children: ReactNode;
@@ -17,18 +17,19 @@ export function Carousel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(true);
 
-  // 子要素のはみだしチェック
+  // 子要素のはみだしチェック TODO: 画像拡大時に正しく効いていなさそう
   useEffect(() => {
     const checkOverflow = () => {
       if (scrollRef.current) {
-        const hasHorizontalOverflow = scrollRef.current.scrollWidth > scrollRef.current.clientWidth;
+        const hasHorizontalOverflow =
+          scrollRef.current.scrollWidth > scrollRef.current.clientWidth;
         setHasOverflow(hasHorizontalOverflow);
       }
     };
 
     checkOverflow();
-    window.addEventListener('resize', checkOverflow);
-    return () => window.removeEventListener('resize', checkOverflow);
+    window.addEventListener("resize", checkOverflow);
+    return () => window.removeEventListener("resize", checkOverflow);
   }, [children]);
 
   // 子要素変更時に先頭にスクロール
@@ -40,20 +41,23 @@ export function Carousel({
 
   const scroll = (direction: "left" | "right") => {
     if (!scrollRef.current) return;
-    
+
     const container = scrollRef.current;
     const scrollMax = container.scrollWidth - container.clientWidth;
     const currentScroll = container.scrollLeft;
     const isNearStart = currentScroll <= container.clientWidth * 0.1; // 先頭から10%以内
-    const isNearEnd = currentScroll >= scrollMax - (container.clientWidth * 0.1); // 末尾から10%以内
-    
+    const isNearEnd = currentScroll >= scrollMax - container.clientWidth * 0.1; // 末尾から10%以内
+
     if (direction === "left") {
       if (isNearStart) {
         // 先頭付近なら最後尾へジャンプ
         container.scrollTo({ left: scrollMax, behavior: "smooth" });
       } else {
         // それ以外は1ページ分戻る
-        container.scrollBy({ left: -container.clientWidth, behavior: "smooth" });
+        container.scrollBy({
+          left: -container.clientWidth,
+          behavior: "smooth",
+        });
       }
     } else {
       if (isNearEnd) {
@@ -81,18 +85,18 @@ export function Carousel({
         }}
       >
         {React.Children.map(children, (child) => (
-          <div className="shrink-0 snap-start snap-always">
-            {child}
-          </div>
+          <div className="shrink-0 snap-start snap-always">{child}</div>
         ))}
       </div>
 
       {hasOverflow && (
-        <div className={`
+        <div
+          className={`
           absolute top-1/2 -translate-y-1/2 w-full
           flex justify-between pointer-events-none
           ${navigationClassName}
-        `}>
+        `}
+        >
           <button
             onClick={() => scroll("left")}
             className="
@@ -115,7 +119,7 @@ export function Carousel({
             "
             aria-label="Next slide"
           >
-            <ForwardIcon className="w-6 h-6" />
+            <NextIcon className="w-6 h-6" />
           </button>
         </div>
       )}

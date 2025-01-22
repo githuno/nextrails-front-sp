@@ -339,12 +339,14 @@ const EditableImages = () => {
             </CarouselItem>
           ))}
       </Carousel>
+
+      {/* TODO：クリックした画像が開くようにする必要あり。現在は先頭画像に戻ってしまう */}
       <Modal
         isOpen={isImageModalOpen}
         onClose={() => setIsImageModalOpen(false)}
-        className="bg-black/70"
+        className="bg-white/0"
       >
-        <Carousel>
+        <Carousel className="bg-black/70">
           {imageset.files.map((file) => (
             <CarouselItem
               key={file.idbId}

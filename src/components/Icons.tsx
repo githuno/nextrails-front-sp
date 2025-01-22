@@ -15,7 +15,7 @@ const PrevIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-const ForwardIcon = (props: React.SVGProps<SVGSVGElement>) => (
+const NextIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     className="w-4 h-4 text-white"
     fill="none"
@@ -32,4 +32,4 @@ const ForwardIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export { PrevIcon, ForwardIcon };
+export { PrevIcon, NextIcon };
