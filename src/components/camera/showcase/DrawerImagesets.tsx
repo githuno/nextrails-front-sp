@@ -12,7 +12,7 @@ import { LinesIcon } from "@/components/Icons";
 
 const DrawerImagesets = () => {
   const { cameraState } = useCamera();
-  const { dbName, setImageset } = useImageset();
+  const { dbName, imageset, setImageset } = useImageset();
   const { idb } = useIdb<File>(dbName);
   const { cloud } = useCloudImg();
 
@@ -20,6 +20,7 @@ const DrawerImagesets = () => {
   const [isRequireGet, setIsRequireGet] = useState<boolean>(true); // TODO: 修正必要→発火トリガー・非発火トリガー・リセットトリガー
   const [latestImagesets, setLatestImagesets] = useState<Imageset[]>([]);
 
+  // TODO: リファクタリング必要
   const getLatestImagesets = useCallback(async () => {
     try {
       let tmpLatestSets: Imageset[] = [];
@@ -104,6 +105,44 @@ const DrawerImagesets = () => {
       setIsRequireGet(false); // TODO：今のところこれないと無限ループになる
     }
   }, [cameraState, getLatestImagesets, isRequireGet]);
+
+  useEffect(() => {
+    // latestImagesetsのnameにimageset.nameが含まれていない場合、imagesetを追加
+    if (
+      imageset.name &&
+      !latestImagesets.some((set) => set.name === imageset.name)
+    ) {
+      setLatestImagesets((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          name: imageset.name,
+          status: ImagesetState.DRAFT,
+          files: [],
+        },
+      ]);
+    }
+    // imageset.filesが更新された場合、latestImagesetsの該当setのfilesを再取得
+    if (imageset.files.length > 0) {
+      // contentType: "image/png" のdeltedAtがnullの最新のfileを取得
+      const latestImage = imageset.files
+        .filter((file) => file.contentType === "image/png" && !file.deletedAt)
+        .shift();
+      setLatestImagesets((prev) =>
+        prev.map((set) =>
+          set.name === imageset.name && latestImage
+            ? { ...set, files: [latestImage] }
+            : set
+        )
+      );
+    } else {
+      setLatestImagesets((prev) =>
+        prev.map((set) =>
+          set.name === imageset.name ? { ...set, files: [] } : set
+        )
+      );
+    }
+  }, [imageset]);
 
   return (
     // ドロワー
