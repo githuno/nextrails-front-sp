@@ -10,7 +10,7 @@ import {
 } from "@/components/camera/_utils";
 import { useCloudImg, ShouldDo } from "./hooks/useCloudImg";
 
-const EditableImages = () => {
+const CurrentImages = () => {
   const { cameraState } = useCamera();
   const { imageset, setImageset, dbName } = useImageset();
   const { idb, idbState } = useIdb<File>(dbName);
@@ -318,6 +318,7 @@ const EditableImages = () => {
                   ) : (
                     // 削除操作が可能な状態
                     <div>
+                      {/* TODO: モーダルのオープンとクローズが重複して作動してしまっている */}
                       <button
                         onClick={() =>
                           handleLocalDelete({ file, setName: imageset.name })
@@ -381,4 +382,4 @@ const EditableImages = () => {
   );
 };
 
-export { EditableImages };
+export { CurrentImages };
