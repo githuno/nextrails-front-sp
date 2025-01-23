@@ -1,11 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Carousel, Modal } from "@/components";
-import {
-  useImageset,
-  File,
-  Imageset,
-  ImagesetState,
-} from "@/components/camera";
+import React, { useState } from "react";
+import { Modal } from "@/components";
+import { useImageset, File, ImagesetState } from "@/components/camera";
 import {
   useCamera,
   useIdb,
@@ -20,7 +15,6 @@ const Showcase = () => {
   const { imageset, setImageset, dbName } = useImageset();
   const { idb, idbState } = useIdb<File>(dbName);
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
-  
 
   return (
     <div className="grid grid-rows-5 px-2 pt-2 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
@@ -94,7 +88,7 @@ const Showcase = () => {
 
       <section className="row-span-4 relative grid w-full place-content-center gap-2">
         <CurrentImages />
-        <DrawerImagesets/>
+        <DrawerImagesets />
       </section>
 
       {/* 開発環境でDBの初期化ボタンを配置 */}
