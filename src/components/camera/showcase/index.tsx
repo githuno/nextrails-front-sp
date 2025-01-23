@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Modal } from "@/components";
+import { Carousel, Modal } from "@/components";
 import {
   useImageset,
   File,
@@ -12,93 +12,15 @@ import {
   LoadingSpinner,
   EditIcon,
 } from "@/components/camera/_utils";
-import { useCloudImg } from "./hooks/useCloudImg";
-import { EditableImages } from "./EditableImages";
+import { CurrentImages } from "./CurrentImages";
+import { DrawerImagesets } from "./DrawerImagesets";
 
 const Showcase = () => {
   const { cameraState } = useCamera();
   const { imageset, setImageset, dbName } = useImageset();
   const { idb, idbState } = useIdb<File>(dbName);
-  const { cloud } = useCloudImg();
-
-  const isOnline = navigator.onLine;
-  const [latestImagesets, setLatestImagesets] = useState<Imageset[]>([]);
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
-  const [isRequireGet, setIsRequireGet] = useState<boolean>(true); // TODO: 修正必要→発火トリガー・非発火トリガー・リセットトリガー
-
-  const getLatestImagesets = useCallback(async () => {
-    try {
-      let tmpLatestSets: Imageset[] = [];
-      if (isOnline) {
-        // 1. cloudから最新のimageを取得してlatestImagesetsにセット（※ここでblobもDL）
-        const cloudLatestSets: Imageset[] = await cloud.getImagesets({
-          params: `updatedAt=latest`,
-        });
-        // 2. 同期store名を取得（cloudLatestImagesetsの各name配列を渡す）
-        const cloudStores = cloudLatestSets.map((set) => set.name);
-        const syncedStores = await idb.syncStores(cloudStores);
-        // 3. syncedStoresのうち、cloudStoresに含まれないstore名についてimagesetを追加
-        const diffSets = syncedStores
-          .filter((store) => !cloudStores.includes(store))
-          .map((store) => ({
-            id: Date.now(),
-            name: store,
-            status: ImagesetState.DRAFT,
-            files: [],
-          }));
-        tmpLatestSets = [...cloudLatestSets, ...diffSets];
-        setLatestImagesets([...tmpLatestSets]);
-      }
-      // 4. allImagesetsを同期(storeNameとfileのセットを渡す)
-      const tmpLatestFiles = tmpLatestSets.map((imageset) => ({
-        file: imageset.files[0],
-        storeName: imageset.name,
-      }));
-      const syncedLatestFiles = await idb.syncLatests({
-        dateKey: "updatedAt",
-        set: tmpLatestFiles,
-      });
-      // 5. latestImagesetsのfilesを更新
-      setLatestImagesets((prev) =>
-        prev.map((imageset) => {
-          const syncedLatestFile = syncedLatestFiles.find(
-            (set) => set.storeName === imageset.name
-          );
-          const { storeName, ...file } = syncedLatestFile!;
-          return syncedLatestFile
-            ? {
-                id: imageset.id,
-                name: storeName,
-                status: ImagesetState.DRAFT,
-                files: [file as File],
-              }
-            : imageset;
-        })
-      );
-      // 特別. 非同期で各storeのcloudfilesをidbに同期しておく
-      const syncPromises = latestImagesets.map(async (store) => {
-        try {
-          const cloudfiles = await cloud.getFiles(store.name);
-          await idb.sync(store.name, cloudfiles);
-        } catch (error) {
-          console.error(
-            `Error syncing store ${store} with cloud files:`,
-            error
-          );
-        }
-      });
-      await Promise.all(syncPromises);
-    } catch (error) {
-      console.error("Error updating media:", error);
-    }
-  }, [idb, cloud, isOnline, setLatestImagesets]);
-
-  useEffect(() => {
-    if (cameraState.isScanning && isRequireGet) {
-      // getLatestImagesets();
-      setIsRequireGet(false); // TODO：今のところこれないと無限ループになる
-    }
-  }, [cameraState, getLatestImagesets, isRequireGet]);
+  
 
   return (
     <div className="grid grid-rows-5 px-2 pt-2 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
@@ -171,26 +93,9 @@ const Showcase = () => {
       </section>
 
       <section className="row-span-4 relative grid w-full place-content-center gap-2">
-        <EditableImages />
+        <CurrentImages />
+        <DrawerImagesets/>
       </section>
-
-      {/* latestImagesetsを表示 */}
-      {/* <section className="grid grid-cols-3 grid-rows-1 h-1/5 w-full items-center justify-between pt-2">
-        {latestImagesets.map(({ name, files }) => (
-          <div key={name} className="flex items-center justify-center">
-            <h1 className="font-bold text-center break-words">
-              セット: {name}
-            </h1>
-            {files.length > 0 && (
-              <img
-                src={files[0].idbUrl ?? ""}
-                alt={`Image ${files[0].idbId}`}
-                className="h-full w-full object-contain"
-              />
-            )}
-          </div>
-        ))}
-      </section> */}
 
       {/* 開発環境でDBの初期化ボタンを配置 */}
       {process.env.NODE_ENV === "development" && (
