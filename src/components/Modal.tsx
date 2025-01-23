@@ -12,6 +12,8 @@ import {
 import { createPortal } from "react-dom";
 import { CloseIcon } from "./camera/_utils";
 
+// TODO: 領域外クリックで閉じるモードを追加
+
 interface ModalContextType {
   isOpen: boolean;
 }
