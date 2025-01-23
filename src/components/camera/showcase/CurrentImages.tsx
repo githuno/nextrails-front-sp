@@ -373,6 +373,7 @@ const CurrentImages = () => {
         </Carousel>
       </Modal>
       {(idbState.isStoreSyncing.includes(imageset.name) ||
+        cameraState.isInitializing ||
         cloudState.isFilesFetching) && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/50">
           <LoadingSpinner size="32px" />
