@@ -1,8 +1,8 @@
 import React, { createContext, useEffect, useState } from "react";
+import { CameraContextProvider, IdbFile, useCamera } from "./_utils";
 import { CameraPreview } from "./preview/CameraPreview";
 import { Controller } from "./controls";
 import { Showcase } from "./showcase";
-import { CameraContextProvider, IdbFile } from "./_utils";
 import { session } from "@/components";
 
 // ----------------------------------------------------------------------------- ImagesetType
@@ -76,6 +76,7 @@ const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
 // ----------------------------------------------------------------------------- ImagesetContent
 const ImagesetContent: React.FC = () => {
   const { imageset } = useImageset();
+  const { cameraState } = useCamera();
   useEffect(() => {
     if ("serviceWorker" in navigator && "PushManager" in window) {
       console.log("Service Worker and Push is supported");
@@ -132,9 +133,11 @@ const ImagesetContent: React.FC = () => {
       <div className="flex h-full w-full justify-center">
         <CameraPreview />
       </div>
-      <div className="fixed bottom-[5%] left-0 w-full p-4">
-        <Controller />
-      </div>
+      {!cameraState.isInitializing && (
+        <div className="fixed bottom-[5%] left-0 w-full p-4">
+          <Controller />
+        </div>
+      )}
       <div className="fixed top-1 left-0 w-full p-2">
         <Showcase />
       </div>

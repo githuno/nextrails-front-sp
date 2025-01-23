@@ -2,7 +2,6 @@ import React from "react";
 import { useImageset, File, ImagesetState } from "@/components/camera";
 import {
   useIdb,
-  LoadingSpinner,
   StopIcon,
   RecordIcon,
   useCamera,
@@ -81,13 +80,7 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
           disabled={cameraState.isCapturing}
           className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-red-200 to-white shadow-inner hover:shadow-lg transition-transform"
         >
-          {cameraState.isInitializing ? (
-            <LoadingSpinner />
-          ) : cameraState.isRecording ? (
-            <StopIcon />
-          ) : (
-            <RecordIcon />
-          )}
+          {cameraState.isRecording ? <StopIcon /> : <RecordIcon />}
         </button>
       </div>
     )
