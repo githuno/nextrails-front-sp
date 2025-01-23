@@ -38,6 +38,7 @@ interface Imageset {
   name: string;
   status: ImagesetState;
   files: File[];
+  // syncAt: number; // TODO:同期日時をIDBに持たせればEditableImagesでの不要なリクエストを減らせる
 }
 
 // ----------------------------------------------------------------------------- ImagesetContext
@@ -118,7 +119,7 @@ const ImagesetContent: React.FC = () => {
 
   return (
     <>
-      <button
+      {/* <button
         id="callHelloButton"
         onClick={() => {
           handleButtonClick();
@@ -127,7 +128,7 @@ const ImagesetContent: React.FC = () => {
         className="fixed top-1 z-50 left-1 p-2 bg-blue-500 text-white rounded-md"
       >
         Call Hello Function
-      </button>
+      </button> */}
       <div className="flex h-full w-full justify-center">
         <CameraPreview />
       </div>
