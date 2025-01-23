@@ -9,6 +9,7 @@ import {
   SyncIcon,
 } from "@/components/camera/_utils";
 import { useCloudImg, ShouldDo } from "./hooks/useCloudImg";
+import Image from "next/image";
 
 const CurrentImages = () => {
   const { cameraState } = useCamera();
@@ -288,25 +289,35 @@ const CurrentImages = () => {
               key={file.idbId}
               className="relative h-full w-40 pt-3 pr-2"
             >
-              <div
-                className="w-full aspect-video bg-gray-100 rounded-lg flex items-center justify-center"
-                onClick={() => {
-                  setIsImageModalOpen(true);
-                }}
-              >
-                {file.contentType === "video/webm" ? (
-                  <video
-                    controls
-                    src={file.idbUrl ?? ""}
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <img
-                    src={file.idbUrl ?? ""}
-                    alt={`Image ${file.idbId}`}
-                    className="h-full w-full object-contain"
-                  />
-                )}
+              <div className="aspect-video bg-gray-100/50 rounded-lg flex items-center justify-center">
+                <div
+                  className="relative h-full w-full cursor-pointer"
+                  onClick={() => {
+                    setIsImageModalOpen(true);
+                  }}
+                >
+                  {file.contentType === "video/webm" ? (
+                    <video
+                      controls
+                      src={file.idbUrl ?? ""}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    // <img
+                    //   src={file.idbUrl ?? ""}
+                    //   alt={`Image ${file.idbId}`}
+                    //   className="h-full w-full object-contain p-0.5"
+                    // />
+
+                    <Image
+                      src={file.idbUrl ?? ""}
+                      alt={`Image ${file.idbId}`}
+                      layout="fill"
+                      objectFit="contain"
+                      className="p-0.5"
+                    />
+                  )}
+                </div>
                 {
                   // 削除操作が不可な状態
                   idbState.isUpdating.includes(file.idbId) ||
@@ -320,9 +331,10 @@ const CurrentImages = () => {
                     <div>
                       {/* TODO: モーダルのオープンとクローズが重複して作動してしまっている */}
                       <button
-                        onClick={() =>
-                          handleLocalDelete({ file, setName: imageset.name })
-                        }
+                        onClick={(e) => {
+                          e.stopPropagation(); // 親要素のクリックイベントを防ぐ
+                          handleLocalDelete({ file, setName: imageset.name });
+                        }}
                         className="absolute top-0 right-0 rounded-full bg-white/80 p-1 z-10"
                       >
                         <CloseIcon />

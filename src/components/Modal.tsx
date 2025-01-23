@@ -50,7 +50,10 @@ const Modal: FC<ModalProps> = ({
     }
   };
 
-  const handleClose = async () => {
+  const handleClose = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    if (e) {
+      e.stopPropagation();
+    }
     if (dialogRef.current) {
       // ダイアログを閉じる
       dialogRef.current?.close();
