@@ -47,6 +47,8 @@ class CameraManager {
   private mediaRecorder: MediaRecorder | null = null;
   private recordedChunks: Blob[] = [];
   private scanInterval: number | null = null;
+  private captureTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private animationFrameId: number | null = null;
   private readonly config: Required<CameraConfig>;
   private callbacks: CameraCallbacks = {};
   private readonly setState: React.Dispatch<React.SetStateAction<CameraState>>;
@@ -350,14 +352,16 @@ class CameraManager {
       );
       const url = this.canvasElement.toDataURL("image/png");
       this.callbacks.onCaptureComplete?.(url);
+      this.animationFrameId = null; // アニメーションフレームIDをクリア
     };
     // INFO(最適化): drawImage の処理をフレームレートに合わせて最適化
-    requestAnimationFrame(drawFrame);
+    this.animationFrameId = requestAnimationFrame(drawFrame);
 
-    setTimeout(() => {
+    this.captureTimeoutId = setTimeout(() => {
       // 1秒後にビデオを再生してstateを更新
       this.videoElement?.play();
       this.setState((prev) => ({ ...prev, isCapturing: false }));
+      this.captureTimeoutId = null; // タイムアウトIDをクリア
     }, 1000);
   }
 
@@ -410,6 +414,16 @@ class CameraManager {
 
   public cleanup(): void {
     this.stopQrScan();
+
+    if (this.captureTimeoutId) {
+      clearTimeout(this.captureTimeoutId);
+      this.captureTimeoutId = null;
+    }
+
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
 
     if (this.mediaRecorder?.state === "recording") {
       this.mediaRecorder.stop();
