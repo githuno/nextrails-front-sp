@@ -8,14 +8,18 @@ interface CarouselProps {
   navigationClassName?: string;
 }
 
-export function Carousel({
+const Carousel = ({
   children,
   className = "",
   containerClassName = "",
   navigationClassName = "",
-}: CarouselProps) {
+}: CarouselProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(true);
+  // Counterのための状態変数-------------------------------------↓
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [visibleItems, setVisibleItems] = useState(1);
+  // Counterのための状態変数-------------------------------------↑
 
   // 子要素のはみだしチェック TODO: 画像拡大時に正しく効いていなさそう
   useEffect(() => {
@@ -24,6 +28,17 @@ export function Carousel({
         const hasHorizontalOverflow =
           scrollRef.current.scrollWidth > scrollRef.current.clientWidth;
         setHasOverflow(hasHorizontalOverflow);
+
+        // Counterのための計算-------------------------------------↓
+        // 可視アイテム数の計算
+        const firstChild = scrollRef.current.firstChild as HTMLElement | null;
+        if (firstChild) {
+          const visibleItemsCount = Math.floor(
+            scrollRef.current.clientWidth / firstChild.clientWidth
+          );
+          setVisibleItems(visibleItemsCount);
+        }
+        // Counterのための計算-------------------------------------↑
       }
     };
 
@@ -38,6 +53,33 @@ export function Carousel({
       scrollRef.current.scrollLeft = 0;
     }
   }, [children]);
+
+  // Counterのためのエフェクト-------------------------------------↓
+  // スクロール位置の監視
+  useEffect(() => {
+    const handleScroll = () => {
+      if (scrollRef.current) {
+        const firstChild = scrollRef.current.firstChild as HTMLElement | null;
+        if (firstChild) {
+          const currentIndex = Math.round(
+            scrollRef.current.scrollLeft / firstChild.clientWidth
+          );
+          setCurrentIndex(currentIndex);
+        }
+      }
+    };
+
+    if (scrollRef.current) {
+      scrollRef.current.addEventListener("scroll", handleScroll);
+    }
+
+    return () => {
+      if (scrollRef.current) {
+        scrollRef.current.removeEventListener("scroll", handleScroll);
+      }
+    };
+  }, []);
+  // Counterのためのエフェクト-------------------------------------↑
 
   const scroll = (direction: "left" | "right") => {
     if (!scrollRef.current) return;
@@ -123,6 +165,39 @@ export function Carousel({
           </button>
         </div>
       )}
+
+      {/* Counterの表示-------------------------------------↓*/}
+      <div className="py-1">
+        <Counter
+          totalItems={React.Children.count(children)}
+          visibleItems={visibleItems}
+          currentIndex={currentIndex}
+        />
+      </div>
+      {/* Counterの表示-------------------------------------↑*/}
     </div>
   );
+};
+
+export { Carousel };
+
+interface CounterProps {
+  totalItems: number;
+  visibleItems: number;
+  currentIndex: number;
 }
+
+const Counter = ({ totalItems, visibleItems, currentIndex }: CounterProps) => {
+  const circles = Array.from({ length: totalItems }, (_, index) => (
+    <div
+      key={index}
+      className={`w-2 h-2 rounded-full mx-1 ${
+        index >= currentIndex && index < currentIndex + visibleItems
+          ? "bg-blue-400"
+          : "bg-gray-400"
+      }`}
+    />
+  ));
+
+  return <div className="flex justify-center mt-2">{circles}</div>;
+};

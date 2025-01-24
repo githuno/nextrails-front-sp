@@ -1,11 +1,11 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
 interface CarouselItemProps {
-  children: ReactNode
-  className?: string
+  children: ReactNode;
+  className?: string;
 }
 
-export function CarouselItem({ children, className = "" }: CarouselItemProps) {
+const CarouselItem = ({ children, className = "" }: CarouselItemProps) => {
   return (
     <div
       className={`
@@ -16,5 +16,7 @@ export function CarouselItem({ children, className = "" }: CarouselItemProps) {
     >
       {children}
     </div>
-  )
-}
+  );
+};
+
+export { CarouselItem };
