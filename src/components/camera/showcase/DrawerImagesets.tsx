@@ -171,7 +171,7 @@ const DrawerImagesets = () => {
         <div
           className="
               fixed top-7 left-[-95vw] w-[95vw] h-[20vh] 
-              bg-gradient-to-l from-white to-white/80 shadow-lg
+              bg-white/80 shadow-lg
               flex flex-col items-end rounded-tr-3xl
               transition-all duration-300 peer-checked:left-0
             "
@@ -180,15 +180,15 @@ const DrawerImagesets = () => {
             htmlFor="drawerToggle"
             className="
                 absolute bottom-0 right-[-1.2rem] transform translate-x-1/2
-                flex justify-center items-center w-8 h-8 bg-white
+                flex justify-center items-center w-8 h-8 bg-white/80 
+                shadow-[4px_4px_6px_-1px_rgba(0,0,0,0.3)]
                 rounded-tr-full rounded-br-full
-                shadow-[4px_4px_6px_-1px_rgba(0,0,0,0.1)]
                 cursor-pointer transition-transform duration-300
                 peer-checked:rotate-180
               "
-            // INFO: shadow-[X方向_Y方向_ぼかし半径_拡散半径_色] で左方向に影を出さないよう調整している
+            // INFO: shadow-[X方向_Y方向_ぼかし半径_拡散半径_色] で影を調整している
           >
-            <LinesIcon className="w-4 h-4" fill="#999999" />
+            <LinesIcon className="w-4 h-4" fill="#999" />
           </label>
 
           {/* ドロワー内の要素 */}
