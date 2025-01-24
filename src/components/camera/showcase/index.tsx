@@ -17,7 +17,7 @@ const Showcase = () => {
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
 
   return (
-    <div className="grid grid-rows-5 px-2 pt-2 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
+    <div className="grid grid-rows-5 px-2 py-1 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
       <Modal
         isOpen={isNameModalOpen}
         onClose={() => setIsNameModalOpen(false)}
@@ -58,14 +58,14 @@ const Showcase = () => {
         </div>
       </Modal>
 
-      <section className="row-start-1 grid grid-cols-3 w-full place-content-center">
+      <section className="row-start-1 grid w-full place-content-center">
         {idbState.isStoreLoading.includes(imageset.name) ? (
-          <div className="col-span-3 grid justify-center">
+          <div className="grid justify-center">
             <LoadingSpinner size="24px" />
           </div>
         ) : (
           <>
-            <div className="col-span-2 row-start-1 flex items-center justify-center">
+            <div className="row-start-1 flex items-center justify-center">
               <h1 className="font-bold text-center break-words">
                 セット: {imageset.name}
               </h1>
@@ -78,10 +78,6 @@ const Showcase = () => {
                 </button>
               )}
             </div>
-            {/* TODO: 削除済みを除外する */}
-            <p className="text-center break-words">
-              count: {imageset.files.length}
-            </p>
           </>
         )}
       </section>
