@@ -3,16 +3,22 @@ import { PrevIcon, NextIcon } from "./Icons";
 
 interface CarouselProps {
   children: ReactNode;
+  index?: number | null;
   className?: string;
   containerClassName?: string;
   navigationClassName?: string;
+  autoScrollTop?: boolean;
+  id?: string;
 }
 
 const Carousel = ({
   children,
+  index = null,
   className = "",
   containerClassName = "",
   navigationClassName = "",
+  autoScrollTop = false,
+  id,
 }: CarouselProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(true);
@@ -36,7 +42,12 @@ const Carousel = ({
           const visibleItemsCount = Math.floor(
             scrollRef.current.clientWidth / firstChild.clientWidth
           );
-          setVisibleItems(visibleItemsCount);
+          if (visibleItemsCount > 0) {
+            setVisibleItems(visibleItemsCount);
+          } else {
+            console.warn("Carousel: visibleItemsCount is less than 1");
+            setVisibleItems(1);
+          }
         }
         // Counterのための計算-------------------------------------↑
       }
@@ -47,12 +58,22 @@ const Carousel = ({
     return () => window.removeEventListener("resize", checkOverflow);
   }, [children]);
 
+  // indexが指定されている場合はその位置へスクロール
+  useEffect(() => {
+    if (index !== null && scrollRef.current) {
+      const firstChild = scrollRef.current.firstChild as HTMLElement | null;
+      if (firstChild) {
+        scrollRef.current.scrollLeft = firstChild.clientWidth * index;
+      }
+    }
+  }, [index]);
+
   // 子要素変更時に先頭にスクロール
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && autoScrollTop) {
       scrollRef.current.scrollLeft = 0;
     }
-  }, [children]);
+  }, [autoScrollTop, children]);
 
   // Counterのためのエフェクト-------------------------------------↓
   // スクロール位置の監視
@@ -78,7 +99,7 @@ const Carousel = ({
         scrollRef.current.removeEventListener("scroll", handleScroll);
       }
     };
-  }, []);
+  }, [children]);
   // Counterのためのエフェクト-------------------------------------↑
 
   const scroll = (direction: "left" | "right") => {
@@ -117,7 +138,7 @@ const Carousel = ({
       <div
         ref={scrollRef}
         className={`
-          flex gap-x-4 overflow-x-auto scrollbar-hide
+          flex overflow-x-auto scrollbar-hide
           scroll-smooth snap-x snap-mandatory
           ${containerClassName}
         `}
@@ -172,6 +193,8 @@ const Carousel = ({
           totalItems={React.Children.count(children)}
           visibleItems={visibleItems}
           currentIndex={currentIndex}
+          containerRef={scrollRef}
+          id={id}
         />
       </div>
       {/* Counterの表示-------------------------------------↑*/}
@@ -185,17 +208,45 @@ interface CounterProps {
   totalItems: number;
   visibleItems: number;
   currentIndex: number;
+  containerRef?: React.RefObject<HTMLDivElement>;
+  id?: string;
 }
 
-const Counter = ({ totalItems, visibleItems, currentIndex }: CounterProps) => {
+const Counter = ({
+  totalItems,
+  visibleItems,
+  currentIndex,
+  containerRef,
+  id,
+}: CounterProps) => {
+  useEffect(() => {
+    console.log("currentIndex", currentIndex);
+    console.log("visibleItems", visibleItems);
+  }, [currentIndex, visibleItems]);
+
   const circles = Array.from({ length: totalItems }, (_, index) => (
     <div
-      key={index}
-      className={`w-2 h-2 rounded-full mx-1 ${
+      key={id ? id + index : index}
+      className={`w-2 h-2 rounded-full mx-1 cursor-pointer ${
         index >= currentIndex && index < currentIndex + visibleItems
           ? "bg-blue-400"
           : "bg-gray-400"
       }`}
+      onClick={() => {
+        // クリックでスクロール
+        if (containerRef) {
+          const container = containerRef.current;
+          if (container) {
+            const firstChild = container.firstChild as HTMLElement | null;
+            if (firstChild) {
+              container.scrollTo({
+                left: firstChild.clientWidth * index,
+                behavior: "smooth",
+              });
+            }
+          }
+        }
+      }}
     />
   ));
 

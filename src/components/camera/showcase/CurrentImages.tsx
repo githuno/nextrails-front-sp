@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Carousel, CarouselItem, Modal } from "@/components";
-import { useImageset, File } from "@/components/camera";
+import { useImageset, type Imageset, type File } from "@/components/camera";
 import {
   useCamera,
   useIdb,
@@ -8,7 +8,7 @@ import {
   CloseIcon,
   SyncIcon,
 } from "@/components/camera/_utils";
-import { useCloudImg, ShouldDo } from "./hooks/useCloudImg";
+import { useCloudImg } from "./hooks/useCloudImg";
 import Image from "next/image";
 
 const CurrentImages = () => {
@@ -19,6 +19,7 @@ const CurrentImages = () => {
 
   const [isSyncing, setIsSyncing] = useState<string[]>([]);
   const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false);
+  const [carouselIndex, setCarouselIndex] = useState<number | null>(null);
 
   const getImages = useCallback(async () => {
     const currentName = imageset.name;
@@ -29,21 +30,21 @@ const CurrentImages = () => {
       const idbFiles = await idb.get(imageset.name, {
         date: { key: "updatedAt", order: "desc" },
       });
-      // debug
-      console.log("GET! idbFiles:", idbFiles);
+
       // IDBファイルが存在する場合
       if (Array.isArray(idbFiles) && idbFiles.length > 0) {
         setImageset((prev) =>
           // セット名が変更されている場合は更新しない
           prev.name === currentName ? { ...prev, files: idbFiles } : prev
         );
-        // IDBの同期済みファイルのうちで最新更新日時を取得
-        const idbSyncedAt =
-          idbFiles.filter((file) => !file.shouldSync).shift()?.updatedAt ?? 0;
-        params = `updatedAt_over=${idbSyncedAt}&updatedAt_sort=desc`; // 更新日時がidbの最新ファイルより新しい(削除含む)ファイルを取得
+        // IDBのfilesから適切な日時を取得してparamsを再定義
+        params = `updatedAt_over=${cloud.checkUpdatedAt(
+          idbFiles
+        )}&updatedAt_sort=desc`;
       }
+
       // クラウドからファイルを取得
-      await syncFromImages({ setName: imageset.name, params });
+      await fetchImages({ setName: imageset.name, params });
     } catch (error) {
       console.error("Error updating media:", error);
     } finally {
@@ -54,10 +55,8 @@ const CurrentImages = () => {
   const localCleanup = useCallback(
     async (imagesetName: string) => {
       const targetFiles = imageset.files.filter(
-        (file) => file.deletedAt && !file.shouldSync // 削除済みかつ同期不要ファイル
+        (file) => file.deletedAt && file.updatedAt < file.fetchedAt // 削除済みかつ取得以降に更新されていないファイル
       );
-      // debug
-      console.log("targetFiles:", targetFiles);
       try {
         for (const file of targetFiles) {
           await idb.delete(imagesetName, file.idbId); // IDBの削除済みファイルを削除
@@ -77,7 +76,7 @@ const CurrentImages = () => {
     [idb, imageset.files]
   );
 
-  const syncFromImages = useCallback(
+  const fetchImages = useCallback(
     async ({ setName, params }: { setName: string; params: string }) => {
       if (!isOnline) return;
       try {
@@ -85,8 +84,6 @@ const CurrentImages = () => {
           params: params,
         });
         if (cloudFiles.length === 0 || !Array.isArray(cloudFiles)) return;
-        // debug
-        console.log("GET! cloudFiles:", cloudFiles);
         // cloudFilesがある場合はIDBに同期してimagesetにセット
         const syncedFiles = await idb.sync(setName, cloudFiles, {
           dateKey: "updatedAt",
@@ -100,8 +97,6 @@ const CurrentImages = () => {
               }
             : prev
         );
-        // debug
-        console.log("GET! syncedFiles:", syncedFiles);
       } catch (error) {
         console.error(`Error updating media with ${setName}:`, error);
       }
@@ -109,52 +104,45 @@ const CurrentImages = () => {
     [cloud, idb]
   );
 
-  const syncToImage = useCallback(
-    async ({ setName, file }: { file: File; setName: string }) => {
-      const method = cloud.shouldDo(file);
-      if (
-        !isOnline ||
-        method === ShouldDo.NOT ||
-        isSyncing.includes(file.idbId)
-      )
-        return;
+  const pushImage = useCallback(
+    async (set: Imageset) => {
+      const file = set.files
+        .filter(
+          (file) =>
+            file.size !== 0 && // ファイルのサイズプロパティが0（＝まだIDBに保存されていない仮ファイル）
+            file.shouldPush && // shouldPushプロパティがtrue
+            !isSyncing.includes(file.idbId) // isSyncingに含まれていないファイル
+        )
+        .pop(); // 上記条件内で更新日が最古のファイル
+      if (!file) return; // ファイルがない場合は処理しない
+
       setIsSyncing((prev) => [...prev, file.idbId]);
 
-      // debug
-      console.log("autoSync! method,file:", method, file);
-
-      // 同期済みとして新しいファイルを作成
-      let newFile: File = { ...file, shouldSync: false };
-
+      let newFile: File = { ...file, shouldPush: false };
       try {
-        switch (method) {
-          case ShouldDo.POST:
-            newFile = await cloud.postFile({ file, imagesetName: setName });
-            newFile.idbUrl = file.idbUrl;
-            await idb.put(setName, newFile);
-            break;
-          case ShouldDo.PUT:
-            await cloud.putFile({ file, imagesetName: setName });
-            await idb.put(setName, newFile);
-            break;
-          case ShouldDo.DELETE:
-            await cloud.deleteFile({ file, imagesetName: setName });
-            await idb.delete(setName, file.idbId); // IDBの物理削除
-            break;
-          default:
-            break;
+        if (file.deletedAt) {
+          // DELETE
+          await cloud.deleteFile({ file, imagesetName: set.name });
+          await idb.delete(set.name, file.idbId); // IDBの物理削除
+        } else if (file.id && file.version) {
+          // PUT
+          await cloud.putFile({ file, imagesetName: set.name });
+          await idb.put(set.name, newFile);
+        } else if (!file.id) {
+          // POST
+          newFile = await cloud.postFile({ file, imagesetName: set.name });
+          await idb.put(set.name, newFile);
         }
         // imagesetの該当fileを更新
         setImageset((prev) =>
-          prev.name === setName
+          prev.name === set.name
             ? {
                 ...prev,
-                files:
-                  method !== ShouldDo.DELETE
-                    ? prev.files.map((f) =>
-                        f.idbId === newFile.idbId ? newFile : f
-                      )
-                    : prev.files.filter((f) => f.idbId !== newFile.idbId),
+                files: file.deletedAt
+                  ? prev.files.filter((f) => f.idbId !== newFile.idbId)
+                  : prev.files.map((f) =>
+                      f.idbId === newFile.idbId ? newFile : f
+                    ),
               }
             : prev
         );
@@ -173,9 +161,9 @@ const CurrentImages = () => {
       // 1. fileのversionとdeletedAtを更新して定義
       const deleteFile = {
         ...file,
+        shouldPush: true,
         deletedAt: Date.now(),
         updatedAt: Date.now(),
-        shouldSync: true,
         version: file.version + 1,
         blob: null,
       };
@@ -202,8 +190,8 @@ const CurrentImages = () => {
       if (isSyncing.includes(file.idbId)) return;
       const targetFile = {
         ...file,
+        shouldPush: true,
         updatedAt: Date.now(),
-        shouldSync: true,
         version: file.version + 1,
       };
       // 1. IDBの更新
@@ -243,58 +231,44 @@ const CurrentImages = () => {
   }, [imageset.name, cameraState.isInitializing]);
 
   useEffect(() => {
-    const autoSync = async () => {
+    const autoPush = async () => {
       if (
-        !cameraState.isScanning || // SCANNING状態でない場合
-        imageset.files.length === 0 || // ファイルがない場合
+        !isOnline || // オフラインの場合
+        (cameraState.isAvailable && !cameraState.isScanning) || // カメラが使えるのにSCANNING状態でない場合
+        imageset.files.length === 0 || // filesがない場合
         isSyncing.includes(imageset.name) // 同期中の場合
       )
         return; // 上記条件下では処理しない
 
-      // 未同期ファイルの最古ファイルを抽出
-      const fileToUpdate = imageset.files
-        .filter((file) => file.shouldSync)
-        .pop();
-      if (!fileToUpdate) return; // 更新がない場合は処理しない
-
-      // 前回の同期日時を取得
-      const prevSyncedAt =
-        imageset.files.filter((file) => !file.shouldSync).shift()?.updatedAt ??
-        0;
-      // 前回の同期以降に更新されたファイルを取得
-      const params = `updatedAt_over=${prevSyncedAt}&updatedAt_sort=desc`;
-
-      // TODO: リクエストが多くなるので最適化が必要
-      const timeoutId = setTimeout(() => {
-        // 1. 未同期ファイルを同期（local→cloud）
-        syncToImage({ setName: imageset.name, file: fileToUpdate });
-        // 2. 差分更新ファイルを取得（cloud→local）
-        syncFromImages({ setName: imageset.name, params });
-        // 3. 論理削除済みファイルを物理削除
-        localCleanup(imageset.name);
-      }, 500); // 0.5秒のデバウンス後に上記処理を実行
-      return () => clearTimeout(timeoutId);
+      await pushImage(imageset);
     };
-    autoSync();
-  }, [isOnline, imageset.files, cameraState.isScanning]);
+    autoPush();
+  }, [isOnline, imageset.files, cameraState.isScanning, isSyncing]);
+
+  const handleCarouselItemClick = (fileIndex: number) => {
+    setIsImageModalOpen(true);
+    setTimeout(() => {
+      setCarouselIndex(fileIndex);
+    }, 100);
+  };
 
   return (
     <>
-      <Carousel>
+      <Carousel autoScrollTop={true} containerClassName="gap-x-3">
         {imageset.files
           .filter((file) => !file.deletedAt)
           .map((file) => (
             // 子要素自身で幅を定義
             <CarouselItem
-              key={file.idbId}
-              className="relative h-full w-40 pt-3 pr-2"
+              key={"small-" + file.idbId}
+              className="relative h-full w-40 pt-2"
             >
               <div className="aspect-video bg-gray-100/50 rounded-lg flex items-center justify-center">
                 <div
                   className="relative h-full w-full cursor-pointer"
-                  onClick={() => {
-                    setIsImageModalOpen(true);
-                  }}
+                  onClick={() =>
+                    handleCarouselItemClick(imageset.files.indexOf(file))
+                  }
                 >
                   {file.contentType === "video/webm" ? (
                     <video
@@ -308,7 +282,6 @@ const CurrentImages = () => {
                     //   alt={`Image ${file.idbId}`}
                     //   className="h-full w-full object-contain p-0.5"
                     // />
-
                     <Image
                       src={file.idbUrl ?? ""}
                       alt={`Image ${file.idbId}`}
@@ -356,16 +329,20 @@ const CurrentImages = () => {
       {/* TODO：クリックした画像が開くようにする必要あり。現在は先頭画像に戻ってしまう */}
       <Modal
         isOpen={isImageModalOpen}
-        onClose={() => setIsImageModalOpen(false)}
+        onClose={() => {
+          setCarouselIndex(null);
+          setIsImageModalOpen(false);
+        }}
         className="bg-white/0"
       >
-        <Carousel className="bg-black/70">
+        <Carousel
+          className="bg-black/70"
+          containerClassName="md:gap-x-1"
+          index={carouselIndex}
+        >
           {imageset.files.map((file) => (
-            <CarouselItem
-              key={file.idbId}
-              className="relative flex items-center justify-center"
-            >
-              <div className="w-[100vw] h-[90vh]">
+            <CarouselItem key={"large-" + file.idbId}>
+              <div className="w-[100vw] h-[90vh] py-2 px-1 md:w-[93vw] md:pr-0">
                 {file.contentType === "video/webm" ? (
                   <video
                     controls
