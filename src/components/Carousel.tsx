@@ -219,11 +219,6 @@ const Counter = ({
   containerRef,
   id,
 }: CounterProps) => {
-  useEffect(() => {
-    console.log("currentIndex", currentIndex);
-    console.log("visibleItems", visibleItems);
-  }, [currentIndex, visibleItems]);
-
   const circles = Array.from({ length: totalItems }, (_, index) => (
     <div
       key={id ? id + index : index}
