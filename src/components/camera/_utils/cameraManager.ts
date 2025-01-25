@@ -18,6 +18,7 @@ import jsQR from "jsqr";
 
 interface CameraState {
   isInitializing: boolean;
+  isAvailable: boolean;
   isScanning: boolean;
   isRecording: boolean;
   isCapturing: boolean;
@@ -189,7 +190,11 @@ class CameraManager {
     this.setState((prev) => ({ ...prev, isInitializing: true, error: null }));
     try {
       await this.getSensor();
-      this.setState((prev) => ({ ...prev, isInitializing: false }));
+      this.setState((prev) => ({
+        ...prev,
+        isInitializing: false,
+        isAvailable: true,
+      }));
     } catch (error) {
       const cameraError =
         error instanceof Error
@@ -200,6 +205,7 @@ class CameraManager {
       this.setState((prev) => ({
         ...prev,
         isInitializing: false,
+        isAvailable: false,
         error: cameraError,
       }));
       throw cameraError;
@@ -219,7 +225,11 @@ class CameraManager {
     try {
       await this.getSensor();
       await this.waitForVideoReady();
-      this.setState((prev) => ({ ...prev, isInitializing: false }));
+      this.setState((prev) => ({
+        ...prev,
+        isInitializing: false,
+        isAvailable: true,
+      }));
     } catch (error) {
       const cameraError =
         error instanceof Error
@@ -230,6 +240,7 @@ class CameraManager {
       this.setState((prev) => ({
         ...prev,
         isInitializing: false,
+        isAvailable: false,
         error: cameraError,
       }));
       throw cameraError;
@@ -448,6 +459,7 @@ class CameraManager {
     this.setState((prev) => ({
       ...prev,
       isInitializing: false,
+      isAvailable: false,
       isScanning: false,
       isRecording: false,
       isCapturing: false,

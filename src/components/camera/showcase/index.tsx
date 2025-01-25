@@ -24,6 +24,7 @@ const Showcase = () => {
         className="bg-transparent"
       >
         <div className="rounded-lg p-4 bg-white/80 shadow-lg">
+          {/* TODO:　変更・追加（作成）・移動をわかりやすくする　セット間の転送も必要 */}
           <h2 className="text-xl mb-4">setNameを編集</h2>
           <form
             onSubmit={(e) => {
@@ -69,7 +70,7 @@ const Showcase = () => {
               <h1 className="font-bold text-center break-words">
                 セット: {imageset.name}
               </h1>
-              {cameraState.isScanning && ( // 編集可能なのはSCANNING時のみ
+              {(cameraState.isScanning || !cameraState.isAvailable) && ( // 編集可能なのはSCANNING時のみ
                 <button
                   onClick={() => setIsNameModalOpen(true)}
                   className="ml-2 p-1 bg-transparent hover:bg-gray-200 rounded-full transition-colors"

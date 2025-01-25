@@ -11,6 +11,7 @@ import { CameraState, CameraConfig, CameraManager } from "./cameraManager";
 // 初期カメラ状態
 const initialCameraState: CameraState = {
   isInitializing: true,
+  isAvailable: false,
   isScanning: false,
   isRecording: false,
   isCapturing: false,
