@@ -42,7 +42,8 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
       updatedAt: Date.now(),
       deletedAt: null, // 削除日時
       createdAt: Date.now(), // 作成日時
-      shouldSync: true, // 同期すべきか
+      fetchedAt: 0, // 取得日時
+      shouldPush: true, // クラウドにプッシュすべきかどうか（クラウドで管理していないプロパティ）
       size: blob.size,
       contentType: blob.type,
       filename: "", // PUTで編集させる

@@ -10,14 +10,6 @@ interface CloudState {
   isDeleting: string[]; // file.idbIdを削除中
 }
 
-enum Method {
-  NOT = 0,
-  GET = 1,
-  POST = 2,
-  PUT = 3,
-  DELETE = 4,
-}
-
 class Cloud {
   private cloudStorage: ReturnType<typeof useCloudStorage>["cloudStorage"];
   private contentTypeToExtension: Record<
@@ -46,7 +38,13 @@ class Cloud {
 
   // imagesetsを取得して返す
   public getImagesets = useCallback(
-    async ({ params }: { params?: string }): Promise<Imageset[]> => {
+    async ({
+      params,
+      excludeSetName,
+    }: {
+      params?: string;
+      excludeSetName?: string;
+    }): Promise<Imageset[]> => {
       try {
         const response = await fetch(
           params
@@ -59,18 +57,18 @@ class Cloud {
         const cloudImagesets = await response.json().then(async (json) => {
           const imagesets = await Promise.all(
             json.map(async (imageset: Imageset) => {
-              if (!imageset) {
-                return null; // imagesetがundefinedの場合はnullを返す
-              }
-              // 1. filesプロパティが存在しない場合や、値が配列でない場合に空の配列を設定
-              imageset.files = Array.isArray(imageset.files)
-                ? imageset.files
-                : [];
-              if (!imageset.files.length) {
+              if (!imageset) return null; // imagesetがnullの場合はスキップ
+
+              // 1. 条件に当てはまるセットはfilesを空にしてスキップ
+              if (
+                !Array.isArray(imageset.files) || // filesが配列でない場合
+                imageset.name === excludeSetName // 除外対象のimagesetの場合
+              ) {
+                imageset.files = [];
                 return imageset;
               }
 
-              // 2. filesプロパティの各要素にblobをセット
+              // 2. セット.filesについてfileごとに各要素をセット
               imageset.files = await Promise.all(
                 imageset.files.map(async (file: File) => {
                   // 2-1. blobをDLしてセット
@@ -88,10 +86,9 @@ class Cloud {
                       ?.split("/")
                       .pop()
                       ?.replace(/\.[^/.]+$/, "") || "";
-                  // 2-3. 同期不要フラグをセット
-                  file.shouldSync = false;
-                  // 2-4. 削除済みファイルについてはそもそもcloudから返ってこないため考慮不要
-                  //
+                  // 2-3. 取得日時は0にセット
+                  file.fetchedAt = 0;
+                  file.shouldPush = false;
                   return file;
                 })
               );
@@ -117,6 +114,7 @@ class Cloud {
       options?: { params: string }
     ): Promise<File[]> => {
       this.updateState({ isFilesFetching: true });
+      const now = Date.now(); // 先に取得日時をセットしておく
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}${
@@ -141,17 +139,16 @@ class Cloud {
               return [] as Blob[]; // エラーの場合は空の配列を返すか、適切な処理をする
             });
 
-          // 3. ファイルにblobをセット
+          // 3. 各fileにプロパティをセット
           const files = json.map((file: File) => {
-            // 3-1. keyからidbIdを取得
+            file.fetchedAt = now;
+            file.shouldPush = false;
             file.idbId =
               file.key
                 ?.split("/")
                 .pop()
                 ?.replace(/\.[^/.]+$/, "") || "";
-            // 3-2. 同期不要フラグをセット
-            file.shouldSync = false;
-            // 3-3. 削除済みファイルはblobを付与しない ※idb上で削除されず、cloud上では削除されたファイルを考慮
+            // 削除済みファイルはblobを付与しない ※idb上で削除されず、cloud上では削除されたファイルを考慮
             if (!file.deletedAt) {
               const blobIndex = keys.indexOf(file.key);
               if (blobIndex !== -1 && blobs[blobIndex]) {
@@ -252,14 +249,16 @@ class Cloud {
           throw new Error(`Failed to upload file: ${response.statusText}`);
         }
         const updatedFile = await response.json();
-        // 3-1. keyからidbIdを取得
+        // 3. 各プロパティをセット
+        updatedFile.fetchedAt = 0;
+        updatedFile.shouldPush = false;
+        updatedFile.idbUrl = file.idbUrl;
         updatedFile.idbId =
           updatedFile.key
             ?.split("/")
             .pop()
             ?.replace(/\.[^/.]+$/, "") || "";
-        // 3-2. 同期不要フラグを立てる
-        updatedFile.shouldSync = false;
+
         // 4. 更新されたファイルを返す
         return updatedFile as File;
       } catch (error) {
@@ -308,14 +307,24 @@ class Cloud {
     []
   );
 
-  // Fileの状態に応じて処理を分岐
-  public shouldDo = (file: File): Method => {
-    if (file.size === 0 || !file.shouldSync) return Method.NOT; // ファイルのサイズプロパティが0（まだIDBに保存されていない仮ファイル）
-    if (file.deletedAt) return Method.DELETE;
-    if (file.id && file.version) return Method.PUT;
-    if (!file.id) return Method.POST;
-    return Method.NOT;
-  };
+  public checkUpdatedAt = useCallback((descendedLocalfiles: File[]): number => {
+    let lastPushedAt = 0;
+    let firstUpdatedAt = 0;
+
+    for (const file of descendedLocalfiles) {
+      // fetchedAt が 0 でない最新ファイル（配列の先頭）日時を取得
+      if (file.fetchedAt !== 0) return file.fetchedAt;
+      // shouldPush が false の最新ファイル（配列の先頭）日時を取得
+      if (lastPushedAt === 0 && !file.shouldPush) {
+        lastPushedAt = file.updatedAt;
+        break;
+      }
+      // 更新日が最古（配列の最後）のファイル日時を取得
+      firstUpdatedAt = file.updatedAt;
+    }
+
+    return lastPushedAt || firstUpdatedAt;
+  }, []);
 }
 
 const useCloudImg = () => {
@@ -331,4 +340,4 @@ const useCloudImg = () => {
   return { cloud, cloudState, isOnline };
 };
 
-export { useCloudImg, Method as ShouldDo };
+export { useCloudImg };

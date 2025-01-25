@@ -289,65 +289,58 @@ class IdbManager<T extends IdbFile> {
     }
   }
 
-  // syncStoresは存在しないストアを作成したうえで全てのストア名を返却する
-  async syncStores(storeNames: string[]): Promise<string[]> {
-    for (const storeName of storeNames) {
-      await this.createStore(storeName);
-    }
-    return this.getStores();
-  }
-
   // syncLatestsは最新のファイルをidbに追加したうえで最新のidbファイルセットを返す
   async syncLatests({
     dateKey,
     set,
   }: {
     dateKey: keyof T;
-    set: { file: T; storeName: string }[];
-  }): Promise<(T & { storeName: string })[]> {
-    const results: (T & { storeName: string })[] = [];
+    set: { files: T[]; storeName: string }[];
+  }): Promise<{ files: T[]; storeName: string }[]> {
+    const results: { files: T[]; storeName: string }[] = [];
+    const idbStoreNames = await this.getStores();
+
     if (set.length === 0) {
-      // A. 同期するファイルがない場合
+      // A. 受け取ったセットが空配列の場合
       console.log("No files to sync");
-      const storeNames = await this.getStores();
-      for (const storeName of storeNames) {
-        const storeLatestFile = (await this.get(storeName, {
+      for (const storeName of idbStoreNames) {
+        const idbLatestFile = (await this.get(storeName, {
           date: { key: dateKey, order: "latest" },
         })) as T;
-        if (storeLatestFile) {
-          storeLatestFile.blob = null; // blobは返さない
-          results.push({
-            ...storeLatestFile,
-            storeName,
-          });
+        if (idbLatestFile) {
+          idbLatestFile.blob = null; // blobは返さない
+          results.push({ files: [idbLatestFile], storeName });
+        } else {
+          results.push({ files: [], storeName });
         }
       }
     } else {
-      // B. 同期するファイルがある場合
-      for (const { file, storeName } of set) {
-        const storeLatestFile = (await this.get(storeName, {
-          date: { key: dateKey, order: "latest" },
-        })) as T;
-        if (
-          !file ||
-          !file.blob ||
-          !file[dateKey] || // ファイルが存在しないか、
-          (storeLatestFile && // idbにファイルが存在するのに、
-            file[dateKey] <= storeLatestFile[dateKey]) // idbデータより古い場合
-        ) {
-          storeLatestFile.blob = null; // blobは返さない
-          // ストア名だけ返す
-          results.push({
-            ...storeLatestFile,
-            storeName,
-          });
+      // B. 受け取ったセットが空でない場合
+      for (const { files, storeName } of set) {
+        let latestFile: T | null = null;
+        if (!idbStoreNames.includes(storeName)) {
+          // B-1. idbにストアが存在しない場合
+          latestFile = await this.post(storeName, files[0]); // ファイルを作成して返す
         } else {
-          // ファイルを追加して返す
-          const newFile: T = await this.post(storeName, file);
-          results.push({
-            ...newFile,
-            storeName,
-          });
+          // B-2. idbにストアが存在する場合
+          const idbLatestFile = (await this.get(storeName, {
+            date: { key: dateKey, order: "latest" },
+          })) as T | null;
+          if (!files[0] || (idbLatestFile && files[0][dateKey] < idbLatestFile[dateKey])) {
+            latestFile = idbLatestFile;
+          } else {
+            await this.put(storeName, files[0]); // 上記条件ではファイルを更新して
+            // 最新のファイルを取り直す
+            latestFile = (await this.get(storeName, {
+              date: { key: dateKey, order: "latest" },
+            })) as T | null;
+          }
+        }
+        if (latestFile) {
+          latestFile.blob = null; // blobは返さない
+          results.push({ files: [latestFile], storeName });
+        } else {
+          results.push({ files: [], storeName });
         }
       }
     }

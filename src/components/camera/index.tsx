@@ -7,13 +7,14 @@ import { session } from "@/components";
 
 // ----------------------------------------------------------------------------- ImagesetType
 interface File extends IdbFile {
-  // idbId: string; // IDB用のID
-  // idbUrl: string | null; // IDB用のURL
-  // blob: Blob | null; // 画像データ
+  // idbId: string; // IDB用のID（クラウドで管理していないプロパティ）
+  // idbUrl: string | null; // IDB用のURL（クラウドで管理していないプロパティ）
+  // blob: Blob | null; // 画像データ（クラウドで管理していないプロパティ）
   // updatedAt: number; // 更新日時
+  fetchedAt: number; // 取得日時（クラウドで管理していないプロパティ）
+  shouldPush: boolean; // クラウドにプッシュ必要かどうか（クラウドで管理していないプロパティ）
   deletedAt: number | null; // 論理削除日時
   createdAt: number; // 作成日時
-  shouldSync: boolean; // 同期済みかどうか
   id: string | null; // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
   contentType: string;
   size: number;
@@ -77,6 +78,7 @@ const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
 const ImagesetContent: React.FC = () => {
   const { imageset } = useImageset();
   const { cameraState } = useCamera();
+
   useEffect(() => {
     if ("serviceWorker" in navigator && "PushManager" in window) {
       console.log("Service Worker and Push is supported");
@@ -171,7 +173,13 @@ export {
   ImagesetState, // TODO: typeとenumを統一する
 };
 
-// TODO: カルーセルの実装
 // TODO: ServiceWorker（イベント）の実装
 // → useCloudImgによるオンラインアップデートは、ServiceWorkerで行う？
 // → 画像が3枚以上の場合にトーストでDRAFT変更を促す
+// NotionDBアップロード
+// Notionページアップロード
+// Gmail下書き
+// GooglePhotosアップロード
+//
+// 認証
+// 制限＆課金　※ 「アップグレード」ではなく「支援してください」にする。応援コメントを送れるようにする

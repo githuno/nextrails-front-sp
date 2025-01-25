@@ -50,7 +50,8 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
       updatedAt: Date.now(),
       deletedAt: null, // 論理削除日時
       createdAt: Date.now(), // 作成日時
-      shouldSync: true, // 同期すべきか
+      fetchedAt: 0, // 取得日時
+      shouldPush: true, // クラウドにプッシュすべきどうか（クラウドで管理していないプロパティ）
       size: 0,
       contentType: "image/png",
       filename: "", // PUTで編集させる

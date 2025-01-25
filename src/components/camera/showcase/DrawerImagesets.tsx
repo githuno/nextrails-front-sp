@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Carousel, CarouselItem } from "@/components";
 import {
   useImageset,
-  File,
+  type File,
   Imageset,
   ImagesetState,
 } from "@/components/camera";
@@ -20,73 +20,71 @@ const DrawerImagesets = () => {
   const [latestImagesets, setLatestImagesets] = useState<Imageset[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // TODO: リファクタリング必要
   const getLatestImagesets = useCallback(async () => {
+    interface SyncSetType {
+      storeName: string;
+      files: File[];
+    }
     try {
-      let tmpLatestSets: Imageset[] = [];
+      let forSyncSets: SyncSetType[] = [];
+      // 1. オンラインの場合、クラウドのimageSetsを取得
       if (isOnline) {
         setIsLoading(true);
-        // 1. cloudから最新のimageを取得してlatestImagesetsにセット（※ここでblobもDL）
+        // 1-1. cloudから最新のimageSetsを取得（※ここでidbId, blob, fetcedAtもセット済み）
         const cloudLatestSets: Imageset[] = await cloud.getImagesets({
-          params: `updatedAt=latest`,
+          params: `updatedAt=latest`, // 最新のセットのみ取得
+          excludeSetName: imageset.name, // 現在のセットはファイル除外
         });
-        // 2. 同期store名を取得（cloudLatestImagesetsの各name配列を渡す）
-        const cloudStores = cloudLatestSets.map((set) => set.name);
-        const syncedStores = await idb.syncStores(cloudStores);
-        // 3. syncedStoresのうち、cloudStoresに含まれないstore名についてimagesetを追加
-        const diffSets = syncedStores
-          .filter((store) => !cloudStores.includes(store))
-          .map((store) => ({
-            id: Date.now(),
-            name: store,
-            status: ImagesetState.DRAFT,
-            files: [],
-          }));
-        tmpLatestSets = [...cloudLatestSets, ...diffSets];
-        setLatestImagesets([...tmpLatestSets]);
+        // 1-2. forSyncSetsを定義
+        forSyncSets = cloudLatestSets.map((set) => ({
+          storeName: set.name,
+          files: set.files,
+        }));
       }
-      // 4. allImagesetsを同期(storeNameとfileのセットを渡す)
-      const tmpLatestFiles = tmpLatestSets.map((imageset) => ({
-        file: imageset.files[0],
-        storeName: imageset.name,
-      }));
-      const syncedLatestFiles = await idb.syncLatests({
+      // 2. 同期
+      const syncedSets: SyncSetType[] = await idb.syncLatests({
         dateKey: "updatedAt",
-        set: tmpLatestFiles,
+        set: forSyncSets,
       });
-      // 5. latestImagesetsのfilesを更新して更新日降順で並び替え
-      const updatedSets = tmpLatestSets.map((imageset) => {
-        const syncedLatestFile = syncedLatestFiles.find(
-          (set) => set.storeName === imageset.name
-        );
-        const { storeName, ...file } = syncedLatestFile!;
-        return syncedLatestFile
-          ? {
-              id: imageset.id,
-              name: storeName,
-              status: ImagesetState.DRAFT,
-              files: [file as File],
-            }
-          : imageset;
-      });
-      updatedSets.sort(
-        (a, b) => b.files[0]?.updatedAt ?? 0 - a.files[0]?.updatedAt ?? 0
-      );
+      // 3. Imageset型に更新して更新日降順で並び替え
+      const updatedSets: Imageset[] = syncedSets.map((set) => ({
+        id: set.files[0].updatedAt, // 仮のセットID
+        name: set.storeName,
+        status: ImagesetState.DRAFT,
+        files: set.files,
+      }));
+      // 4. idの降順で並び替え
+      updatedSets.sort((a, b) => b.id - a.id);
       setLatestImagesets(updatedSets);
       setIsLoading(false);
       // -----------------------------------------------------------------------
       // 特別. 非同期で各storeのcloudfilesをidbに同期しておく
-      const syncPromises = latestImagesets.map(async (store) => {
-        try {
-          const cloudfiles = await cloud.getFiles(store.name);
-          await idb.sync(store.name, cloudfiles);
-        } catch (error) {
-          console.error(
-            `Error syncing store ${store} with cloud files:`,
-            error
-          );
-        }
-      });
+      const syncPromises = latestImagesets
+        .filter((set) => set.name !== imageset.name)
+        .map(async (store) => {
+          let params = "deletedAt_null=true&updatedAt_sort=desc";
+          const idbFiles = await idb.get(store.name, {
+            date: { key: "updatedAt", order: "desc" },
+          });
+          // INFO: lengthが1なら今回取得した最新ファイルのため削除されていないファイルを全取得すればよい
+          // INFO: lengthが2以上ならIDBにもともと存在するファイルであり、クラウド上は削除されている可能性があるため"deletedAt_null=true"は使えない
+          if (Array.isArray(idbFiles) && idbFiles.length > 1) {
+            params = `updatedAt_over=${cloud.checkUpdatedAt(
+              idbFiles
+            )}&updatedAt_sort=desc`;
+          }
+          try {
+            const cloudfiles = await cloud.getFiles(store.name, {
+              params: params,
+            });
+            await idb.sync(store.name, cloudfiles);
+          } catch (error) {
+            console.error(
+              `Error syncing store ${store} with cloud files:`,
+              error
+            );
+          }
+        });
       await Promise.all(syncPromises);
     } catch (error) {
       console.error("Error updating media:", error);
@@ -106,19 +104,19 @@ const DrawerImagesets = () => {
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
-    const fetchData = async () => {
+    const fetchLatests = async () => {
       // 実行前に1秒待つ
       timeoutId = await new Promise((resolve) => setTimeout(resolve, 1000));
       getLatestImagesets();
     };
 
     if (cameraState.isInitializing) {
-      fetchData();
+      fetchLatests();
     }
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [cameraState.isInitializing, getLatestImagesets]);
+  }, [cameraState.isInitializing]);
 
   useEffect(() => {
     // latestImagesetsのnameにimageset.nameが含まれていない場合、imagesetを追加
@@ -193,7 +191,7 @@ const DrawerImagesets = () => {
 
           {/* ドロワー内の要素 */}
           <div className="grid w-full justify-end px-4 py-2">
-            <Carousel>
+            <Carousel containerClassName="gap-x-2">
               {latestImagesets.map(({ name, files }) => (
                 <CarouselItem
                   key={name}
