@@ -285,8 +285,8 @@ const CurrentImages = () => {
                     <Image
                       src={file.idbUrl ?? ""}
                       alt={`Image ${file.idbId}`}
-                      layout="fill"
-                      objectFit="contain"
+                      fill
+                      style={{ objectFit: 'contain' }}
                       className="p-0.5"
                     />
                   )}

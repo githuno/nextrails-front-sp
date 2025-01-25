@@ -50,8 +50,8 @@ const PortfolioPage = () => {
                 <Image
                   src={project.img}
                   alt={project.title}
-                  layout="fill"
-                  objectFit="cover"
+                  fill
+                  style={{ objectFit: 'cover' }}
                 />
               </div>
               <div className="p-6 flex flex-col justify-between col-span-2">
@@ -110,8 +110,8 @@ const PortfolioPage = () => {
                   <Image
                     src={project.img}
                     alt={project.title}
-                    layout="fill"
-                    objectFit="cover"
+                    fill
+                    style={{ objectFit: 'cover' }}
                   />
                 </div>
                 <div className="p-4 flex flex-col flex-grow h-30">
