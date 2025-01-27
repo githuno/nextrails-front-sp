@@ -1,4 +1,3 @@
-import { useCloudImg } from "./hooks/useCloudImg";
 import React, { useCallback, useEffect, useState } from "react";
 import { Carousel, CarouselItem } from "@/components";
 import {
@@ -8,15 +7,16 @@ import {
   ImagesetState,
 } from "@/components/camera";
 import { useCamera, useIdb } from "@/components/camera/_utils";
+import { useCloud } from "./hooks/useCloud";
 import { LinesIcon } from "@/components/Icons";
 
 const DrawerImagesets = () => {
   const { cameraState } = useCamera();
   const { dbName, imageset, setImageset } = useImageset();
   const { idb } = useIdb<File>(dbName);
-  const { cloud } = useCloudImg();
+  const { cloudState, cloudGetImagesets, cloudGetFiles, checkUpdatedAt } =
+    useCloud();
 
-  const isOnline = navigator.onLine;
   const [latestImagesets, setLatestImagesets] = useState<Imageset[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -27,11 +27,11 @@ const DrawerImagesets = () => {
     }
     try {
       let forSyncSets: SyncSetType[] = [];
+      setIsLoading(true);
       // 1. オンラインの場合、クラウドのimageSetsを取得
-      if (isOnline) {
-        setIsLoading(true);
+      if (cloudState.isOnline) {
         // 1-1. cloudから最新のimageSetsを取得（※ここでidbId, blob, fetcedAtもセット済み）
-        const cloudLatestSets: Imageset[] = await cloud.getImagesets({
+        const cloudLatestSets: Imageset[] = await cloudGetImagesets({
           params: `updatedAt=latest`, // 最新のセットのみ取得
           excludeSetName: imageset.name, // 現在のセットはファイル除外
         });
@@ -48,7 +48,7 @@ const DrawerImagesets = () => {
       });
       // 3. Imageset型に更新して更新日降順で並び替え
       const updatedSets: Imageset[] = syncedSets.map((set) => ({
-        id: set.files[0].updatedAt, // 仮のセットID
+        id: set.files[0].updatedAt ?? 0, // 仮のセットID
         name: set.storeName,
         status: ImagesetState.DRAFT,
         files: set.files,
@@ -69,12 +69,12 @@ const DrawerImagesets = () => {
           // INFO: lengthが1なら今回取得した最新ファイルのため削除されていないファイルを全取得すればよい
           // INFO: lengthが2以上ならIDBにもともと存在するファイルであり、クラウド上は削除されている可能性があるため"deletedAt_null=true"は使えない
           if (Array.isArray(idbFiles) && idbFiles.length > 1) {
-            params = `updatedAt_over=${cloud.checkUpdatedAt(
+            params = `updatedAt_over=${checkUpdatedAt(
               idbFiles
             )}&updatedAt_sort=desc`;
           }
           try {
-            const cloudfiles = await cloud.getFiles(store.name, {
+            const cloudfiles = await cloudGetFiles(store.name, {
               params: params,
             });
             await idb.sync(store.name, cloudfiles);
@@ -88,8 +88,10 @@ const DrawerImagesets = () => {
       await Promise.all(syncPromises);
     } catch (error) {
       console.error("Error updating media:", error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [idb, cloud, isOnline, setLatestImagesets]);
+  }, [idb, cloudState.isOnline, setLatestImagesets, imageset.name]);
 
   const handleCarouselItemClick = (name: string) => {
     setImageset((prev) => ({ ...prev, name }));
