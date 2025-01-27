@@ -17,6 +17,7 @@ const CurrentImages = () => {
   const { idb, idbState } = useIdb<File>(dbName);
   const {
     cloudState,
+    checkOnlineStatus,
     cloudGetFiles,
     cloudPutFile,
     cloudPostFile,
@@ -225,11 +226,15 @@ const CurrentImages = () => {
   useEffect(() => {
     console.log("imageset.files:", imageset.files);
   }, [imageset.files]);
+  useEffect(() => {
+    console.log("cloudState:", cloudState);
+  }, [cloudState]);
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
     const initialize = async () => {
       if (cameraState.isInitializing && !isSyncing.includes(imageset.name)) {
+        await checkOnlineStatus();
         await getImages();
         localCleanup(imageset.name);
       }

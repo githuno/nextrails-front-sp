@@ -36,10 +36,12 @@ const DrawerImagesets = () => {
           excludeSetName: imageset.name, // 現在のセットはファイル除外
         });
         // 1-2. forSyncSetsを定義
-        forSyncSets = cloudLatestSets.map((set) => ({
-          storeName: set.name,
-          files: set.files,
-        }));
+        forSyncSets = cloudLatestSets
+          .filter((set) => set.name !== imageset.name && set.files.length > 0)
+          .map((set) => ({
+            storeName: set.name,
+            files: set.files,
+          }));
       }
       // 2. 同期
       const syncedSets: SyncSetType[] = await idb.syncLatests({
@@ -48,7 +50,7 @@ const DrawerImagesets = () => {
       });
       // 3. Imageset型に更新して更新日降順で並び替え
       const updatedSets: Imageset[] = syncedSets.map((set) => ({
-        id: set.files[0].updatedAt ?? 0, // 仮のセットID
+        id: set.files[0] ? set.files[0].updatedAt : 0, // 仮のセットID
         name: set.storeName,
         status: ImagesetState.DRAFT,
         files: set.files,
