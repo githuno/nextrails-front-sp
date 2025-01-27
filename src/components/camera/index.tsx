@@ -1,6 +1,6 @@
 import React, { createContext, useEffect, useState } from "react";
 import { CameraContextProvider, IdbFile, useCamera } from "./_utils";
-import { CameraPreview } from "./preview/CameraPreview";
+import { Preview } from "./preview";
 import { Controller } from "./controls";
 import { Showcase } from "./showcase";
 import { session } from "@/components";
@@ -47,7 +47,6 @@ interface ImagesetContextProps {
   dbName: string;
   imageset: Imageset;
   setImageset: React.Dispatch<React.SetStateAction<Imageset>>;
-  onQrScanned: (data: string) => void;
 }
 const ImagesetContext = createContext<ImagesetContextProps | undefined>(
   undefined
@@ -63,12 +62,9 @@ const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
     status: ImagesetState.DRAFT,
     files: [],
   });
-  const onQrScanned = (data: string) => alert(data);
 
   return (
-    <ImagesetContext.Provider
-      value={{ dbName, imageset, setImageset, onQrScanned }}
-    >
+    <ImagesetContext.Provider value={{ dbName, imageset, setImageset }}>
       {children}
     </ImagesetContext.Provider>
   );
@@ -133,7 +129,7 @@ const ImagesetContent: React.FC = () => {
         Call Hello Function
       </button> */}
       <div className="flex h-full w-full justify-center">
-        <CameraPreview />
+        <Preview />
       </div>
       {!cameraState.isInitializing && (
         <div className="fixed bottom-[5%] left-0 w-full p-4">

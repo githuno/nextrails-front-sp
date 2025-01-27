@@ -19,6 +19,7 @@ const Showcase = () => {
   return (
     <div className="grid grid-rows-5 px-2 py-1 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
       <Modal
+        id="setName"
         isOpen={isNameModalOpen}
         onClose={() => setIsNameModalOpen(false)}
         className="bg-transparent"

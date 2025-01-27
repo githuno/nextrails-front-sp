@@ -4,7 +4,7 @@ import { useImageset } from "@/components/camera";
 import { useCamera, LoadingSpinner } from "@/components/camera/_utils";
 
 const CameraPreview = () => {
-  const { imageset, onQrScanned } = useImageset();
+  const { imageset } = useImageset();
   const { isOpen } = useModal();
   const { cameraState, camera } = useCamera();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -18,7 +18,7 @@ const CameraPreview = () => {
           videoElement: videoRef.current,
           canvasElement: canvasRef.current,
         });
-        camera.startQrScan(onQrScanned);
+        camera.startQrScan();
       } else if (!isOpen && camera) {
         // モーダルが閉じられたらクリーンアップ
         await camera.cleanup();

@@ -300,7 +300,7 @@ class IdbManager<T extends IdbFile> {
     const results: { files: T[]; storeName: string }[] = [];
     const idbStoreNames = await this.getStores();
 
-    if (set.length === 0) {
+    if (Array.isArray(set) && set.length === 0) {
       // A. 受け取ったセットが空配列の場合
       console.log("No files to sync");
       for (const storeName of idbStoreNames) {

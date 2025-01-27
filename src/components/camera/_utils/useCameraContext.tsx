@@ -16,6 +16,7 @@ const initialCameraState: CameraState = {
   isRecording: false,
   isCapturing: false,
   availableDevices: [],
+  scannedData: null,
   error: null,
 };
 

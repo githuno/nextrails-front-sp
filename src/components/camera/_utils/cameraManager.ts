@@ -24,6 +24,7 @@ interface CameraState {
   isCapturing: boolean;
   deviceId?: string;
   availableDevices: MediaDeviceInfo[];
+  scannedData: string | null;
   error: Error | null;
 }
 
@@ -35,7 +36,6 @@ interface CameraConfig {
 }
 
 interface CameraCallbacks {
-  onQRCodeScanned?: (data: string) => void;
   onCaptureComplete?: (url: string | null) => void;
   onRecordComplete?: (blob: Blob) => void;
   onError?: (error: Error) => void;
@@ -276,15 +276,13 @@ class CameraManager {
     }
   }
 
-  public async startQrScan(onScanned: (data: string) => void): Promise<void> {
+  public async startQrScan(): Promise<void> {
     if (!this.videoElement || !this.canvasElement) {
       throw new Error(
         "video or canvas element is not set. please setupVideo first"
       );
     }
-
-    this.setCallbacks({ onQRCodeScanned: onScanned });
-    this.setState((prev) => ({ ...prev, isScanning: true }));
+    this.setState((prev) => ({ ...prev, isScanning: true, scannedData: null }));
 
     const context = this.canvasElement.getContext("2d");
     if (!context) return;
@@ -311,7 +309,7 @@ class CameraManager {
 
         const code = jsQR(imageData.data, imageData.width, imageData.height);
         if (code?.data) {
-          this.callbacks.onQRCodeScanned?.(code.data);
+          this.setState((prev) => ({ ...prev, scannedData: code.data }));
         }
       }
     }, this.config.QRSCAN_INTERVAL);
@@ -321,7 +319,11 @@ class CameraManager {
     if (this.scanInterval !== null) {
       window.clearInterval(this.scanInterval);
       this.scanInterval = null;
-      this.setState((prev) => ({ ...prev, isScanning: false }));
+      this.setState((prev) => ({
+        ...prev,
+        isScanning: false,
+        scannedData: null,
+      }));
     }
   }
 
@@ -464,6 +466,7 @@ class CameraManager {
       isRecording: false,
       isCapturing: false,
       availableDevices: [],
+      scannedData: null,
       error: null,
     }));
   }

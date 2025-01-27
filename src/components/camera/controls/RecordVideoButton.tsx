@@ -15,7 +15,7 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
   onSaveCompleted,
 }) => {
   const { camera, cameraState } = useCamera();
-  const { imageset, setImageset, dbName, onQrScanned } = useImageset();
+  const { imageset, setImageset, dbName } = useImageset();
   const { idb } = useIdb(dbName);
 
   const handleStartRecording = () => {
@@ -63,7 +63,7 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
       }
       return prev;
     });
-    camera.startQrScan(onQrScanned);
+    camera.startQrScan();
     onSaveCompleted();
   };
 
