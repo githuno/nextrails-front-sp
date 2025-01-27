@@ -1,28 +1,52 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { Modal } from "@/components";
 import { useCamera } from "@/components/camera/_utils";
 
-const Webview = () => {
-  const { cameraState } = useCamera();
-  const proxyUrl = cameraState.scannedData
-    ? `/api/proxy?url=${encodeURIComponent(cameraState.scannedData)}`
-    : null;
-  // const proxyUrl = iframeSrc
-  //   ? `/api/proxy?url=${encodeURIComponent("https://veil-spy-46a.notion.site/7dd602d98f254544bf720e3ef72656db")}`
-  //   : null;
-  // const proxyUrl = "https://veil-spy-46a.notion.site/7dd602d98f254544bf720e3ef72656db"
-  // const proxyUrl = "https://blog.openreplay.com/"
+const ModalWebview = () => {
+  const { camera, cameraState } = useCamera();
+  const [isUrlValid, setIsUrlValid] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkURL = () => {
+      if (!cameraState.scannedData) return;
+      try {
+        const url = new URL(cameraState.scannedData);
+        if (url.protocol === "http:" || url.protocol === "https:") {
+          console.log("url.protocol", url.protocol);
+          setIsUrlValid(true);
+        } else {
+          alert(cameraState.scannedData);
+          setIsUrlValid(false);
+          camera?.clearScannedData();
+        }
+      } catch (e) {
+        alert(cameraState.scannedData);
+        setIsUrlValid(false);
+        camera?.clearScannedData();
+      }
+    };
+
+    checkURL();
+  }, [cameraState.scannedData]);
 
   return (
-    <>
-      {proxyUrl && (
+    cameraState.scannedData && (
+      <Modal
+        id="webview"
+        isOpen={isUrlValid}
+        onClose={() => {
+          camera?.clearScannedData();
+        }}
+        className="bg-white w-full h-full"
+      >
         <iframe
-          src={proxyUrl}
+          src={`/api/proxy?url=${encodeURIComponent(cameraState.scannedData)}`}
           className="absolute inset-0 w-full h-full"
           title="Webview"
         />
-      )}
-    </>
+      </Modal>
+    )
   );
 };
 
-export { Webview };
+export { ModalWebview };

@@ -315,6 +315,10 @@ class CameraManager {
     }, this.config.QRSCAN_INTERVAL);
   }
 
+  public clearScannedData(): void {
+    this.setState((prev) => ({ ...prev, scannedData: null }));
+  }
+
   public stopQrScan(): void {
     if (this.scanInterval !== null) {
       window.clearInterval(this.scanInterval);
