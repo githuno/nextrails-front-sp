@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal } from "@/components";
 import { useImageset, File, ImagesetState } from "@/components/camera";
 import {
@@ -9,12 +9,19 @@ import {
 } from "@/components/camera/_utils";
 import { CurrentImages } from "./CurrentImages";
 import { DrawerImagesets } from "./DrawerImagesets";
+import { useCloud } from "./hooks/useCloud";
 
 const Showcase = () => {
   const { cameraState } = useCamera();
+  const { cloudState } = useCloud();
   const { imageset, setImageset, dbName } = useImageset();
   const { idb, idbState } = useIdb<File>(dbName);
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
+
+  // debug
+  useEffect(() => {
+    console.log("cloudState.isOnline:", cloudState.isOnline);
+  }, [cloudState.isOnline]);
 
   return (
     <div className="grid grid-rows-5 px-2 py-1 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
@@ -85,8 +92,12 @@ const Showcase = () => {
       </section>
 
       <section className="row-span-4 relative grid w-full place-content-center gap-2">
-        <CurrentImages />
-        <DrawerImagesets />
+        {cloudState.isOnline !== null && (
+          <>
+            <CurrentImages />
+            <DrawerImagesets />
+          </>
+        )}
       </section>
 
       {/* 開発環境でDBの初期化ボタンを配置 */}

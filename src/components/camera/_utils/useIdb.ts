@@ -299,7 +299,7 @@ class IdbManager<T extends IdbFile> {
   }): Promise<{ files: T[]; storeName: string }[]> {
     const results: { files: T[]; storeName: string }[] = [];
     const idbStoreNames = await this.getStores();
-
+  
     if (Array.isArray(set) && set.length === 0) {
       // A. 受け取ったセットが空配列の場合
       console.log("No files to sync");
@@ -316,13 +316,16 @@ class IdbManager<T extends IdbFile> {
       }
     } else {
       // B. 受け取ったセットが空でない場合
+      const setStoreNames = set.map(({ storeName }) => storeName);
+  
+      // B-1. 受け取ったセットに含まれるストアの処理
       for (const { files, storeName } of set) {
         let latestFile: T | null = null;
         if (!idbStoreNames.includes(storeName)) {
-          // B-1. idbにストアが存在しない場合
+          // idbにストアが存在しない場合
           latestFile = await this.post(storeName, files[0]); // ファイルを作成して返す
         } else {
-          // B-2. idbにストアが存在する場合
+          // idbにストアが存在する場合
           const idbLatestFile = (await this.get(storeName, {
             date: { key: dateKey, order: "latest" },
           })) as T | null;
@@ -341,6 +344,21 @@ class IdbManager<T extends IdbFile> {
           results.push({ files: [latestFile], storeName });
         } else {
           results.push({ files: [], storeName });
+        }
+      }
+  
+      // B-2. 受け取ったセットに含まれていないストアの処理
+      for (const storeName of idbStoreNames) {
+        if (!setStoreNames.includes(storeName)) {
+          const idbLatestFile = (await this.get(storeName, {
+            date: { key: dateKey, order: "latest" },
+          })) as T | null;
+          if (idbLatestFile) {
+            idbLatestFile.blob = null; // blobは返さない
+            results.push({ files: [idbLatestFile], storeName });
+          } else {
+            results.push({ files: [], storeName });
+          }
         }
       }
     }

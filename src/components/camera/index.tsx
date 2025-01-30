@@ -5,6 +5,8 @@ import { Controller } from "./controls";
 import { Showcase } from "./showcase";
 import { session } from "@/components";
 
+import { CloudProvider } from "./showcase/hooks/useCloud";
+
 // ----------------------------------------------------------------------------- ImagesetType
 interface File extends IdbFile {
   // idbId: string; // IDB用のID（クラウドで管理していないプロパティ）
@@ -103,6 +105,13 @@ const ImagesetContent: React.FC = () => {
         }
       });
     }
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", (event) => {
+        if (event.data && event.data.type === "ALERT_IMAGESET_FILES") {
+          alert(event.data.message);
+        }
+      });
+    };
   }, []);
 
   const handleButtonClick = () => {
@@ -131,13 +140,15 @@ const ImagesetContent: React.FC = () => {
       <div className="flex h-full w-full justify-center">
         <Preview />
       </div>
-      {!cameraState.isInitializing && (
+      {cameraState.isAvailable !== null && (
         <div className="fixed bottom-[5%] left-0 w-full p-4">
           <Controller />
         </div>
       )}
       <div className="fixed top-1 left-0 w-full p-2">
-        <Showcase />
+        <CloudProvider>
+          <Showcase />
+        </CloudProvider>
       </div>
     </>
   );
@@ -171,6 +182,8 @@ export {
 
 // TODO: ServiceWorker（イベント）の実装
 // → useCloudImgによるオンラインアップデートは、ServiceWorkerで行う？
+// → Notion拡張機能　ユーザー向け：1️⃣テンプレートDB作成機能 2️⃣QR生成（ID）印刷機能 ｜自分（企業）用：3️⃣QR生成（アクション）4️⃣refurnishへの連携データ生成
+// → QRコードがサービス名文字列の場合、IDBで該当文字列とステートを検索する
 // → 画像が3枚以上の場合にトーストでDRAFT変更を促す
 // NotionDBアップロード
 // Notionページアップロード

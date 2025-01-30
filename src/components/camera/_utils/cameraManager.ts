@@ -17,8 +17,7 @@ import jsQR from "jsqr";
 // TODO: ビデオ制約のカスタマイズ機能
 
 interface CameraState {
-  isInitializing: boolean;
-  isAvailable: boolean;
+  isAvailable: boolean | null; // null:初期化中、true:利用可能、false:利用不可
   isScanning: boolean;
   isRecording: boolean;
   isCapturing: boolean;
@@ -187,12 +186,10 @@ class CameraManager {
 
   // --------------------------------------------------------------------------
   public async setup(): Promise<void> {
-    this.setState((prev) => ({ ...prev, isInitializing: true, error: null }));
     try {
       await this.getSensor();
       this.setState((prev) => ({
         ...prev,
-        isInitializing: false,
         isAvailable: true,
       }));
     } catch (error) {
@@ -204,7 +201,6 @@ class CameraManager {
       this.cleanup();
       this.setState((prev) => ({
         ...prev,
-        isInitializing: false,
         isAvailable: false,
         error: cameraError,
       }));
@@ -219,7 +215,6 @@ class CameraManager {
     videoElement: HTMLVideoElement;
     canvasElement: HTMLCanvasElement;
   }): Promise<void> {
-    this.setState((prev) => ({ ...prev, isInitializing: true, error: null }));
     this.videoElement = videoElement;
     this.canvasElement = canvasElement;
     try {
@@ -227,7 +222,6 @@ class CameraManager {
       await this.waitForVideoReady();
       this.setState((prev) => ({
         ...prev,
-        isInitializing: false,
         isAvailable: true,
       }));
     } catch (error) {
@@ -239,7 +233,6 @@ class CameraManager {
       this.cleanup();
       this.setState((prev) => ({
         ...prev,
-        isInitializing: false,
         isAvailable: false,
         error: cameraError,
       }));
@@ -464,8 +457,7 @@ class CameraManager {
 
     this.setState((prev) => ({
       ...prev,
-      isInitializing: false,
-      isAvailable: false,
+      isAvailable: null,
       isScanning: false,
       isRecording: false,
       isCapturing: false,

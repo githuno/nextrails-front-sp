@@ -25,11 +25,14 @@ const CameraPreview = () => {
       }
     };
     setupCamera();
+    return () => {
+      camera?.cleanup();
+    };
   }, [videoRef.current, canvasRef.current, camera, isOpen, imageset.name]);
 
   return (
     <>
-      {cameraState.isInitializing && (
+      {cameraState.isAvailable === null && (
         <div className="absolute inset-0 flex items-center justify-center">
           <LoadingSpinner size="72px" />
         </div>

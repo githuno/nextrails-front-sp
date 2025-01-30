@@ -1,19 +1,34 @@
-import { useCallback, useState, useEffect } from "react";
+import React, { useContext, useCallback, useState, ReactNode, createContext, useEffect, useLayoutEffect } from "react";
 import { session } from "@/components";
 import { File, Imageset } from "@/components/camera";
 import { useCloudStorage } from "@/components/camera/_utils";
+import { useCamera } from "@/components/camera/_utils";
 
 interface CloudState {
-  isOnline: boolean; // オンラインかどうか
+  isOnline: boolean | null; // オンラインかどうか
   isFilesFetching: boolean; // filesを取得中
   isPosting: string[]; // file.idbIdを追加中
   isPutting: string[]; // file.idbIdを更新中
   isDeleting: string[]; // file.idbIdを削除中
 }
 
-const useCloud = () => {
+interface CloudContextProps {
+  cloudState: CloudState;
+  checkOnlineStatus: () => Promise<boolean>;
+  cloudGetImagesets: (params: { params?: string; excludeSetName?: string }) => Promise<Imageset[]>;
+  cloudGetFiles: (imagesetName: string, options?: { params: string }) => Promise<File[]>;
+  cloudPutFile: (params: { imagesetName: string; file: File }) => Promise<void>;
+  cloudPostFile: (params: { imagesetName: string; file: File }) => Promise<File>;
+  cloudDeleteFile: (params: { imagesetName: string; file: File }) => Promise<void>;
+  checkUpdatedAt: (descendedLocalfiles: File[]) => number;
+}
+
+const CloudContext = createContext<CloudContextProps | undefined>(undefined);
+
+const CloudProvider = ({ children }: { children: ReactNode }) => {
+  const {cameraState} = useCamera();
   const [cloudState, setCloudState] = useState<CloudState>({
-    isOnline: navigator.onLine,
+    isOnline: null, // navigator.onLine,
     isFilesFetching: false,
     isPosting: [],
     isPutting: [],
@@ -22,22 +37,24 @@ const useCloud = () => {
   const { cloudStorage, contentTypeToExtension } = useCloudStorage();
 
   // オンライン状況のチェック
-  const checkOnlineStatus = useCallback(async () => {
+  const checkOnlineStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE}/health`
-      );
-      if (response.ok) {
-        setCloudState({ ...cloudState, isOnline: true });
-      } else {
-        console.error(`Health check failed: ${response.status}`);
-        setCloudState({ ...cloudState, isOnline: false });
-      }
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/health`);
+      const isOnline = response.ok;
+      setCloudState(prev => ({ ...prev, isOnline }));
+      return isOnline;
     } catch (error) {
-      console.error("Error checking online status:", error);
-      setCloudState({ ...cloudState, isOnline: false });
+      setCloudState(prev => ({ ...prev, isOnline: false }));
+      return false;
     }
-  }, [cloudState]);
+  }, []);
+  useLayoutEffect(() => {
+    if(cameraState.isAvailable !== null) checkOnlineStatus();
+      // checkOnlineStatus();
+    return () => {
+      setCloudState(prev => ({ ...prev, isOnline: null }));
+    }
+  }, [cameraState.isAvailable]);
 
   // imagesetsを取得して返す
   const cloudGetImagesets = useCallback(
@@ -116,7 +133,7 @@ const useCloud = () => {
       imagesetName: string,
       options?: { params: string }
     ): Promise<File[]> => {
-      setCloudState({ ...cloudState, isFilesFetching: true });
+      setCloudState((prev) => ({ ...prev, isFilesFetching: true }));
       const now = Date.now(); // 先に取得日時をセットしておく
       try {
         const response = await fetch(
@@ -170,10 +187,10 @@ const useCloud = () => {
         console.error("Error fetching media:", error);
         return [];
       } finally {
-        setCloudState({ ...cloudState, isFilesFetching: false });
+        setCloudState((prev) => ({ ...prev, isFilesFetching: false }));
       }
     },
-    [cloudStorage, cloudState]
+    [cloudStorage]
   );
 
   // imageset.fileを更新する
@@ -185,10 +202,10 @@ const useCloud = () => {
       imagesetName: string;
       file: File;
     }): Promise<void> => {
-      setCloudState({
-        ...cloudState,
-        isPutting: [...cloudState.isPutting, file.idbId],
-      });
+      setCloudState((prev) => ({
+        ...prev,
+        isPutting: [...prev.isPutting, file.idbId],
+      }));
       try {
         if (!file.id || !file.version || !file.createdAt || !file.updatedAt)
           return;
@@ -208,16 +225,13 @@ const useCloud = () => {
       } catch (error) {
         console.error("Error updating files:", error);
       } finally {
-        setCloudState({
-          ...cloudState,
-          isPutting: cloudState.isPutting.filter((id) => id !== file.idbId),
-        });
-        // updateState({
-        //   isPutting: cloudState.isPutting.filter((id) => id !== file.idbId),
-        // });
+        setCloudState((prev) => ({
+          ...prev,
+          isPutting: prev.isPutting.filter((id) => id !== file.idbId),
+        }));
       }
     },
-    [cloudState, setCloudState]
+    []
   );
 
   // imageset.fileを追加して返す
@@ -229,10 +243,10 @@ const useCloud = () => {
       imagesetName: string;
       file: File;
     }): Promise<File> => {
-      setCloudState({
-        ...cloudState,
-        isPosting: [...cloudState.isPosting, file.idbId],
-      });
+      setCloudState((prev) => ({
+        ...prev,
+        isPosting: [...prev.isPosting, file.idbId],
+      }));
       try {
         if (!file.contentType || !file.idbUrl || !file.idbId) {
           throw new Error("Invalid file data");
@@ -278,13 +292,13 @@ const useCloud = () => {
         console.error("Error uploading files:", error);
         return Promise.reject(error);
       } finally {
-        setCloudState({
-          ...cloudState,
-          isPosting: cloudState.isPosting.filter((id) => id !== file.idbId),
-        });
+        setCloudState((prev) => ({
+          ...prev,
+          isPosting: prev.isPosting.filter((id) => id !== file.idbId),
+        }));
       }
     },
-    [cloudStorage, contentTypeToExtension, cloudState, setCloudState]
+    [cloudStorage, contentTypeToExtension]
   );
 
   // imageset.fileを論理削除する
@@ -296,10 +310,10 @@ const useCloud = () => {
       imagesetName: string;
       file: File;
     }): Promise<void> => {
-      setCloudState({
-        ...cloudState,
-        isDeleting: [...cloudState.isDeleting, file.idbId],
-      });
+      setCloudState((prev) => ({
+        ...prev,
+        isDeleting: [...prev.isDeleting, file.idbId],
+      }));
       try {
         if (!file.id || !file.version || !file.updatedAt || !file.deletedAt)
           throw new Error("Invalid file data");
@@ -316,13 +330,13 @@ const useCloud = () => {
       } catch (error) {
         console.error("Error updating files:", error);
       } finally {
-        setCloudState({
-          ...cloudState,
-          isDeleting: cloudState.isDeleting.filter((id) => id !== file.idbId),
-        });
+        setCloudState((prev) => ({
+          ...prev,
+          isDeleting: prev.isDeleting.filter((id) => id !== file.idbId),
+        }));
       }
     },
-    [cloudState, setCloudState]
+    []
   );
 
   const checkUpdatedAt = useCallback((descendedLocalfiles: File[]): number => {
@@ -344,20 +358,31 @@ const useCloud = () => {
     return lastPushedAt || firstUpdatedAt;
   }, []);
 
-  useEffect(() => {
-    setCloudState(cloudState);
-  }, [cloudState]);
-
-  return {
-    cloudState,
-    checkOnlineStatus,
-    cloudGetImagesets,
-    cloudGetFiles,
-    cloudPutFile,
-    cloudPostFile,
-    cloudDeleteFile,
-    checkUpdatedAt,
-  };
+  return (
+    <CloudContext.Provider
+      value={{
+        cloudState,
+        checkOnlineStatus,
+        cloudGetImagesets,
+        cloudGetFiles,
+        cloudPutFile,
+        cloudPostFile,
+        cloudDeleteFile,
+        checkUpdatedAt,
+      }}
+    >
+      {children}
+    </CloudContext.Provider>
+  );
 };
 
-export { useCloud };
+
+const useCloud = (): CloudContextProps => {
+  const context = useContext(CloudContext);
+  if (!context) {
+    throw new Error("useCloud must be used within a CloudProvider");
+  }
+  return context;
+};
+
+export { CloudProvider, useCloud };

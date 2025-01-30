@@ -27,6 +27,9 @@ const ModalWebview = () => {
     };
 
     checkURL();
+    return () => {
+      setIsUrlValid(false);
+    }
   }, [cameraState.scannedData]);
 
   return (

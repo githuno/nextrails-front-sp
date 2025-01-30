@@ -66,6 +66,11 @@ const Carousel = ({
         scrollRef.current.scrollLeft = firstChild.clientWidth * index;
       }
     }
+    return () => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollLeft = 0;
+      }
+    };
   }, [index]);
 
   // 子要素変更時に先頭にスクロール
@@ -161,7 +166,10 @@ const Carousel = ({
         `}
         >
           <button
-            onClick={() => scroll("left")}
+            onClick={(e) => {
+              e.stopPropagation()
+              scroll("left");
+            }}
             className="
               pointer-events-auto p-2 rounded-full
               bg-black/30 shadow hover:bg-black/60
@@ -173,7 +181,10 @@ const Carousel = ({
             <PrevIcon className="w-6 h-6" />
           </button>
           <button
-            onClick={() => scroll("right")}
+            onClick={(e) => {
+              e.stopPropagation()
+              scroll("right");
+            }}
             className="
               pointer-events-auto p-2 rounded-full
               bg-black/30 shadow hover:bg-black/60

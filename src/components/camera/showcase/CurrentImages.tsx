@@ -17,7 +17,6 @@ const CurrentImages = () => {
   const { idb, idbState } = useIdb<File>(dbName);
   const {
     cloudState,
-    checkOnlineStatus,
     cloudGetFiles,
     cloudPutFile,
     cloudPostFile,
@@ -29,7 +28,7 @@ const CurrentImages = () => {
   const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false);
   const [carouselIndex, setCarouselIndex] = useState<number | null>(null);
 
-  const fetchImages = useCallback(
+  const pullImages = useCallback(
     async ({ setName, params }: { setName: string; params: string }) => {
       if (!cloudState.isOnline) return;
       try {
@@ -131,13 +130,13 @@ const CurrentImages = () => {
       }
 
       // クラウドからファイルを取得
-      await fetchImages({ setName: imageset.name, params });
+      await pullImages({ setName: imageset.name, params });
     } catch (error) {
       console.error("Error updating media:", error);
     } finally {
       setIsSyncing((prev) => prev.filter((name) => name !== currentName));
     }
-  }, [idb, fetchImages, imageset.name, checkUpdatedAt]);
+  }, [idb, pullImages, imageset.name, checkUpdatedAt, cloudState.isOnline]);
 
   const localCleanup = useCallback(
     async (imagesetName: string) => {
@@ -233,14 +232,20 @@ const CurrentImages = () => {
 
   useEffect(() => {
     const initialize = async () => {
-      if (cameraState.isInitializing && !isSyncing.includes(imageset.name)) {
-        await checkOnlineStatus();
+      if (
+        cameraState.isAvailable !== null &&
+        !isSyncing.includes(imageset.name)
+      ) {
+        console.log("⚡️fetchCurrents", cloudState.isOnline);
         await getImages();
         localCleanup(imageset.name);
       }
     };
     initialize();
-  }, [imageset.name, cameraState.isInitializing]);
+    return () => {
+      setIsSyncing([]);
+    };
+  }, [imageset.name, cameraState.isAvailable]);
 
   useEffect(() => {
     const autoPush = async () => {
@@ -279,14 +284,15 @@ const CurrentImages = () => {
             // 子要素自身で幅を定義
             <CarouselItem
               key={"small-" + file.idbId}
-              className="relative h-full w-40 pt-2"
+              className="relative h-full w-40 pt-2 pr-2"
             >
               <div className="aspect-video bg-gray-100/50 rounded-lg flex items-center justify-center">
                 <div
                   className="relative h-full w-full cursor-pointer"
-                  onClick={() =>
-                    handleCarouselItemClick(imageset.files.indexOf(file))
-                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCarouselItemClick(imageset.files.indexOf(file));
+                  }}
                 >
                   {file.contentType === "video/webm" ? (
                     <video
@@ -380,7 +386,7 @@ const CurrentImages = () => {
         </Carousel>
       </Modal>
       {(idbState.isStoreSyncing.includes(imageset.name) ||
-        cameraState.isInitializing ||
+        cameraState.isAvailable === null ||
         cloudState.isFilesFetching) && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/50">
           <LoadingSpinner size="32px" />
