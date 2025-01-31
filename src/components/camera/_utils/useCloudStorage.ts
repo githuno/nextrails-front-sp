@@ -174,7 +174,7 @@ class CloudStorageImpl implements CloudStorageManager {
 }
 
 // INFO：CloudStorageのディレクトリ
-enum CloudStorageDir {
+enum CloudStorageDir { // TODO: enumは書き換える必要ありそう：https://zenn.dev/ubie_dev/articles/ts-58-erasable-syntax-only
   IMAGES = "images",
   VIDEOS = "videos",
   THREES = "threes",

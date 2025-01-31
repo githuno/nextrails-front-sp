@@ -29,7 +29,7 @@ interface File extends IdbFile {
   };
 }
 
-enum ImagesetState {
+enum ImagesetState { // TODO: enumは書き換える必要ありそう：https://zenn.dev/ubie_dev/articles/ts-58-erasable-syntax-only
   DRAFT = "DRAFT",
   SENT = "SENT",
   ARCHIVED = "ARCHIVED",

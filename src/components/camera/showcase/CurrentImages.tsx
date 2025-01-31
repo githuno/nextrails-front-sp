@@ -286,9 +286,9 @@ const CurrentImages = () => {
               key={"small-" + file.idbId}
               className="relative h-full w-40 pt-2 pr-2"
             >
-              <div className="aspect-video bg-gray-100/50 rounded-lg flex items-center justify-center">
+              <div className="aspect-video bg-white/60 rounded-lg flex items-center justify-center">
                 <div
-                  className="relative h-full w-full cursor-pointer"
+                  className="relative h-full w-full cursor-pointer shadow-xl"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleCarouselItemClick(imageset.files.indexOf(file));
@@ -332,7 +332,7 @@ const CurrentImages = () => {
                           e.stopPropagation(); // 親要素のクリックイベントを防ぐ
                           handleLocalDelete({ file, setName: imageset.name });
                         }}
-                        className="absolute top-0 right-0 rounded-full bg-white/80 p-1 z-10"
+                        className="absolute top-0 right-0 rounded-full bg-white/80 p-1 z-10 shadow-lg"
                       >
                         <CloseIcon />
                       </button>

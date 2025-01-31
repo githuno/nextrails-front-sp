@@ -88,7 +88,7 @@ const Modal: FC<ModalProps> = ({
 
           <button
             onClick={handleClose}
-            className="absolute bg-white/50 cursor-pointer rounded-full shadow-md hover:shadow-lg transition-transform"
+            className="absolute bg-white/80 cursor-pointer rounded-full shadow-lg hover:shadow-lg transition-transform"
             style={{
               top: anchorRef?.current?.offsetTop ?? 0,
               right: anchorRef?.current?.offsetWidth ?? 0,

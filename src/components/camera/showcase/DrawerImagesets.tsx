@@ -9,6 +9,7 @@ import {
 import { useIdb, LoadingSpinner } from "@/components/camera/_utils";
 import { useCloud } from "./hooks/useCloud";
 import { LinesIcon } from "@/components/Icons";
+import Image from "next/image";
 
 const DrawerImagesets = () => {
   const { dbName, imageset, setImageset } = useImageset();
@@ -139,7 +140,7 @@ const DrawerImagesets = () => {
       clearTimeout(timeoutId);
     };
   }, [cloudState.isOnline, imageset.files]);
-  
+
   return (
     // ドロワー
     latestImagesets.length > 1 && (
@@ -182,23 +183,40 @@ const DrawerImagesets = () => {
               {latestImagesets.map(({ name, files }) => (
                 <CarouselItem
                   key={name}
-                  className={`relative h-[15vh] w-32 pr-2 rounded-lg bg-white hover:bg-gray-100 shadow-xl ${
+                  className={`relative h-[15vh] w-32 rounded-lg bg-white hover:bg-gray-100 shadow-xl ${
                     name === imageset.name ? "border-2 border-blue-200" : ""
                   }`}
                 >
                   <div
-                    className="h-full w-full cursor-pointer"
+                    className="grid grid-rows-5 h-full w-full cursor-pointer"
                     onClick={() => handleCarouselItemClick(name)}
                   >
                     <h1 className="font-bold text-center break-words">
                       {name}
                     </h1>
                     {files.length > 0 && (
-                      <img
-                        src={files[0].idbUrl ?? ""}
-                        alt={`Image ${files[0].idbId}`}
-                        className="h-full w-full object-contain"
-                      />
+                      <div className="relative row-span-4 w-full h-full">
+                        {files[0].contentType === "video/webm" ? (
+                          <video
+                            controls
+                            src={files[0].idbUrl ?? ""}
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          // <img
+                          //   src={files[0].idbUrl ?? ""}
+                          //   alt={`Image ${files[0].idbId}`}
+                          //   className="h-full w-full object-contain"
+                          // />
+                          <Image
+                            src={files[0].idbUrl ?? ""}
+                            alt={`Image ${files[0].idbId}`}
+                            fill
+                            style={{ objectFit: "contain" }}
+                            className="p-0.5"
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
                 </CarouselItem>
