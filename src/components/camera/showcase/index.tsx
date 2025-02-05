@@ -10,6 +10,8 @@ import {
 import { CurrentImages } from "./CurrentImages";
 import { DrawerImagesets } from "./DrawerImagesets";
 import { useCloud } from "./hooks/useCloud";
+import { useNotion } from "./hooks/useNotion";
+import { NotionModal } from "./NotionModal";
 
 const Showcase = () => {
   const { cameraState } = useCamera();
@@ -17,11 +19,34 @@ const Showcase = () => {
   const { imageset, setImageset, dbName } = useImageset();
   const { idb, idbState } = useIdb<File>(dbName);
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
+  const [isNotionModalOpen, setIsNotionModalOpen] = useState<boolean>(false);
+  const { notionState, connectNotion, selectPage, uploadImagesToNotion } = useNotion();
 
   // debug
   useEffect(() => {
     console.log("cloudState.isOnline:", cloudState.isOnline);
   }, [cloudState.isOnline]);
+
+  const handleNotionUpload = async () => {
+    try {
+      if (!notionState.isConnected || !notionState.selectedPageId) {
+        setIsNotionModalOpen(true);
+        return;
+      }
+
+      const files = imageset.files.filter(file => !file.deletedAt);
+      await uploadImagesToNotion(files, idb, imageset.name);
+      
+      // アップロード後にステータスを更新
+      setImageset(prev => ({
+        ...prev,
+        status: ImagesetState.SENT
+      }));
+    } catch (error) {
+      console.error('Failed to upload to Notion:', error);
+      // TODO: エラー処理の追加
+    }
+  };
 
   return (
     <div className="grid grid-rows-5 px-2 py-1 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
@@ -32,7 +57,7 @@ const Showcase = () => {
         className="bg-transparent"
       >
         <div className="rounded-lg p-4 bg-white/80 shadow-lg">
-          {/* TODO:　変更・追加（作成）・移動をわかりやすくする　セット間の転送も必要 */}
+        {/* TODO:　変更・追加（作成）・移動をわかりやすくする　セット間の転送も必要 */}
           <h2 className="text-xl mb-4">setNameを編集</h2>
           <form
             onSubmit={(e) => {
@@ -67,6 +92,15 @@ const Showcase = () => {
         </div>
       </Modal>
 
+      <NotionModal
+        isOpen={isNotionModalOpen}
+        onClose={() => setIsNotionModalOpen(false)}
+        onConnect={connectNotion}
+        isConnected={notionState.isConnected}
+        onPageSelect={selectPage}
+        pages={notionState.pages}
+      />
+
       <section className="row-start-1 grid w-full place-content-center">
         {idbState.isStoreLoading.includes(imageset.name) ? (
           <div className="grid justify-center">
@@ -96,6 +130,14 @@ const Showcase = () => {
           <>
             <CurrentImages />
             <DrawerImagesets />
+            {imageset.files.length > 0 && (
+              <button
+                onClick={handleNotionUpload}
+                className="absolute top-2 right-2 px-3 py-1 bg-black text-white rounded-md text-sm"
+              >
+                Notionへ送信
+              </button>
+            )}
           </>
         )}
       </section>
