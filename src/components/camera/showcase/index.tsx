@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Modal } from "@/components";
-import { useImageset, File, ImagesetState } from "@/components/camera";
+import { useImageset, type File, ImagesetState } from "@/components/camera";
 import {
   useCamera,
   useIdb,
@@ -11,7 +11,9 @@ import { CurrentImages } from "./CurrentImages";
 import { DrawerImagesets } from "./DrawerImagesets";
 import { useCloud } from "./hooks/useCloud";
 import { useNotion } from "./hooks/useNotion";
+import { useGoogleDrive } from "./hooks/useGoogleDrive";
 import { NotionModal } from "./NotionModal";
+import { GoogleDriveModal } from "./GoogleDriveModal";
 
 const Showcase = () => {
   const { cameraState } = useCamera();
@@ -20,12 +22,19 @@ const Showcase = () => {
   const { idb, idbState } = useIdb<File>(dbName);
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
   const [isNotionModalOpen, setIsNotionModalOpen] = useState<boolean>(false);
-  const { notionState, connectNotion, selectPage, uploadImagesToNotion } = useNotion();
+  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] =
+    useState<boolean>(false);
+  const { notionState, connectNotion, selectPage, uploadImagesToNotion } =
+    useNotion();
+  const {
+    state: googleDriveState,
+    uploadToGoogleDrive,
+    checkConnection,
+  } = useGoogleDrive();
 
-  // debug
-  useEffect(() => {
-    console.log("cloudState.isOnline:", cloudState.isOnline);
-  }, [cloudState.isOnline]);
+  // useEffect(() => {
+  //   console.log("cloudState.isOnline:", cloudState.isOnline);
+  // }, [cloudState.isOnline]);
 
   const handleNotionUpload = async () => {
     try {
@@ -34,17 +43,59 @@ const Showcase = () => {
         return;
       }
 
-      const files = imageset.files.filter(file => !file.deletedAt);
+      const files = imageset.files.filter((file) => !file.deletedAt);
       await uploadImagesToNotion(files, idb, imageset.name);
-      
+
       // アップロード後にステータスを更新
-      setImageset(prev => ({
+      setImageset((prev) => ({
         ...prev,
-        status: ImagesetState.SENT
+        status: ImagesetState.SENT,
       }));
     } catch (error) {
-      console.error('Failed to upload to Notion:', error);
-      // TODO: エラー処理の追加
+      console.error("Failed to upload to Notion:", error);
+    }
+  };
+
+  const handleGoogleDriveUpload = async () => {
+    try {
+      // 認証状態を確認
+      const isConnected = await checkConnection(true);
+      if (!isConnected) {
+        setIsGoogleDriveModalOpen(true);
+        return;
+      }
+
+      // 認証済みの場合はアップロード処理を実行
+      const files = imageset.files.filter((file) => !file.deletedAt);
+      console.log("Uploading files:", files);
+
+      const fileObjects = await Promise.all(
+        files.map((file) => {
+          const blobUrl = file.idbUrl;
+          if (!blobUrl) {
+            throw new Error(`Blob URL not found for idbId: ${file.idbId}`);
+          }
+          return fetch(blobUrl)
+            .then((response) => response.blob())
+            .then((blob) => new File([blob], file.idbId, { type: blob.type }));
+        })
+      );
+
+      const result = await uploadToGoogleDrive({
+        name: imageset.name,
+        files: fileObjects,
+      });
+
+      if (result.success) {
+        setImageset((prev) => ({
+          ...prev,
+          status: ImagesetState.SENT,
+        }));
+      } else {
+        throw new Error(result.error || "Upload failed");
+      }
+    } catch (error) {
+      console.error("Failed to upload to Google Drive:", error);
     }
   };
 
@@ -57,7 +108,7 @@ const Showcase = () => {
         className="bg-transparent"
       >
         <div className="rounded-lg p-4 bg-white/80 shadow-lg">
-        {/* TODO:　変更・追加（作成）・移動をわかりやすくする　セット間の転送も必要 */}
+          {/* TODO:　変更・追加（作成）・移動をわかりやすくする　セット間の転送も必要 */}
           <h2 className="text-xl mb-4">setNameを編集</h2>
           <form
             onSubmit={(e) => {
@@ -101,6 +152,11 @@ const Showcase = () => {
         pages={notionState.pages}
       />
 
+      <GoogleDriveModal
+        isOpen={isGoogleDriveModalOpen}
+        onClose={() => setIsGoogleDriveModalOpen(false)}
+      />
+
       <section className="row-start-1 grid w-full place-content-center">
         {idbState.isStoreLoading.includes(imageset.name) ? (
           <div className="grid justify-center">
@@ -131,12 +187,27 @@ const Showcase = () => {
             <CurrentImages />
             <DrawerImagesets />
             {imageset.files.length > 0 && (
-              <button
-                onClick={handleNotionUpload}
-                className="absolute top-2 right-2 px-3 py-1 bg-black text-white rounded-md text-sm"
-              >
-                Notionへ送信
-              </button>
+              <div className="absolute top-2 right-2 flex gap-2">
+                <button
+                  onClick={handleNotionUpload}
+                  className="px-3 py-1 bg-black text-white rounded-md text-sm"
+                >
+                  Notionへ送信
+                </button>
+                <button
+                  onClick={handleGoogleDriveUpload}
+                  disabled={
+                    googleDriveState.isUploading || googleDriveState.isChecking
+                  }
+                  className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm disabled:bg-gray-400"
+                >
+                  {googleDriveState.isUploading
+                    ? "アップロード中..."
+                    : googleDriveState.isChecking
+                    ? "認証状態確認中..."
+                    : "Google Driveへ送信"}
+                </button>
+              </div>
             )}
           </>
         )}
