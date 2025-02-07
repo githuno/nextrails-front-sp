@@ -254,26 +254,38 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
 
         // 1. CloudStrageにアップロードしてkeyを取得
         const type = contentTypeToExtension[file.contentType];
-        file.key = await cloudStorage.upload({
-          storagePath: `users/${session.userId}/${imagesetName}/${type.class}/${file.idbId}.${type.ext}`,
-          fileId: file.idbId,
-          filePath: file.idbUrl,
-          contentType: file.contentType,
-        });
+        try {
+          file.key = await cloudStorage.upload({
+            storagePath: `users/${session.userId}/${imagesetName}/${type.class}/${file.idbId}.${type.ext}`,
+            fileId: file.idbId,
+            filePath: file.idbUrl,
+            contentType: file.contentType,
+          });
+        } catch (uploadError) {
+          console.error("Error uploading file to cloud storage:", uploadError);
+          throw new Error("Failed to upload file to cloud storage");
+        }
 
         // 2. CloudにファイルをPOST
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(file),
+        let response;
+        try {
+          response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(file),
+            }
+          );
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to upload file: ${response.statusText} - ${errorText}`);
           }
-        );
-        if (!response.ok) {
-          throw new Error(`Failed to upload file: ${response.statusText}`);
+        } catch (networkError) {
+          console.error("Network error:", networkError);
+          throw new Error("Network error occurred while uploading file");
         }
         const updatedFile = await response.json();
         // 3. 各プロパティをセット
