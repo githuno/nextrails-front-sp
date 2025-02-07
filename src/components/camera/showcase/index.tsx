@@ -44,7 +44,7 @@ const Showcase = () => {
       }
 
       const files = imageset.files.filter((file) => !file.deletedAt);
-      await uploadImagesToNotion(files, idb, imageset.name);
+      await uploadImagesToNotion(files);
 
       // アップロード後にステータスを更新
       setImageset((prev) => ({
