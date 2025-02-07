@@ -32,6 +32,13 @@ const ModalWebview = () => {
     }
   }, [cameraState.scannedData]);
 
+  // IDBの連携サービスデータとサービスキーを突合 →
+  // サービスキーにない場合はアラートを出す → ここでサービス連携を促すためのロジックが必要
+
+  // 「サービスキー｜DBキー｜ID」の形式でQR作成
+  // notionキーであり、一致データがない場合は登録を促す
+  // notionキーであり、一致データがある場合は該当データのステータス変更を促す
+
   return (
     cameraState.scannedData && (
       <Modal
