@@ -1,5 +1,12 @@
-import React, { useContext, useCallback, useState, ReactNode, createContext, useEffect, useLayoutEffect } from "react";
-import { session } from "@/components";
+import React, {
+  useContext,
+  useCallback,
+  useState,
+  ReactNode,
+  createContext,
+  useLayoutEffect,
+} from "react";
+import { useSession } from "@/app/layout";
 import { File, Imageset } from "@/components/camera";
 import { useCloudStorage } from "@/components/camera/_utils";
 import { useCamera } from "@/components/camera/_utils";
@@ -15,18 +22,38 @@ interface CloudState {
 interface CloudContextProps {
   cloudState: CloudState;
   checkOnlineStatus: () => Promise<boolean>;
-  cloudGetImagesets: (params: { params?: string; excludeSetName?: string }) => Promise<Imageset[]>;
-  cloudGetFiles: (imagesetName: string, options?: { params: string }) => Promise<File[]>;
+  cloudGetImagesets: (params: {
+    params?: string;
+    excludeSetName?: string;
+  }) => Promise<Imageset[]>;
+  cloudGetFiles: (
+    imagesetName: string,
+    options?: { params: string }
+  ) => Promise<File[]>;
   cloudPutFile: (params: { imagesetName: string; file: File }) => Promise<void>;
-  cloudPostFile: (params: { imagesetName: string; file: File }) => Promise<File>;
-  cloudDeleteFile: (params: { imagesetName: string; file: File }) => Promise<void>;
+  cloudPostFile: (params: {
+    imagesetName: string;
+    file: File;
+  }) => Promise<File>;
+  cloudDeleteFile: (params: {
+    imagesetName: string;
+    file: File;
+  }) => Promise<void>;
   checkUpdatedAt: (descendedLocalfiles: File[]) => number;
 }
 
 const CloudContext = createContext<CloudContextProps | undefined>(undefined);
 
+// APIリクエスト用の共通オプション
+const defaultFetchOptions: RequestInit = {
+  credentials: 'include',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+};
+
 const CloudProvider = ({ children }: { children: ReactNode }) => {
-  const {cameraState} = useCamera();
+  const { cameraState } = useCamera();
   const [cloudState, setCloudState] = useState<CloudState>({
     isOnline: null, // navigator.onLine,
     isFilesFetching: false,
@@ -39,21 +66,23 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
   // オンライン状況のチェック
   const checkOnlineStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/health`);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE}/health`
+      );
       const isOnline = response.ok;
-      setCloudState(prev => ({ ...prev, isOnline }));
+      setCloudState((prev) => ({ ...prev, isOnline }));
       return isOnline;
     } catch (error) {
-      setCloudState(prev => ({ ...prev, isOnline: false }));
+      setCloudState((prev) => ({ ...prev, isOnline: false }));
       return false;
     }
   }, []);
   useLayoutEffect(() => {
-    if(cameraState.isAvailable !== null) checkOnlineStatus();
-      // checkOnlineStatus();
+    if (cameraState.isAvailable !== null) checkOnlineStatus();
+    // checkOnlineStatus();
     return () => {
-      setCloudState(prev => ({ ...prev, isOnline: null }));
-    }
+      setCloudState((prev) => ({ ...prev, isOnline: null }));
+    };
   }, [cameraState.isAvailable]);
 
   // imagesetsを取得して返す
@@ -69,7 +98,8 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch(
           params
             ? `${process.env.NEXT_PUBLIC_API_BASE}/imagesets?${params}`
-            : `${process.env.NEXT_PUBLIC_API_BASE}/imagesets`
+            : `${process.env.NEXT_PUBLIC_API_BASE}/imagesets`,
+          defaultFetchOptions
         );
         if (!response.ok) {
           throw new Error(`Response not ok: ${response.status}`);
@@ -139,7 +169,8 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}${
             options ? `&${options.params}` : ""
-          }`
+          }`,
+          defaultFetchOptions
         );
         if (!response.ok) {
           throw new Error(`Response not ok: ${response.status}`);
@@ -212,12 +243,10 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}?name=${imagesetName}`,
           {
+            ...defaultFetchOptions,
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
             body: JSON.stringify(file),
-          }
+          },
         );
         if (!response.ok) {
           throw new Error(`Failed to update file: ${response.statusText}`);
@@ -252,11 +281,13 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
           throw new Error("Invalid file data");
         }
 
+        const { session } = useSession();
+        if (!session) throw new Error("User not found");
         // 1. CloudStrageにアップロードしてkeyを取得
         const type = contentTypeToExtension[file.contentType];
         try {
           file.key = await cloudStorage.upload({
-            storagePath: `users/${session.userId}/${imagesetName}/${type.class}/${file.idbId}.${type.ext}`,
+            storagePath: `users/${session.user.id}/${imagesetName}/${type.class}/${file.idbId}.${type.ext}`,
             fileId: file.idbId,
             filePath: file.idbUrl,
             contentType: file.contentType,
@@ -272,10 +303,8 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
           response = await fetch(
             `${process.env.NEXT_PUBLIC_API_BASE}/files?name=${imagesetName}`,
             {
+              ...defaultFetchOptions,
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
               body: JSON.stringify(file),
             }
           );
@@ -332,10 +361,8 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
         await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE}/files/${file.id}/s?name=${imagesetName}`,
           {
+            ...defaultFetchOptions,
             method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-            },
             body: JSON.stringify(file),
           }
         );
@@ -387,7 +414,6 @@ const CloudProvider = ({ children }: { children: ReactNode }) => {
     </CloudContext.Provider>
   );
 };
-
 
 const useCloud = (): CloudContextProps => {
   const context = useContext(CloudContext);

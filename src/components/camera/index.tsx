@@ -3,7 +3,7 @@ import { CameraContextProvider, IdbFile, useCamera } from "./_utils";
 import { Preview } from "./preview";
 import { Controller } from "./controls";
 import { Showcase } from "./showcase";
-import { session } from "@/components";
+import { useSession } from "@/app/layout";
 
 import { CloudProvider } from "./showcase/hooks/useCloud";
 
@@ -56,8 +56,9 @@ const ImagesetContext = createContext<ImagesetContextProps | undefined>(
 const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const { session } = useSession();
   // 以下の値変更は子孫の再レンダリングを伴う
-  const dbName = `user-${session.userId}`;
+  const dbName = `user-${session ? session.user.id : "0"}`;
   const [imageset, setImageset] = useState<Imageset>({
     id: Date.now(),
     name: "1",

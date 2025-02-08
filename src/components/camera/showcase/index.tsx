@@ -14,8 +14,10 @@ import { useNotion } from "./hooks/useNotion";
 import { useGoogleDrive } from "./hooks/useGoogleDrive";
 import { NotionModal } from "./NotionModal";
 import { GoogleDriveModal } from "./GoogleDriveModal";
+import { useSession } from "@/app/layout";
 
 const Showcase = () => {
+  const { session } = useSession();
   const { cameraState } = useCamera();
   const { cloudState } = useCloud();
   const { imageset, setImageset, dbName } = useImageset();
@@ -212,6 +214,16 @@ const Showcase = () => {
           </>
         )}
       </section>
+
+      {/* クリックしてセッション情報を確認 */}
+      <div className="fixed bottom-4 left-4">
+        <button
+          onClick={() => alert(session?.user.id)}
+          className="p-1 bg-gray-200/80 rounded"
+        >
+          session
+        </button>
+      </div>
 
       {/* 開発環境でDBの初期化ボタンを配置 */}
       {process.env.NODE_ENV === "development" && (
