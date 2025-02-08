@@ -84,7 +84,7 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({
       >
         <button
           onClick={toggleButtons}
-          className="w-16 h-16 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center"
+          className="w-16 h-16 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700"
         >
           {isExpanded ? "×" : "+"}
         </button>
