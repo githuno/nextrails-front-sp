@@ -10,8 +10,10 @@ import { useIdb, LoadingSpinner } from "@/components/camera/_utils";
 import { useCloud } from "./hooks/useCloud";
 import { LinesIcon } from "@/components/Icons";
 import Image from "next/image";
+import { useSession } from "@/app/layout";
 
 const DrawerImagesets = () => {
+  const { session } = useSession();
   const { dbName, imageset, setImageset } = useImageset();
   const { idb } = useIdb<File>(dbName);
   const { cloudState, cloudGetImagesets, cloudGetFiles, checkUpdatedAt } =
@@ -53,7 +55,7 @@ const DrawerImagesets = () => {
         let forSyncSets: SyncSetType[] = [];
         setIsLoading(true);
         // 1. オンラインの場合、クラウドのimageSetsを取得
-        if (isOnline) {
+        if (isOnline && session ) {
           forSyncSets = await pullLatests();
         }
         // 2. 同期
@@ -111,7 +113,14 @@ const DrawerImagesets = () => {
   );
 
   const handleCarouselItemClick = (name: string) => {
-    setImageset((prev) => ({ ...prev, name }));
+    if (name !== imageset.name) {
+      setImageset({
+        id: Date.now(),
+        name: name,
+        status: ImagesetState.DRAFT,
+        files: [],
+      });
+    }
     // ドロワーを閉じる
     const drawerToggle = document.getElementById(
       "drawerToggle"

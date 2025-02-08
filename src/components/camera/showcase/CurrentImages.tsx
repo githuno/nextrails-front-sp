@@ -10,8 +10,10 @@ import {
 } from "@/components/camera/_utils";
 import { useCloud } from "./hooks/useCloud";
 import Image from "next/image";
+import { useSession } from "@/app/layout";
 
 const CurrentImages = () => {
+  const { session } = useSession();
   const { cameraState } = useCamera();
   const { imageset, setImageset, dbName } = useImageset();
   const { idb, idbState } = useIdb<File>(dbName);
@@ -30,7 +32,7 @@ const CurrentImages = () => {
 
   const pullImages = useCallback(
     async ({ setName, params }: { setName: string; params: string }) => {
-      if (!cloudState.isOnline) return;
+      if (!cloudState.isOnline || !session ) return;
       try {
         const cloudFiles = await cloudGetFiles(setName, {
           params: params,
@@ -250,6 +252,7 @@ const CurrentImages = () => {
   useEffect(() => {
     const autoPush = async () => {
       if (
+        !session ||
         !cloudState.isOnline || // オフラインの場合
         (cameraState.isAvailable && !cameraState.isScanning) || // カメラが使えるのにSCANNING状態でない場合
         imageset.files.length === 0 || // filesがない場合

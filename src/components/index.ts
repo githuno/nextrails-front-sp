@@ -13,15 +13,4 @@ export {
   CarouselItem,
   Modal,
   useModal,
-  type Session,
-  session,
 }
-
-// 仮
-type Session = {
-  userId: string;
-};
-// 仮
-const session = {
-  userId: "11111111-1111-1111-1111-111111111111",
-}; 
