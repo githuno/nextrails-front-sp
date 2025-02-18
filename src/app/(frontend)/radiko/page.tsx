@@ -56,13 +56,6 @@ export default function RadikoPage() {
   const [selectedStation, setSelectedStation] = useState<string>("");
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
-  const [selectedDate, setSelectedDate] = useState<Date>(() => {
-    // 初期値としてJST現在時刻を設定
-    const now = new Date();
-    const jstOffset = 9 * 60;
-    const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
-    return new Date(utc + jstOffset * 60 * 1000);
-  });
   const [selectedTab, setSelectedTab] = useState<number>(0);
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -70,11 +63,29 @@ export default function RadikoPage() {
   // LocalStorageのキー
   const PLAYBACK_STATE_KEY = "radiko_playback_state";
 
-  // 過去7日分の日付を生成（JST基準）
-  const dates = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(selectedDate);
-    date.setDate(date.getDate() - i);
-    return date;
+  // 日付タブの一覧を現在時刻から生成するように修正
+  const getDates = () => {
+    const now = new Date();
+    const jstOffset = 9 * 60;
+    const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+    const jstNow = new Date(utc + jstOffset * 60 * 1000);
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(jstNow);
+      date.setDate(date.getDate() - i);
+      return date;
+    });
+  };
+
+  // dates配列を現在時刻から常に生成
+  const dates = getDates();
+
+  // selectedDateの初期値も現在時刻から設定
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const now = new Date();
+    const jstOffset = 9 * 60;
+    const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+    return new Date(utc + jstOffset * 60 * 1000);
   });
 
   const setupHls = useCallback(
@@ -307,10 +318,10 @@ export default function RadikoPage() {
     }
   };
 
-  // タブ切り替えの処理
+  // タブ切り替えの処理を修正
   const handleTabChange = (index: number) => {
     setSelectedTab(index);
-    setSelectedDate(dates[index]);
+    setSelectedDate(getDates()[index]);
   };
 
   // audioタグのイベントハンドラを追加
