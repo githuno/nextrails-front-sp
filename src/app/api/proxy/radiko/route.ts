@@ -28,9 +28,29 @@ type CustomHeadersInit = HeadersInit & {
   [key: string]: string;
 };
 
-// JSTタイムゾーンのヘルパー関数
+// JSTタイムゾーンのヘルパー関数を修正
 function getJSTDate(date: Date = new Date()): Date {
-  return new Date(date.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+  return new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+}
+
+function formatToJST(timeStr: string): string {
+  if (!timeStr) return "";
+
+  try {
+    const date = new Date(timeStr);
+    return date.toLocaleString("ja-JP", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).replace(/[/:\s]/g, "");
+  } catch (error) {
+    console.error("Date formatting error:", error);
+    return timeStr;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -51,51 +71,17 @@ export async function GET(request: NextRequest) {
     } else {
       const baseUrl = path.startsWith("v2/") ? V2_URL : V3_URL;
       const cleanPath = path.replace(/^v[23]\//, "");
-      
-      // タイムスタンプパラメータがある場合、JSTに変換
+
+      // プレイリストのURLの場合、タイムスタンプをJSTに変換
       if (cleanPath.includes("playlist.m3u8")) {
         const urlObj = new URL(cleanPath, baseUrl);
-        const ft = urlObj.searchParams.get("ft");
-        const to = urlObj.searchParams.get("to");
-        
+        let ft = urlObj.searchParams.get("ft");
+        let to = urlObj.searchParams.get("to");
+
         if (ft && to) {
-          // 既にJST形式であることを確認
-          const ftDate = new Date(
-            parseInt(ft.substring(0, 4)),
-            parseInt(ft.substring(4, 6)) - 1,
-            parseInt(ft.substring(6, 8)),
-            parseInt(ft.substring(8, 10)),
-            parseInt(ft.substring(10, 12))
-          );
-          
-          const toDate = new Date(
-            parseInt(to.substring(0, 4)),
-            parseInt(to.substring(4, 6)) - 1,
-            parseInt(to.substring(6, 8)),
-            parseInt(to.substring(8, 10)),
-            parseInt(to.substring(10, 12))
-          );
-
-          const jstFt = getJSTDate(ftDate);
-          const jstTo = getJSTDate(toDate);
-
-          urlObj.searchParams.set("ft", 
-            jstFt.getFullYear().toString() +
-            String(jstFt.getMonth() + 1).padStart(2, "0") +
-            String(jstFt.getDate()).padStart(2, "0") +
-            String(jstFt.getHours()).padStart(2, "0") +
-            String(jstFt.getMinutes()).padStart(2, "0") +
-            "00"
-          );
-
-          urlObj.searchParams.set("to",
-            jstTo.getFullYear().toString() +
-            String(jstTo.getMonth() + 1).padStart(2, "0") +
-            String(jstTo.getDate()).padStart(2, "0") +
-            String(jstTo.getHours()).padStart(2, "0") +
-            String(jstTo.getMinutes()).padStart(2, "0") +
-            "00"
-          );
+          // タイムスタンプをJSTフォーマットに変換
+          urlObj.searchParams.set("ft", formatToJST(ft));
+          urlObj.searchParams.set("to", formatToJST(to));
         }
         url = urlObj.toString();
       } else {
@@ -110,15 +96,16 @@ export async function GET(request: NextRequest) {
       // 日本の固定IPアドレスを設定（東京のIPアドレス範囲の例）
       "X-Forwarded-For": "133.203.1.1",
       // User-Agentを固定（一般的なブラウザとして認識されるように）
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       // Accept-Encodingを指定して圧縮形式を制御
       "Accept-Encoding": "gzip, deflate",
       // Origin と Referer を追加
-      "Origin": "https://radiko.jp",
-      "Referer": "https://radiko.jp/",
+      Origin: "https://radiko.jp",
+      Referer: "https://radiko.jp/",
       // タイムゾーンヘッダーを追加
-      "Date": new Date().toUTCString(),
-      "Time-Zone": "Asia/Tokyo"
+      Date: getJSTDate().toUTCString(),
+      "Time-Zone": "Asia/Tokyo",
     };
 
     const response = await fetch(url, {
@@ -140,17 +127,23 @@ export async function GET(request: NextRequest) {
       if (response.status === 404) {
         // エリア情報の取得に失敗した場合、デフォルトの東京エリアを使用
         if (path.includes("station/list/OUT.xml")) {
-          const tokyoResponse = await fetch(url.replace("OUT.xml", "JP13.xml"), {
-            headers: requestHeaders,
-            method: "GET",
-            redirect: "follow",
-          });
-          
+          const tokyoResponse = await fetch(
+            url.replace("OUT.xml", "JP13.xml"),
+            {
+              headers: requestHeaders,
+              method: "GET",
+              redirect: "follow",
+            }
+          );
+
           if (tokyoResponse.ok) {
             const responseBody = await tokyoResponse.arrayBuffer();
             const responseHeaders = new Headers();
             // 必要なヘッダーのみを転送
-            responseHeaders.set("Content-Type", tokyoResponse.headers.get("Content-Type") || "application/xml");
+            responseHeaders.set(
+              "Content-Type",
+              tokyoResponse.headers.get("Content-Type") || "application/xml"
+            );
             responseHeaders.set("Access-Control-Allow-Origin", "*");
             // Content-Encodingヘッダーは削除（自動的に解凍される）
             return new NextResponse(responseBody, {
@@ -173,24 +166,54 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorResponse = {
+        error: `HTTP error! status: ${response.status}`,
+        url: url,
+        path: path,
+        timestamp: new Date().toISOString(),
+        timezone: "Asia/Tokyo",
+        headers: requestHeaders,
+        responseStatus: response.status,
+        responseStatusText: response.statusText,
+      };
+
+      // 認証エラーの場合は特別な処理
+      if (response.status === 401) {
+        return new NextResponse(JSON.stringify(errorResponse), {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+            "WWW-Authenticate": "Bearer",
+          },
+        });
+      }
+
+      return new NextResponse(JSON.stringify(errorResponse), {
+        status: response.status,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     // レスポンスの処理
     const responseBody = await response.arrayBuffer();
     const responseHeaders = new Headers();
-    
+
     // 必要なヘッダーのみを転送
-    responseHeaders.set("Content-Type", response.headers.get("Content-Type") || "application/xml");
+    responseHeaders.set(
+      "Content-Type",
+      response.headers.get("Content-Type") || "application/xml"
+    );
     responseHeaders.set("Access-Control-Allow-Origin", "*");
     responseHeaders.set("Access-Control-Allow-Methods", "GET, OPTIONS");
     responseHeaders.set("Access-Control-Allow-Headers", "*");
-    
+
     // Radikoの認証関連ヘッダーを転送
-    ["X-Radiko-AuthToken", "X-Radiko-KeyOffset", "X-Radiko-KeyLength"].forEach(header => {
-      const value = response.headers.get(header);
-      if (value) responseHeaders.set(header, value);
-    });
+    ["X-Radiko-AuthToken", "X-Radiko-KeyOffset", "X-Radiko-KeyLength"].forEach(
+      (header) => {
+        const value = response.headers.get(header);
+        if (value) responseHeaders.set(header, value);
+      }
+    );
 
     return new NextResponse(responseBody, {
       status: response.status,
@@ -198,25 +221,26 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Proxy error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     const status = errorMessage.includes("404") ? 404 : 500;
-    
-    return new NextResponse(
-      JSON.stringify({
-        error: errorMessage,
-        timestamp: getJSTDate().toISOString(),
-        timezone: "Asia/Tokyo",
-        details: error instanceof Error ? error.stack : undefined
-      }),
-      {
-        status: status,
-        headers: {
-          "Content-Type": "application/json",
-          "Date": getJSTDate().toUTCString(),
-          "Time-Zone": "Asia/Tokyo"
-        },
-      }
-    );
+
+    const errorResponse = {
+      error: error instanceof Error ? error.message : "Unknown error",
+      timestamp: new Date().toISOString(),
+      timezone: "Asia/Tokyo",
+      path: path,
+      details: error instanceof Error ? error.stack : undefined,
+    };
+
+    return new NextResponse(JSON.stringify(errorResponse), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json",
+        Date: new Date().toUTCString(),
+        "Time-Zone": "Asia/Tokyo",
+      },
+    });
   }
 }
 

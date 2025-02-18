@@ -2,15 +2,14 @@ const PROXY_URL = "/api/proxy/radiko";
 const AUTH_TOKEN_KEY = "radiko_auth_token";
 const AREA_ID_KEY = "radiko_area_id";
 
-// JST日付操作のためのヘルパー関数を追加
+// JST日付操作のためのヘルパー関数を修正
 const getJSTDate = (date: Date = new Date()): Date => {
-  const jstOffset = 9 * 60; // JST is UTC+9
-  const utc = date.getTime() + date.getTimezoneOffset() * 60 * 1000;
-  return new Date(utc + jstOffset * 60 * 1000);
+  const jstDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+  return jstDate;
 };
 
 const formatJSTDate = (date: Date): string => {
-  const jstDate = getJSTDate(date);
+  const jstDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
   return (
     jstDate.getFullYear().toString() +
     String(jstDate.getMonth() + 1).padStart(2, "0") +
@@ -20,13 +19,13 @@ const formatJSTDate = (date: Date): string => {
 
 // JST日付操作のためのヘルパー関数を追加
 const getJSTTime = (date: Date = new Date()): string => {
-  const jst = getJSTDate(date);
+  const jstDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
   return (
-    jst.getFullYear().toString() +
-    String(jst.getMonth() + 1).padStart(2, "0") +
-    String(jst.getDate()).padStart(2, "0") +
-    String(jst.getHours()).padStart(2, "0") +
-    String(jst.getMinutes()).padStart(2, "0") +
+    jstDate.getFullYear().toString() +
+    String(jstDate.getMonth() + 1).padStart(2, "0") +
+    String(jstDate.getDate()).padStart(2, "0") +
+    String(jstDate.getHours()).padStart(2, "0") +
+    String(jstDate.getMinutes()).padStart(2, "0") +
     "00"
   );
 };
@@ -280,27 +279,35 @@ export class RadikoClient {
     to: string
   ): Promise<string> {
     try {
-      // 認証状態の確認と必要に応じて再認証
       if (!this.authToken) {
         await this.init();
       }
 
+      // JST時刻文字列からDateオブジェクトを作成
+      const createJSTDate = (timeStr: string): Date => {
+        const year = parseInt(timeStr.substring(0, 4));
+        const month = parseInt(timeStr.substring(4, 6)) - 1;
+        const day = parseInt(timeStr.substring(6, 8));
+        const hour = parseInt(timeStr.substring(8, 10));
+        const minute = parseInt(timeStr.substring(10, 12));
+        
+        // JSTでの日時を指定
+        const date = new Date();
+        date.setFullYear(year);
+        date.setMonth(month);
+        date.setDate(day);
+        date.setHours(hour);
+        date.setMinutes(minute);
+        date.setSeconds(0);
+        
+        // UTCに変換
+        return new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+      };
+
       const queryParams = new URLSearchParams({
         station_id: stationId,
-        ft: getJSTTime(new Date(
-          parseInt(ft.substring(0, 4)),
-          parseInt(ft.substring(4, 6)) - 1,
-          parseInt(ft.substring(6, 8)),
-          parseInt(ft.substring(8, 10)),
-          parseInt(ft.substring(10, 12))
-        )),
-        to: getJSTTime(new Date(
-          parseInt(to.substring(0, 4)),
-          parseInt(to.substring(4, 6)) - 1,
-          parseInt(to.substring(6, 8)),
-          parseInt(to.substring(8, 10)),
-          parseInt(to.substring(10, 12))
-        )),
+        ft: getJSTTime(createJSTDate(ft)),
+        to: getJSTTime(createJSTDate(to)),
         l: "15",
       });
 
@@ -346,8 +353,10 @@ export class RadikoClient {
       return proxyUrl.toString();
     } catch (error) {
       console.error("Stream URL error:", error);
-      if (error instanceof Error && 
-          (error.message.includes("401") || error.message.includes("auth"))) {
+      if (
+        error instanceof Error &&
+        (error.message.includes("401") || error.message.includes("auth"))
+      ) {
         // 認証関連のエラーの場合、認証をクリアして再認証
         this.clearAuth();
         await this.init();
