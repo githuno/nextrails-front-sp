@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 import { type File } from "@/components/camera";
+import { NotionModal } from "./NotionModal";
+import { useStorage } from "@/components/storage";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ||
@@ -14,12 +16,50 @@ interface NotionState {
   }>;
 }
 
-export const useNotion = () => {
+// クラウドプロバイダー用の公開URL取得インターフェース
+interface PublicUrlProvider {
+  isProviderFile: (key: string) => boolean;
+  getPublicUrl: (key: string, provider: any) => Promise<string>;
+  requiresPublishing?: boolean;
+}
+
+// プロバイダーごとの公開URL取得ロジック
+const publicUrlProviders: PublicUrlProvider[] = [
+  {
+    // Google Drive用
+    isProviderFile: (key: string) => key.startsWith("gdrive/"),
+    getPublicUrl: async (key: string, provider) => {
+      const fileId = key.replace("gdrive/", "");
+      const folderId = fileId.split("/")[0];
+
+      if (provider.publishFolder) {
+        const shouldPublish = await confirm(
+          "Notionで画像を表示するには、Googleドライブのフォルダを公開設定にする必要があります。\n公開設定にしてもよろしいですか？"
+        );
+        if (!shouldPublish) {
+          throw new Error("User cancelled folder publishing");
+        }
+        await provider.publishFolder(folderId);
+      }
+
+      return key;
+    },
+    requiresPublishing: true,
+  },
+  // R2用 (デフォルトプロバイダー)
+  {
+    isProviderFile: (key: string) => !key.includes("/"),
+    getPublicUrl: async (key: string) => key,
+  },
+];
+
+const useNotion = () => {
   const [notionState, setNotionState] = useState<NotionState>({
     isConnected: false,
     selectedPageId: null,
     pages: [],
   });
+  const { cloud } = useStorage();
 
   const fetchPages = useCallback(async () => {
     try {
@@ -57,6 +97,18 @@ export const useNotion = () => {
     }));
   }, []);
 
+  // ファイルの公開URLを取得する関数
+  const getPublicUrl = useCallback(
+    async (key: string) => {
+      const provider = publicUrlProviders.find((p) => p.isProviderFile(key));
+      if (!provider) {
+        throw new Error(`Unsupported storage provider for key: ${key}`);
+      }
+      return provider.getPublicUrl(key, cloud.provider);
+    },
+    [cloud.provider]
+  );
+
   const uploadImagesToNotion = useCallback(
     async (files: File[]) => {
       if (!notionState.isConnected || !notionState.selectedPageId) {
@@ -69,19 +121,30 @@ export const useNotion = () => {
           throw new Error("No valid images to upload");
         }
 
-        // R2のkeyを使用して画像情報を準備
-        const images = validFiles.map((file) => {
+        // 各ファイルの公開URLを取得
+        const imagePromises = validFiles.map(async (file) => {
           if (!file.key) {
             throw new Error(
-              `R2 key not found for file: ${file.filename || "untitled"}`
+              `Storage key not found for file: ${file.filename || "untitled"}`
             );
           }
 
-          return {
-            url: file.key,
-            filename: file.filename || "untitled",
-          };
+          try {
+            const publicUrl = await getPublicUrl(file.key);
+            return {
+              url: publicUrl,
+              filename: file.filename || "untitled",
+            };
+          } catch (error) {
+            console.error(
+              `Failed to get public URL for file ${file.key}:`,
+              error
+            );
+            throw error;
+          }
         });
+
+        const images = await Promise.all(imagePromises);
 
         const response = await fetch(`${API_BASE}/notion/upload`, {
           method: "POST",
@@ -106,7 +169,7 @@ export const useNotion = () => {
         throw error;
       }
     },
-    [notionState]
+    [notionState, getPublicUrl]
   );
 
   return {
@@ -116,3 +179,5 @@ export const useNotion = () => {
     uploadImagesToNotion,
   };
 };
+
+export { useNotion, NotionModal };

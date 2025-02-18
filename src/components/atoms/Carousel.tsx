@@ -1,5 +1,5 @@
 import React, { ReactNode, useEffect, useRef, useState } from "react";
-import { PrevIcon, NextIcon } from "./Icons";
+import { PrevIcon, NextIcon } from "../Icons";
 
 interface CarouselProps {
   children: ReactNode;
@@ -21,6 +21,7 @@ const Carousel = ({
   id,
 }: CarouselProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // TODO: scroll-stateで改善可能か？ https://developer.chrome.com/blog/css-scroll-state-queries?hl=ja
   const [hasOverflow, setHasOverflow] = useState(true);
   // Counterのための状態変数-------------------------------------↓
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -167,7 +168,7 @@ const Carousel = ({
         >
           <button
             onClick={(e) => {
-              e.stopPropagation()
+              e.stopPropagation();
               scroll("left");
             }}
             className="
@@ -182,7 +183,7 @@ const Carousel = ({
           </button>
           <button
             onClick={(e) => {
-              e.stopPropagation()
+              e.stopPropagation();
               scroll("right");
             }}
             className="

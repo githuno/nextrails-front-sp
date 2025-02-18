@@ -1,42 +1,24 @@
-import React, { useEffect, useState } from "react";
-import { Modal } from "@/components";
-import { useImageset, type File, ImagesetState } from "@/components/camera";
+import React, { useState } from "react";
+import { Modal } from "@/components/atoms";
+import { useStorage } from "@/components/storage";
+import { useImageset, ImagesetState } from "@/components/camera";
 import {
   useCamera,
-  useIdb,
   LoadingSpinner,
   EditIcon,
 } from "@/components/camera/_utils";
 import { CurrentImages } from "./CurrentImages";
 import { DrawerImagesets } from "./DrawerImagesets";
-import { useCloud } from "./hooks/useCloud";
-import { useNotion } from "./hooks/useNotion";
-import { useGoogleDrive } from "./hooks/useGoogleDrive";
-import { NotionModal } from "./NotionModal";
-import { GoogleDriveModal } from "./GoogleDriveModal";
-import { useSession } from "@/app/layout";
+import { useNotion, NotionModal } from "@/components/services/notion";
 
 const Showcase = () => {
-  const { session } = useSession();
   const { cameraState } = useCamera();
-  const { cloudState } = useCloud();
-  const { imageset, setImageset, dbName } = useImageset();
-  const { idb, idbState } = useIdb<File>(dbName);
+  const { idb } = useStorage();
+  const { imageset, setImageset } = useImageset();
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
   const [isNotionModalOpen, setIsNotionModalOpen] = useState<boolean>(false);
-  const [isGoogleDriveModalOpen, setIsGoogleDriveModalOpen] =
-    useState<boolean>(false);
   const { notionState, connectNotion, selectPage, uploadImagesToNotion } =
     useNotion();
-  const {
-    state: googleDriveState,
-    uploadToGoogleDrive,
-    checkConnection,
-  } = useGoogleDrive();
-
-  // useEffect(() => {
-  //   console.log("cloudState.isOnline:", cloudState.isOnline);
-  // }, [cloudState.isOnline]);
 
   const handleNotionUpload = async () => {
     try {
@@ -58,48 +40,48 @@ const Showcase = () => {
     }
   };
 
-  const handleGoogleDriveUpload = async () => {
-    try {
-      // 認証状態を確認
-      const isConnected = await checkConnection(true);
-      if (!isConnected) {
-        setIsGoogleDriveModalOpen(true);
-        return;
-      }
+  // const handleGoogleDriveUpload = async () => {
+  //   try {
+  //     // 認証状態を確認
+  //     const isConnected = await checkConnection(true);
+  //     if (!isConnected) {
+  //       setIsGoogleDriveModalOpen(true);
+  //       return;
+  //     }
 
-      // 認証済みの場合はアップロード処理を実行
-      const files = imageset.files.filter((file) => !file.deletedAt);
-      console.log("Uploading files:", files);
+  //     // 認証済みの場合はアップロード処理を実行
+  //     const files = imageset.files.filter((file) => !file.deletedAt);
+  //     console.log("Uploading files:", files);
 
-      const fileObjects = await Promise.all(
-        files.map((file) => {
-          const blobUrl = file.idbUrl;
-          if (!blobUrl) {
-            throw new Error(`Blob URL not found for idbId: ${file.idbId}`);
-          }
-          return fetch(blobUrl)
-            .then((response) => response.blob())
-            .then((blob) => new File([blob], file.idbId, { type: blob.type }));
-        })
-      );
+  //     const fileObjects = await Promise.all(
+  //       files.map((file) => {
+  //         const blobUrl = file.idbUrl;
+  //         if (!blobUrl) {
+  //           throw new Error(`Blob URL not found for idbId: ${file.idbId}`);
+  //         }
+  //         return fetch(blobUrl)
+  //           .then((response) => response.blob())
+  //           .then((blob) => new File([blob], file.idbId, { type: blob.type }));
+  //       })
+  //     );
 
-      const result = await uploadToGoogleDrive({
-        name: imageset.name,
-        files: fileObjects,
-      });
+  //     const result = await uploadToGoogleDrive({
+  //       name: imageset.name,
+  //       files: fileObjects,
+  //     });
 
-      if (result.success) {
-        setImageset((prev) => ({
-          ...prev,
-          status: ImagesetState.SENT,
-        }));
-      } else {
-        throw new Error(result.error || "Upload failed");
-      }
-    } catch (error) {
-      console.error("Failed to upload to Google Drive:", error);
-    }
-  };
+  //     if (result.success) {
+  //       setImageset((prev) => ({
+  //         ...prev,
+  //         status: ImagesetState.SENT,
+  //       }));
+  //     } else {
+  //       throw new Error(result.error || "Upload failed");
+  //     }
+  //   } catch (error) {
+  //     console.error("Failed to upload to Google Drive:", error);
+  //   }
+  // };
 
   return (
     <div className="grid grid-rows-5 px-2 py-1 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
@@ -119,7 +101,7 @@ const Showcase = () => {
               const newName = formData.get("storeName") as string;
               if (newName !== imageset.name) {
                 setImageset({
-                  id: Date.now(),
+                  id: BigInt(Date.now()),
                   name: newName,
                   status: ImagesetState.DRAFT,
                   files: [],
@@ -154,13 +136,13 @@ const Showcase = () => {
         pages={notionState.pages}
       />
 
-      <GoogleDriveModal
+      {/* <GoogleDriveModal
         isOpen={isGoogleDriveModalOpen}
         onClose={() => setIsGoogleDriveModalOpen(false)}
-      />
+      /> */}
 
       <section className="row-start-1 grid w-full place-content-center">
-        {idbState.isStoreLoading.includes(imageset.name) ? (
+        {idb.state.isStoreLoading.includes(imageset.name) ? (
           <div className="grid justify-center">
             <LoadingSpinner size="24px" />
           </div>
@@ -184,46 +166,34 @@ const Showcase = () => {
       </section>
 
       <section className="row-span-4 relative grid w-full place-content-center gap-2">
-        {cloudState.isOnline !== null && (
-          <>
-            <CurrentImages />
-            <DrawerImagesets />
-            {imageset.files.length > 0 && (
-              <div className="absolute top-2 right-2 flex gap-2">
-                <button
-                  onClick={handleNotionUpload}
-                  className="px-3 py-1 bg-black text-white rounded-md text-sm"
-                >
-                  Notionへ送信
-                </button>
-                <button
-                  onClick={handleGoogleDriveUpload}
-                  disabled={
-                    googleDriveState.isUploading || googleDriveState.isChecking
-                  }
-                  className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm disabled:bg-gray-400"
-                >
-                  {googleDriveState.isUploading
-                    ? "アップロード中..."
-                    : googleDriveState.isChecking
-                    ? "認証状態確認中..."
-                    : "Google Driveへ送信"}
-                </button>
-              </div>
-            )}
-          </>
-        )}
+        <>
+          <CurrentImages />
+          <DrawerImagesets />
+          {imageset.files.length > 0 && (
+            <div className="absolute top-2 right-2 flex gap-2">
+              <button
+                onClick={handleNotionUpload}
+                className="px-3 py-1 bg-black text-white rounded-md text-sm"
+              >
+                Notionへ送信
+              </button>
+              {/* <button
+                onClick={handleGoogleDriveUpload}
+                disabled={
+                  googleDriveState.isUploading || googleDriveState.isChecking
+                }
+                className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm disabled:bg-gray-400"
+              >
+                {googleDriveState.isUploading
+                  ? "アップロード中..."
+                  : googleDriveState.isChecking
+                  ? "認証状態確認中..."
+                  : "Google Driveへ送信"}
+              </button> */}
+            </div>
+          )}
+        </>
       </section>
-
-      {/* クリックしてセッション情報を確認 */}
-      <div className="fixed bottom-4 left-4">
-        <button
-          onClick={() => alert(session?.user.id)}
-          className="p-1 bg-gray-200/80 rounded"
-        >
-          session
-        </button>
-      </div>
 
       {/* 開発環境でDBの初期化ボタンを配置 */}
       {process.env.NODE_ENV === "development" && (
@@ -240,7 +210,7 @@ const Showcase = () => {
             className="bg-gray-200"
             onClick={() => {
               setImageset({
-                id: Date.now(),
+                id: BigInt(Date.now()),
                 name: "1",
                 status: ImagesetState.DRAFT,
                 files: [],

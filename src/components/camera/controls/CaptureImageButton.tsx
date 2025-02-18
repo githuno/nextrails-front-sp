@@ -1,7 +1,7 @@
 import React from "react";
+import { useStorage } from "@/components/storage";
 import { useImageset, File, ImagesetState } from "@/components/camera";
 import {
-  useIdb,
   LoadingSpinner,
   CameraIcon,
   useCamera,
@@ -28,9 +28,9 @@ interface CaptureImageButtonProps {
 }
 
 const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
+  const { idb } = useStorage();
   const { camera, cameraState } = useCamera();
-  const { dbName, imageset, setImageset } = useImageset();
-  const { idb } = useIdb(dbName);
+  const { imageset, setImageset } = useImageset();
 
   const handleCaptureImage = async (url: string | null) => {
     if (!url) {

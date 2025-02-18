@@ -1,11 +1,7 @@
 import React from "react";
+import { useStorage } from "@/components/storage";
 import { useImageset, File, ImagesetState } from "@/components/camera";
-import {
-  useIdb,
-  StopIcon,
-  RecordIcon,
-  useCamera,
-} from "@/components/camera/_utils";
+import { StopIcon, RecordIcon, useCamera } from "@/components/camera/_utils";
 
 interface RecordVideoButtonProps {
   onSaveCompleted: () => void;
@@ -14,9 +10,9 @@ interface RecordVideoButtonProps {
 const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
   onSaveCompleted,
 }) => {
+  const { idb } = useStorage();
   const { camera, cameraState } = useCamera();
-  const { imageset, setImageset, dbName } = useImageset();
-  const { idb } = useIdb(dbName);
+  const { imageset, setImageset } = useImageset();
 
   const handleStartRecording = () => {
     if (!camera) {

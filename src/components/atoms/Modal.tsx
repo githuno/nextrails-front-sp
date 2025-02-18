@@ -10,7 +10,7 @@ import {
   useEffect,
 } from "react";
 import { createPortal } from "react-dom";
-import { CloseIcon } from "./camera/_utils";
+import { CloseIcon } from "../camera/_utils";
 
 // TODO: 領域外クリックで閉じるモードを追加
 
@@ -51,6 +51,17 @@ const Modal: FC<ModalProps> = ({
       document.body.style.overflow = "hidden";
     }
   };
+
+  // .contains()を使った領域外クリックで閉じるモード
+  // useEffect(() => {
+  //   function handleClickOutside(event: MouseEvent) {
+  //     if (dialogRef.current && !dialogRef.current.contains(event.target as Node)) {
+  //       onClose();
+  //     }
+  //   }
+  //   document.addEventListener("click", handleClickOutside);
+  //   return () => document.removeEventListener("click", handleClickOutside);
+  // }, [onClose]);
 
   const handleClose = async (e?: React.MouseEvent<HTMLButtonElement>) => {
     if (e) {

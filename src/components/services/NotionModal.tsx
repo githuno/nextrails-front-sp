@@ -1,6 +1,6 @@
-import React from 'react';
-import { Modal } from '@/components';
-import { LoadingSpinner } from '@/components/camera/_utils';
+import React from "react";
+import { Modal } from "@/components/atoms";
+import { LoadingSpinner } from "@/components/camera/_utils";
 
 interface NotionModalProps {
   isOpen: boolean;
@@ -20,7 +20,7 @@ export const NotionModal: React.FC<NotionModalProps> = ({
   onConnect,
   isConnected,
   onPageSelect,
-  pages
+  pages,
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
 
@@ -29,23 +29,21 @@ export const NotionModal: React.FC<NotionModalProps> = ({
     try {
       await onConnect();
     } catch (error) {
-      console.error('Failed to connect:', error);
+      console.error("Failed to connect:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      className="bg-transparent"
-    >
+    <Modal isOpen={isOpen} onClose={onClose} className="bg-transparent">
       <div className="rounded-lg p-4 bg-white/80 shadow-lg min-w-[300px]">
         <h2 className="text-lg font-bold mb-4">Notionと連携</h2>
         {!isConnected ? (
           <div>
-            <p className="mb-4">画像をアップロードするためにNotionと連携する必要があります。</p>
+            <p className="mb-4">
+              画像をアップロードするためにNotionと連携する必要があります。
+            </p>
             <button
               className="bg-black text-white px-4 py-2 rounded-md w-full disabled:opacity-50"
               onClick={handleConnect}
@@ -57,7 +55,7 @@ export const NotionModal: React.FC<NotionModalProps> = ({
                   <span>確認中...</span>
                 </div>
               ) : (
-                'Notionと連携する'
+                "Notionと連携する"
               )}
             </button>
           </div>
@@ -70,7 +68,7 @@ export const NotionModal: React.FC<NotionModalProps> = ({
                   ページが見つかりません
                 </p>
               ) : (
-                pages.map(page => (
+                pages.map((page) => (
                   <button
                     key={page.id}
                     className="w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md mb-2 transition-colors"

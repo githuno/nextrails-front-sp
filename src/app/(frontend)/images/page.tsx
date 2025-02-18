@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ListGroup, ListGroupItem, Session } from "@/components";
+import { ListGroup, ListGroupItem } from "@/components/atoms";
 import Image from "next/image";
-import { session } from "@/components";
+import { userId } from "@/components/storage";
 
 type Item = {
   created_by: string;
@@ -41,7 +41,7 @@ export default function Page() {
             Accept: "application/json",
           },
           body: JSON.stringify({
-            user_id: session.userId,
+            user_id: userId,
           }),
         }
       );
@@ -53,7 +53,7 @@ export default function Page() {
     } catch (error) {
       console.error("Error fetching items:", error);
     }
-  }, [session.userId]);
+  }, [userId]);
 
   useEffect(() => {
     if (isClient) {
@@ -98,9 +98,10 @@ export default function Page() {
                   Message: {item.cdt3d_msg}
                 </p>
                 <p className="text-sm text-gray-500">
-                  url: <a href={
-                    `${process.env.NEXT_PUBLIC_R2_BASE}/${item.id}`
-                  }>{item.id}</a>
+                  url:{" "}
+                  <a href={`${process.env.NEXT_PUBLIC_R2_BASE}/${item.id}`}>
+                    {item.id}
+                  </a>
                 </p>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { openDB, IDBPDatabase, deleteDB } from "idb";
-import { useState, useRef } from "react";
+import { useState, useRef, createContext, useContext, useMemo, useEffect } from "react";
 
 interface IdbFile {
   idbId: string;
@@ -17,28 +17,36 @@ interface IdbState {
 }
 
 class IdbManager<T extends IdbFile> {
-  private dbName: string;
-  private state: IdbState = {
+  private readonly _dbName: string;
+  public state: IdbState = {
     isStoreLoading: [],
     isStoreSyncing: [],
     isUpdating: [],
     isDeleting: [],
   };
-  private setState: React.Dispatch<React.SetStateAction<IdbState>>;
+  public setState: React.Dispatch<React.SetStateAction<IdbState>>;
   private objectURLs: Map<string, string> = new Map();
 
   constructor(
-    dbName: string,
-    setState: React.Dispatch<React.SetStateAction<IdbState>>
+    setState: React.Dispatch<React.SetStateAction<IdbState>>,
+    dbName: string
   ) {
-    this.dbName = dbName;
+    this._dbName = dbName;
     this.setState = setState;
   }
-  private updateState(newState: Partial<IdbState>) {
-    this.state = { ...this.state, ...newState };
-    this.setState(this.state);
+
+  get dbName(): string {
+    return this._dbName;
   }
-  private revokeObjectURLs() {
+
+  private updateState(newState: Partial<IdbState>) {
+    this.setState((prevState) => {
+      const nextState = { ...prevState, ...newState };
+      this.state = nextState;
+      return nextState;
+    });
+  }
+  public revokeObjectURLs() {
     this.objectURLs.forEach((url) => {
       URL.revokeObjectURL(url);
     });
@@ -299,7 +307,7 @@ class IdbManager<T extends IdbFile> {
   }): Promise<{ files: T[]; storeName: string }[]> {
     const results: { files: T[]; storeName: string }[] = [];
     const idbStoreNames = await this.getStores();
-  
+
     if (Array.isArray(set) && set.length === 0) {
       // A. 受け取ったセットが空配列の場合
       console.log("No files to sync");
@@ -317,7 +325,7 @@ class IdbManager<T extends IdbFile> {
     } else {
       // B. 受け取ったセットが空でない場合
       const setStoreNames = set.map(({ storeName }) => storeName);
-  
+
       // B-1. 受け取ったセットに含まれるストアの処理
       for (const { files, storeName } of set) {
         let latestFile: T | null = null;
@@ -329,7 +337,10 @@ class IdbManager<T extends IdbFile> {
           const idbLatestFile = (await this.get(storeName, {
             date: { key: dateKey, order: "latest" },
           })) as T | null;
-          if (!files[0] || (idbLatestFile && files[0][dateKey] < idbLatestFile[dateKey])) {
+          if (
+            !files[0] ||
+            (idbLatestFile && files[0][dateKey] < idbLatestFile[dateKey])
+          ) {
             latestFile = idbLatestFile;
           } else {
             await this.put(storeName, files[0]); // 上記条件ではファイルを更新して
@@ -346,7 +357,7 @@ class IdbManager<T extends IdbFile> {
           results.push({ files: [], storeName });
         }
       }
-  
+
       // B-2. 受け取ったセットに含まれていないストアの処理
       for (const storeName of idbStoreNames) {
         if (!setStoreNames.includes(storeName)) {
@@ -525,26 +536,95 @@ class IdbManager<T extends IdbFile> {
   }
 }
 
-const useIdb = <T extends IdbFile>(
-  dbName: string
-): { idb: IdbManager<T>; idbState: IdbState } => {
-  const [idbState, setIdbState] = useState<IdbState>({
+// コンテキストの作成
+interface IdbContextValue<T extends IdbFile> {
+  state: IdbState;
+  setState: React.Dispatch<React.SetStateAction<IdbState>>;
+  managers: Map<string, IdbManager<T>>; // managersを型定義に追加
+}
+
+// ジェネリックなコンテキスト作成
+const createIdbContext = <T extends IdbFile>() => {
+  return createContext<IdbContextValue<T> | null>(null);
+};
+
+// デフォルトのコンテキスト
+const DefaultIdbContext = createIdbContext<any>();
+
+// プロバイダーコンポーネント
+const IdbProvider = <T extends IdbFile>({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const [state, setState] = useState<IdbState>({
     isStoreLoading: [],
     isStoreSyncing: [],
     isUpdating: [],
     isDeleting: [],
   });
 
-  const idbRef = useRef<IdbManager<T> | null>(null);
+  // managersの参照を保持するためにuseRefを使用
+  const managersRef = useRef<Map<string, IdbManager<T>>>(new Map());
 
-  if (!idbRef.current) {
-    idbRef.current = new IdbManager<T>(dbName, setIdbState);
-  }
+  // コンテキスト値をメモ化
+  const contextValue = useMemo<IdbContextValue<T>>(() => ({
+    state,
+    setState,
+    managers: managersRef.current
+  }), [state]);
 
-  return { idb: idbRef.current, idbState };
+  return (
+    <DefaultIdbContext.Provider value={contextValue}>
+      {children}
+    </DefaultIdbContext.Provider>
+  );
 };
 
-export { useIdb, type IdbFile };
+// カスタムフック
+const useIdb = <T extends IdbFile>(
+  dbName: string
+): {
+  idb: IdbManager<T>;
+  state: IdbState;
+} => {
+  const context = useContext(
+    DefaultIdbContext as unknown as React.Context<IdbContextValue<T>>
+  );
+  if (!context) {
+    throw new Error("useIdb must be used within IdbProvider");
+  }
+
+  const { state, setState, managers } = context;
+
+  // マウント時にのみ実行される処理
+  const idbManager = useMemo(() => {
+    const existingManager = managers.get(dbName);
+    if (existingManager) {
+      return existingManager as IdbManager<T>;
+    }
+    const newManager = new IdbManager<T>(setState, dbName);
+    managers.set(dbName, newManager);
+    return newManager;
+  }, [managers, dbName, setState]);
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => {
+      const manager = managers.get(dbName);
+      if (manager) {
+        manager.revokeObjectURLs();
+      }
+    };
+  }, [managers, dbName]);
+
+  return {
+    idb: idbManager,
+    state
+  };
+};
+
+export { useIdb, IdbProvider, IdbManager, type IdbFile };
 
 // https://claude.ai/chat/c05047a2-59cd-43c6-84c9-954c3acf483c
 // メモリ管理とリソース解放

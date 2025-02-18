@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Modal } from "@/components";
+import { Modal } from "@/components/atoms";
 import { useCamera } from "@/components/camera/_utils";
 
 const ModalWebview = () => {
@@ -29,7 +29,7 @@ const ModalWebview = () => {
     checkURL();
     return () => {
       setIsUrlValid(false);
-    }
+    };
   }, [cameraState.scannedData]);
 
   // IDBの連携サービスデータとサービスキーを突合 →
@@ -50,7 +50,7 @@ const ModalWebview = () => {
         className="bg-white w-full h-full"
       >
         <iframe
-          src={`/api/proxy?url=${encodeURIComponent(cameraState.scannedData)}`}
+          src={`/api/proxy/qr?url=${encodeURIComponent(cameraState.scannedData)}`}
           className="absolute inset-0 w-full h-full"
           title="Webview"
         />
