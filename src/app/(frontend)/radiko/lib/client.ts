@@ -30,6 +30,31 @@ const getJSTTime = (date: Date = new Date()): string => {
   );
 };
 
+const parseRadikoTime = (timeStr: string): Date => {
+  const year = parseInt(timeStr.substring(0, 4));
+  const month = parseInt(timeStr.substring(4, 6)) - 1;
+  const day = parseInt(timeStr.substring(6, 8));
+  const hour = parseInt(timeStr.substring(8, 10));
+  const minute = parseInt(timeStr.substring(10, 12));
+  
+  const date = new Date(Date.UTC(year, month, day, hour - 9, minute));
+  return date;
+};
+
+const formatRadikoTime = (date: Date): string => {
+  const utc = new Date(date.getTime() + (date.getTimezoneOffset() * 60 * 1000));
+  const jst = new Date(utc.getTime() + (9 * 60 * 60 * 1000));
+  
+  return (
+    jst.getFullYear().toString() +
+    String(jst.getMonth() + 1).padStart(2, "0") +
+    String(jst.getDate()).padStart(2, "0") +
+    String(jst.getHours()).padStart(2, "0") +
+    String(jst.getMinutes()).padStart(2, "0") +
+    "00"
+  );
+};
+
 // ヘッダーの型定義を修正
 type RadikoHeaders = Record<string, string> & {
   "X-Radiko-App": string;
@@ -283,31 +308,10 @@ export class RadikoClient {
         await this.init();
       }
 
-      // JST時刻文字列からDateオブジェクトを作成
-      const createJSTDate = (timeStr: string): Date => {
-        const year = parseInt(timeStr.substring(0, 4));
-        const month = parseInt(timeStr.substring(4, 6)) - 1;
-        const day = parseInt(timeStr.substring(6, 8));
-        const hour = parseInt(timeStr.substring(8, 10));
-        const minute = parseInt(timeStr.substring(10, 12));
-        
-        // JSTでの日時を指定
-        const date = new Date();
-        date.setFullYear(year);
-        date.setMonth(month);
-        date.setDate(day);
-        date.setHours(hour);
-        date.setMinutes(minute);
-        date.setSeconds(0);
-        
-        // UTCに変換
-        return new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-      };
-
       const queryParams = new URLSearchParams({
         station_id: stationId,
-        ft: getJSTTime(createJSTDate(ft)),
-        to: getJSTTime(createJSTDate(to)),
+        ft: ft,  // そのまま使用（すでにJST形式）
+        to: to,  // そのまま使用（すでにJST形式）
         l: "15",
       });
 

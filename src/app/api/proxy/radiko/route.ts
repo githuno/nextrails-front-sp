@@ -71,22 +71,7 @@ export async function GET(request: NextRequest) {
     } else {
       const baseUrl = path.startsWith("v2/") ? V2_URL : V3_URL;
       const cleanPath = path.replace(/^v[23]\//, "");
-
-      // プレイリストのURLの場合、タイムスタンプをJSTに変換
-      if (cleanPath.includes("playlist.m3u8")) {
-        const urlObj = new URL(cleanPath, baseUrl);
-        let ft = urlObj.searchParams.get("ft");
-        let to = urlObj.searchParams.get("to");
-
-        if (ft && to) {
-          // タイムスタンプをJSTフォーマットに変換
-          urlObj.searchParams.set("ft", formatToJST(ft));
-          urlObj.searchParams.set("to", formatToJST(to));
-        }
-        url = urlObj.toString();
-      } else {
-        url = new URL(cleanPath, baseUrl).toString();
-      }
+      url = new URL(cleanPath, baseUrl).toString();
     }
 
     // Radikoの認証ヘッダーを設定
@@ -95,17 +80,14 @@ export async function GET(request: NextRequest) {
       ...headers,
       // 日本の固定IPアドレスを設定（東京のIPアドレス範囲の例）
       "X-Forwarded-For": "133.203.1.1",
-      // User-Agentを固定（一般的なブラウザとして認識されるように）
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       // Accept-Encodingを指定して圧縮形式を制御
       "Accept-Encoding": "gzip, deflate",
       // Origin と Referer を追加
       Origin: "https://radiko.jp",
       Referer: "https://radiko.jp/",
-      // タイムゾーンヘッダーを追加
-      Date: getJSTDate().toUTCString(),
-      "Time-Zone": "Asia/Tokyo",
+      // タイムゾーンヘッダーを追加（JST固定）
+      "Date": new Date().toUTCString(),
+      "Time-Zone": "Asia/Tokyo"
     };
 
     const response = await fetch(url, {
