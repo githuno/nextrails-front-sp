@@ -66,35 +66,71 @@ function getRandomJapanIP() {
   return JAPAN_IP_POOL[Math.floor(Math.random() * JAPAN_IP_POOL.length)];
 }
 
-// クライアントIPを取得する関数
-function getClientIP(request: NextRequest): string {
-  // Vercelの場合、X-Forwarded-ForやX-Real-IPヘッダーにクライアントのIPが含まれる
-  const forwarded = request.headers.get("x-forwarded-for");
-  const realIP = request.headers.get("x-real-ip");
-  
-  // クライアントIPが取得できない場合は日本のIPをフォールバックとして使用
-  if (!forwarded && !realIP) {
-    return "133.203.1.1"; // フォールバックIP
-  }
+// 有効な日本のIPアドレス範囲（JPNIC割り当て）
+const JAPAN_IP_RANGES = [
+  ['133.200.0.0', '133.203.255.255'],  // JPNIC
+  ['133.205.0.0', '133.208.255.255'],  // JPNIC
+  ['133.209.0.0', '133.211.255.255'],  // JPNIC
+  // 必要に応じて追加
+];
 
-  // X-Forwarded-Forがある場合は最初のIPを使用（クライアントIP）
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-
-  return realIP || "133.203.1.1";
+// IPアドレスを数値に変換
+function ipToLong(ip: string): number {
+  return ip.split('.')
+    .reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
 }
 
-// IPが日本のものかチェックする関数
-async function isJapaneseIP(ip: string): Promise<boolean> {
+// IPアドレスが日本のIP範囲内かチェック
+function isJapaneseIPRange(ip: string): boolean {
+  const ipLong = ipToLong(ip);
+  return JAPAN_IP_RANGES.some(([start, end]) => {
+    const startLong = ipToLong(start);
+    const endLong = ipToLong(end);
+    return ipLong >= startLong && ipLong <= endLong;
+  });
+}
+
+// クライアントIPを取得する関数
+function getClientIP(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const realIP = request.headers.get("x-real-ip");
+  const cfConnectingIP = request.headers.get("cf-connecting-ip");  // Cloudflare
+  const vercelIP = request.headers.get("x-vercel-forwarded-for");  // Vercel specific
+
+  // 優先順位に従ってIPを取得
+  const clientIP = vercelIP || cfConnectingIP || forwarded?.split(",")[0].trim() || realIP;
+
+  // 有効なIPアドレスが取得できない場合はJPNICの範囲内のIPを使用
+  if (!clientIP || !isJapaneseIPRange(clientIP)) {
+    return "133.200.1.1";  // JPNICの範囲内の固定IP
+  }
+
+  return clientIP;
+}
+
+// IPの検証を強化
+async function validateIP(ip: string): Promise<boolean> {
+  // まずJPNICの範囲でチェック
+  if (isJapaneseIPRange(ip)) {
+    return true;
+  }
+
+  // JPNIC範囲外の場合は外部APIで二重チェック
   try {
-    // IP-APIを使用して国コードを取得
-    const response = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`);
-    const data = await response.json();
-    return data.countryCode === "JP";
+    const [geoResponse1, geoResponse2] = await Promise.all([
+      fetch(`http://ip-api.com/json/${ip}?fields=countryCode`),
+      fetch(`https://ipapi.co/${ip}/country`)
+    ]);
+
+    const data1 = await geoResponse1.json();
+    const country2 = await geoResponse2.text();
+
+    // 両方のAPIが日本と判定した場合のみtrue
+    return data1.countryCode === "JP" && country2.trim() === "JP";
   } catch (error) {
-    console.error("IP location check failed:", error);
-    return true; // エラーの場合は日本のIPとして扱う
+    console.error("IP validation error:", error);
+    // エラーの場合はJPNICの範囲チェック結果を信頼
+    return isJapaneseIPRange(ip);
   }
 }
 
@@ -108,16 +144,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // クライアントIPを取得
     const clientIP = getClientIP(request);
     
-    // 本番環境でのみIPチェックを実行
+    // 本番環境でのIP検証を強化
     if (process.env.NODE_ENV === "production") {
-      const isJapanese = await isJapaneseIP(clientIP);
-      if (!isJapanese) {
+      const isValidIP = await validateIP(clientIP);
+      if (!isValidIP) {
         return new NextResponse(
           JSON.stringify({
-            error: "Access denied: Non-Japanese IP address",
+            error: "Access denied: Invalid IP address",
             timestamp: new Date().toISOString(),
             timezone: "Asia/Tokyo",
           }),
@@ -147,6 +182,8 @@ export async function GET(request: NextRequest) {
       // クライアントIPを設定
       "X-Forwarded-For": clientIP,
       "X-Real-IP": clientIP,
+      "X-Client-IP": clientIP,  // 追加
+      "X-Originating-IP": clientIP,  // 追加
       // Accept-Encodingを指定して圧縮形式を制御
       "Accept-Encoding": "gzip, deflate",
       // Origin と Referer を追加
