@@ -280,31 +280,27 @@ export class RadikoClient {
     to: string
   ): Promise<string> {
     try {
+      // 認証状態の確認と必要に応じて再認証
       if (!this.authToken) {
-        await this.authenticate();
+        await this.init();
       }
-
-      // 時刻文字列をパースしてDateオブジェクトを生成
-      const ftDate = new Date(
-        parseInt(ft.substring(0, 4)),
-        parseInt(ft.substring(4, 6)) - 1,
-        parseInt(ft.substring(6, 8)),
-        parseInt(ft.substring(8, 10)),
-        parseInt(ft.substring(10, 12))
-      );
-
-      const toDate = new Date(
-        parseInt(to.substring(0, 4)),
-        parseInt(to.substring(4, 6)) - 1,
-        parseInt(to.substring(6, 8)),
-        parseInt(to.substring(8, 10)),
-        parseInt(to.substring(10, 12))
-      );
 
       const queryParams = new URLSearchParams({
         station_id: stationId,
-        ft: getJSTTime(ftDate),
-        to: getJSTTime(toDate),
+        ft: getJSTTime(new Date(
+          parseInt(ft.substring(0, 4)),
+          parseInt(ft.substring(4, 6)) - 1,
+          parseInt(ft.substring(6, 8)),
+          parseInt(ft.substring(8, 10)),
+          parseInt(ft.substring(10, 12))
+        )),
+        to: getJSTTime(new Date(
+          parseInt(to.substring(0, 4)),
+          parseInt(to.substring(4, 6)) - 1,
+          parseInt(to.substring(6, 8)),
+          parseInt(to.substring(8, 10)),
+          parseInt(to.substring(10, 12))
+        )),
         l: "15",
       });
 
@@ -318,6 +314,13 @@ export class RadikoClient {
       );
 
       if (!response.ok) {
+        if (response.status === 401) {
+          // 認証エラーの場合、認証をクリアして再認証
+          this.clearAuth();
+          await this.init();
+          // 再帰的に再試行
+          return this.getStreamUrl(stationId, ft, to);
+        }
         throw new Error(`Failed to get playlist: ${response.status}`);
       }
 
@@ -342,8 +345,13 @@ export class RadikoClient {
 
       return proxyUrl.toString();
     } catch (error) {
-      if (error instanceof Error && error.message.includes("401")) {
-        await this.authenticate();
+      console.error("Stream URL error:", error);
+      if (error instanceof Error && 
+          (error.message.includes("401") || error.message.includes("auth"))) {
+        // 認証関連のエラーの場合、認証をクリアして再認証
+        this.clearAuth();
+        await this.init();
+        // 再帰的に再試行（最大1回）
         return this.getStreamUrl(stationId, ft, to);
       }
       throw error;
