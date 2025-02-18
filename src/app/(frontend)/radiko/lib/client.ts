@@ -20,10 +20,7 @@ const formatJSTDate = (date: Date): string => {
 
 // JST日付操作のためのヘルパー関数を追加
 const getJSTTime = (date: Date = new Date()): string => {
-  // JSTオフセットを考慮して時刻を調整
-  const jst = new Date(
-    date.getTime() + (date.getTimezoneOffset() + 540) * 60 * 1000
-  );
+  const jst = getJSTDate(date);
   return (
     jst.getFullYear().toString() +
     String(jst.getMonth() + 1).padStart(2, "0") +
