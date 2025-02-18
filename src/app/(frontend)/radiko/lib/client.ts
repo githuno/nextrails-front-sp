@@ -5,15 +5,33 @@ const AREA_ID_KEY = "radiko_area_id";
 // JST日付操作のためのヘルパー関数を追加
 const getJSTDate = (date: Date = new Date()): Date => {
   const jstOffset = 9 * 60; // JST is UTC+9
-  const utc = date.getTime() + (date.getTimezoneOffset() * 60 * 1000);
-  return new Date(utc + (jstOffset * 60 * 1000));
+  const utc = date.getTime() + date.getTimezoneOffset() * 60 * 1000;
+  return new Date(utc + jstOffset * 60 * 1000);
 };
 
 const formatJSTDate = (date: Date): string => {
   const jstDate = getJSTDate(date);
-  return jstDate.getFullYear().toString() +
+  return (
+    jstDate.getFullYear().toString() +
     String(jstDate.getMonth() + 1).padStart(2, "0") +
-    String(jstDate.getDate()).padStart(2, "0");
+    String(jstDate.getDate()).padStart(2, "0")
+  );
+};
+
+// JST日付操作のためのヘルパー関数を追加
+const getJSTTime = (date: Date = new Date()): string => {
+  // JSTオフセットを考慮して時刻を調整
+  const jst = new Date(
+    date.getTime() + (date.getTimezoneOffset() + 540) * 60 * 1000
+  );
+  return (
+    jst.getFullYear().toString() +
+    String(jst.getMonth() + 1).padStart(2, "0") +
+    String(jst.getDate()).padStart(2, "0") +
+    String(jst.getHours()).padStart(2, "0") +
+    String(jst.getMinutes()).padStart(2, "0") +
+    "00"
+  );
 };
 
 // ヘッダーの型定義を修正
@@ -100,7 +118,7 @@ export class RadikoClient {
       console.error("Proxy fetch error:", error);
       if (error instanceof Error && error.message.includes("Failed to fetch")) {
         // ネットワークエラーの場合は少し待ってから再試行
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         return this.proxyFetch(path, options);
       }
       throw error;
@@ -177,7 +195,7 @@ export class RadikoClient {
       const text = await response.text();
       const match = text.match(/"(.*?)"/);
       const areaId = match ? match[1] : "";
-      
+
       // OUT（国外）や空の場合は東京のエリアIDを使用
       if (!areaId || areaId === "OUT") {
         return "JP13"; // 東京
@@ -201,7 +219,7 @@ export class RadikoClient {
       if (this.areaId === "OUT" || !this.areaId) {
         this.areaId = "JP13";
       }
-      
+
       const response = await this.proxyFetch(
         `v3/station/list/${this.areaId}.xml`
       );
@@ -224,7 +242,7 @@ export class RadikoClient {
   async getPrograms(stationId: string, date: Date) {
     try {
       if (!this.authToken) await this.init();
-      
+
       // 日付文字列をJSTベースで生成
       const dateStr = formatJSTDate(date);
 
@@ -265,19 +283,34 @@ export class RadikoClient {
     to: string
   ): Promise<string> {
     try {
-      // 認証状態を確認し、必要に応じて再認証
       if (!this.authToken) {
         await this.authenticate();
       }
 
+      // 時刻文字列をパースしてDateオブジェクトを生成
+      const ftDate = new Date(
+        parseInt(ft.substring(0, 4)),
+        parseInt(ft.substring(4, 6)) - 1,
+        parseInt(ft.substring(6, 8)),
+        parseInt(ft.substring(8, 10)),
+        parseInt(ft.substring(10, 12))
+      );
+
+      const toDate = new Date(
+        parseInt(to.substring(0, 4)),
+        parseInt(to.substring(4, 6)) - 1,
+        parseInt(to.substring(6, 8)),
+        parseInt(to.substring(8, 10)),
+        parseInt(to.substring(10, 12))
+      );
+
       const queryParams = new URLSearchParams({
         station_id: stationId,
-        ft,
-        to,
+        ft: getJSTTime(ftDate),
+        to: getJSTTime(toDate),
         l: "15",
       });
 
-      // プレイリストの取得時に完全な認証ヘッダーを含める
       const response = await this.proxyFetch(
         `v2/api/ts/playlist.m3u8?${queryParams}`,
         {
@@ -300,7 +333,6 @@ export class RadikoClient {
         throw new Error("No playlist URL found");
       }
 
-      // プロキシURLを構築し、認証情報を含める
       const proxyUrl = new URL(PROXY_URL, window.location.origin);
       proxyUrl.searchParams.set("path", masterPlaylistUrl);
       proxyUrl.searchParams.set(
@@ -314,7 +346,6 @@ export class RadikoClient {
       return proxyUrl.toString();
     } catch (error) {
       if (error instanceof Error && error.message.includes("401")) {
-        // 認証エラーの場合は再認証を試みる
         await this.authenticate();
         return this.getStreamUrl(stationId, ft, to);
       }

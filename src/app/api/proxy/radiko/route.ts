@@ -28,6 +28,11 @@ type CustomHeadersInit = HeadersInit & {
   [key: string]: string;
 };
 
+// JSTタイムゾーンのヘルパー関数
+function getJSTDate(date: Date = new Date()): Date {
+  return new Date(date.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const path = searchParams.get("path");
@@ -46,7 +51,56 @@ export async function GET(request: NextRequest) {
     } else {
       const baseUrl = path.startsWith("v2/") ? V2_URL : V3_URL;
       const cleanPath = path.replace(/^v[23]\//, "");
-      url = new URL(cleanPath, baseUrl).toString();
+      
+      // タイムスタンプパラメータがある場合、JSTに変換
+      if (cleanPath.includes("playlist.m3u8")) {
+        const urlObj = new URL(cleanPath, baseUrl);
+        const ft = urlObj.searchParams.get("ft");
+        const to = urlObj.searchParams.get("to");
+        
+        if (ft && to) {
+          // 既にJST形式であることを確認
+          const ftDate = new Date(
+            parseInt(ft.substring(0, 4)),
+            parseInt(ft.substring(4, 6)) - 1,
+            parseInt(ft.substring(6, 8)),
+            parseInt(ft.substring(8, 10)),
+            parseInt(ft.substring(10, 12))
+          );
+          
+          const toDate = new Date(
+            parseInt(to.substring(0, 4)),
+            parseInt(to.substring(4, 6)) - 1,
+            parseInt(to.substring(6, 8)),
+            parseInt(to.substring(8, 10)),
+            parseInt(to.substring(10, 12))
+          );
+
+          const jstFt = getJSTDate(ftDate);
+          const jstTo = getJSTDate(toDate);
+
+          urlObj.searchParams.set("ft", 
+            jstFt.getFullYear().toString() +
+            String(jstFt.getMonth() + 1).padStart(2, "0") +
+            String(jstFt.getDate()).padStart(2, "0") +
+            String(jstFt.getHours()).padStart(2, "0") +
+            String(jstFt.getMinutes()).padStart(2, "0") +
+            "00"
+          );
+
+          urlObj.searchParams.set("to",
+            jstTo.getFullYear().toString() +
+            String(jstTo.getMonth() + 1).padStart(2, "0") +
+            String(jstTo.getDate()).padStart(2, "0") +
+            String(jstTo.getHours()).padStart(2, "0") +
+            String(jstTo.getMinutes()).padStart(2, "0") +
+            "00"
+          );
+        }
+        url = urlObj.toString();
+      } else {
+        url = new URL(cleanPath, baseUrl).toString();
+      }
     }
 
     // Radikoの認証ヘッダーを設定
@@ -61,7 +115,10 @@ export async function GET(request: NextRequest) {
       "Accept-Encoding": "gzip, deflate",
       // Origin と Referer を追加
       "Origin": "https://radiko.jp",
-      "Referer": "https://radiko.jp/"
+      "Referer": "https://radiko.jp/",
+      // タイムゾーンヘッダーを追加
+      "Date": new Date().toUTCString(),
+      "Time-Zone": "Asia/Tokyo"
     };
 
     const response = await fetch(url, {
@@ -147,13 +204,16 @@ export async function GET(request: NextRequest) {
     return new NextResponse(
       JSON.stringify({
         error: errorMessage,
-        timestamp: new Date().toISOString(),
-        timezone: "Asia/Tokyo"
+        timestamp: getJSTDate().toISOString(),
+        timezone: "Asia/Tokyo",
+        details: error instanceof Error ? error.stack : undefined
       }),
       {
         status: status,
         headers: {
           "Content-Type": "application/json",
+          "Date": getJSTDate().toUTCString(),
+          "Time-Zone": "Asia/Tokyo"
         },
       }
     );

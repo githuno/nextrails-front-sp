@@ -28,19 +28,23 @@ interface PlaybackState {
 // 日時フォーマット用のヘルパー関数
 const formatRadikoTime = (timeStr: string): string => {
   if (!timeStr) return "";
-  const year = parseInt(timeStr.substring(0, 4));
-  const month = parseInt(timeStr.substring(4, 6)) - 1;
-  const day = parseInt(timeStr.substring(6, 8));
-  const hour = parseInt(timeStr.substring(8, 10));
-  const minute = parseInt(timeStr.substring(10, 12));
 
-  // JSTでDateオブジェクトを作成
-  const date = new Date(Date.UTC(year, month, day, hour - 9, minute));
-  return date.toLocaleTimeString("ja-JP", {
+  // タイムスタンプをJSTとして解釈
+  const jstDate = new Date(
+    parseInt(timeStr.substring(0, 4)),
+    parseInt(timeStr.substring(4, 6)) - 1,
+    parseInt(timeStr.substring(6, 8)),
+    parseInt(timeStr.substring(8, 10)),
+    parseInt(timeStr.substring(10, 12))
+  );
+
+  // オフセットを考慮して時刻を表示
+  return new Intl.DateTimeFormat("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Asia/Tokyo"
-  });
+    hour12: false,
+    timeZone: "Asia/Tokyo",
+  }).format(jstDate);
 };
 
 export default function RadikoPage() {
@@ -56,8 +60,8 @@ export default function RadikoPage() {
     // 初期値としてJST現在時刻を設定
     const now = new Date();
     const jstOffset = 9 * 60;
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
-    return new Date(utc + (jstOffset * 60 * 1000));
+    const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+    return new Date(utc + jstOffset * 60 * 1000);
   });
   const [selectedTab, setSelectedTab] = useState<number>(0);
   const [error, setError] = useState<string>("");
@@ -227,7 +231,9 @@ export default function RadikoPage() {
         );
         setPrograms(programList);
         if (programList.length === 0) {
-          setError("番組情報を取得できませんでした。後ほど再度お試しください。");
+          setError(
+            "番組情報を取得できませんでした。後ほど再度お試しください。"
+          );
         }
       } catch (err) {
         console.error("Program loading error:", err);
@@ -247,24 +253,38 @@ export default function RadikoPage() {
       try {
         if (!selectedStation || !audioRef.current) return;
 
-        const streamUrl = await client.getStreamUrl(
-          selectedStation,
-          program.startTime,
-          program.endTime
-        );
+        setError("");
+        const streamUrl = await client
+          .getStreamUrl(selectedStation, program.startTime, program.endTime)
+          .catch((error) => {
+            console.error("Stream URL error:", error);
+            setError("ストリームURLの取得に失敗しました。");
+            throw error;
+          });
 
         // HLSのセットアップ
-        const hls = await setupHls(streamUrl);
+        const hls = await setupHls(streamUrl).catch((error) => {
+          console.error("HLS setup error:", error);
+          setError("ストリームの初期化に失敗しました。");
+          throw error;
+        });
+
         if (!hls) return;
 
         setAudioUrl(streamUrl);
         savePlaybackState(program);
 
         // マニフェスト解析完了後に自動再生
-        await audioRef.current.play();
+        await audioRef.current.play().catch((error) => {
+          console.error("Playback error:", error);
+          setError("再生の開始に失敗しました。");
+          throw error;
+        });
+
         audioRef.current.playbackRate = playbackRate;
       } catch (error) {
         console.error("Failed to play:", error);
+        setError("再生の準備中にエラーが発生しました。");
       }
     },
     [client, selectedStation, setupHls, playbackRate]
@@ -365,7 +385,7 @@ export default function RadikoPage() {
                   month: "numeric",
                   day: "numeric",
                   weekday: "short",
-                  timeZone: "Asia/Tokyo"
+                  timeZone: "Asia/Tokyo",
                 })}
               </button>
             ))}
