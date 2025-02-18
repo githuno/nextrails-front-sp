@@ -2,6 +2,20 @@ const PROXY_URL = "/api/proxy/radiko";
 const AUTH_TOKEN_KEY = "radiko_auth_token";
 const AREA_ID_KEY = "radiko_area_id";
 
+// JST日付操作のためのヘルパー関数を追加
+const getJSTDate = (date: Date = new Date()): Date => {
+  const jstOffset = 9 * 60; // JST is UTC+9
+  const utc = date.getTime() + (date.getTimezoneOffset() * 60 * 1000);
+  return new Date(utc + (jstOffset * 60 * 1000));
+};
+
+const formatJSTDate = (date: Date): string => {
+  const jstDate = getJSTDate(date);
+  return jstDate.getFullYear().toString() +
+    String(jstDate.getMonth() + 1).padStart(2, "0") +
+    String(jstDate.getDate()).padStart(2, "0");
+};
+
 // ヘッダーの型定義を修正
 type RadikoHeaders = Record<string, string> & {
   "X-Radiko-App": string;
@@ -166,11 +180,9 @@ export class RadikoClient {
 
   async getPrograms(stationId: string, date: Date) {
     if (!this.authToken) await this.init();
-    // 日付フォーマットを修正（YYYYMMDD）
-    const dateStr =
-      date.getFullYear().toString() +
-      String(date.getMonth() + 1).padStart(2, "0") +
-      String(date.getDate()).padStart(2, "0");
+    
+    // 日付文字列をJSTベースで生成
+    const dateStr = formatJSTDate(date);
 
     const response = await this.proxyFetch(
       `v3/program/station/date/${dateStr}/${stationId}.xml`

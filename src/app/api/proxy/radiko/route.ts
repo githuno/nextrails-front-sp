@@ -67,6 +67,28 @@ export async function GET(request: NextRequest) {
       redirect: "follow",
     });
 
+    // 404エラーの場合、より詳細なエラーメッセージを返す
+    if (response.status === 404) {
+      console.error("Radiko API 404 Error:", {
+        url,
+        path,
+        headers: requestHeaders,
+      });
+      return new NextResponse(
+        JSON.stringify({
+          error: "Resource not found",
+          details: "The requested Radiko API endpoint returned 404",
+          path: path
+        }),
+        {
+          status: 404,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
     if (!response.ok) {
       console.error("Radiko API Error:", {
         url,
@@ -125,12 +147,17 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Proxy error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const status = errorMessage.includes("404") ? 404 : 500;
+    
     return new NextResponse(
       JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorMessage,
+        timestamp: new Date().toISOString(),
+        timezone: "UTC"
       }),
       {
-        status: 500,
+        status: status,
         headers: {
           "Content-Type": "application/json",
         },

@@ -28,17 +28,18 @@ interface PlaybackState {
 // 日時フォーマット用のヘルパー関数
 const formatRadikoTime = (timeStr: string): string => {
   if (!timeStr) return "";
-  // Radikoの時刻フォーマット（YYYYMMDDHHmmss）をDateオブジェクトに変換
   const year = parseInt(timeStr.substring(0, 4));
   const month = parseInt(timeStr.substring(4, 6)) - 1;
   const day = parseInt(timeStr.substring(6, 8));
   const hour = parseInt(timeStr.substring(8, 10));
   const minute = parseInt(timeStr.substring(10, 12));
 
-  const date = new Date(year, month, day, hour, minute);
+  // JSTでDateオブジェクトを作成
+  const date = new Date(Date.UTC(year, month, day, hour - 9, minute));
   return date.toLocaleTimeString("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Tokyo"
   });
 };
 
@@ -51,15 +52,21 @@ export default function RadikoPage() {
   const [selectedStation, setSelectedStation] = useState<string>("");
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    // 初期値としてJST現在時刻を設定
+    const now = new Date();
+    const jstOffset = 9 * 60;
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
+    return new Date(utc + (jstOffset * 60 * 1000));
+  });
   const [selectedTab, setSelectedTab] = useState<number>(0);
 
   // LocalStorageのキー
   const PLAYBACK_STATE_KEY = "radiko_playback_state";
 
-  // 過去7日分の日付を生成
+  // 過去7日分の日付を生成（JST基準）
   const dates = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
+    const date = new Date(selectedDate);
     date.setDate(date.getDate() - i);
     return date;
   });
@@ -338,6 +345,7 @@ export default function RadikoPage() {
                   month: "numeric",
                   day: "numeric",
                   weekday: "short",
+                  timeZone: "Asia/Tokyo"
                 })}
               </button>
             ))}
