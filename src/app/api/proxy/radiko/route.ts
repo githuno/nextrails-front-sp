@@ -53,6 +53,19 @@ function formatToJST(timeStr: string): string {
   }
 }
 
+// 日本のIPアドレスプール（これは例です）
+const JAPAN_IP_POOL = [
+  "133.203.1.1",
+  "133.203.1.2",
+  "133.203.1.3",
+  // 必要に応じて追加
+];
+
+// ランダムな日本のIPアドレスを取得
+function getRandomJapanIP() {
+  return JAPAN_IP_POOL[Math.floor(Math.random() * JAPAN_IP_POOL.length)];
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const path = searchParams.get("path");
@@ -74,131 +87,105 @@ export async function GET(request: NextRequest) {
       url = new URL(cleanPath, baseUrl).toString();
     }
 
-    // Radikoの認証ヘッダーを設定
+    // Radikoの認証ヘッダーを設定（改善版）
     const requestHeaders: CustomHeadersInit = {
       ...RADIKO_HEADERS,
       ...headers,
-      // 日本の固定IPアドレスを設定（東京のIPアドレス範囲の例）
-      "X-Forwarded-For": "133.203.1.1",
+      // 日本のIPアドレスを設定
+      "X-Forwarded-For": getRandomJapanIP(),
       // Accept-Encodingを指定して圧縮形式を制御
       "Accept-Encoding": "gzip, deflate",
       // Origin と Referer を追加
-      Origin: "https://radiko.jp",
-      Referer: "https://radiko.jp/",
+      "Origin": "https://radiko.jp",
+      "Referer": "https://radiko.jp/",
       // タイムゾーンヘッダーを追加（JST固定）
       "Date": new Date().toUTCString(),
-      "Time-Zone": "Asia/Tokyo"
+      "Time-Zone": "Asia/Tokyo",
+      // 追加のヘッダー
+      "X-Requested-With": "XMLHttpRequest",
+      "Connection": "keep-alive",
     };
 
-    const response = await fetch(url, {
-      headers: requestHeaders,
-      method: "GET",
-      redirect: "follow",
-    });
+    // リトライロジックを実装
+    let retryCount = 0;
+    const maxRetries = 3;
+    let response: Response;
 
-    // エラーハンドリング
-    if (!response.ok) {
+    while (retryCount < maxRetries) {
+      response = await fetch(url, {
+        headers: requestHeaders,
+        method: "GET",
+        redirect: "follow",
+      });
+
+      if (response.ok) {
+        break;
+      }
+
+      if (response.status === 401) {
+        // 認証エラーの場合、異なるIPアドレスで再試行
+        requestHeaders["X-Forwarded-For"] = getRandomJapanIP();
+        retryCount++;
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        continue;
+      }
+
+      break;
+    }
+
+    // エラーハンドリング（最後の応答を使用）
+    if (!response!.ok) {
       console.error("Radiko API Error:", {
         url,
-        status: response.status,
-        statusText: response.statusText,
+        status: response!.status,
+        statusText: response!.statusText,
         path,
         headers: requestHeaders,
       });
 
-      if (response.status === 404) {
-        // エリア情報の取得に失敗した場合、デフォルトの東京エリアを使用
-        if (path.includes("station/list/OUT.xml")) {
-          const tokyoResponse = await fetch(
-            url.replace("OUT.xml", "JP13.xml"),
-            {
-              headers: requestHeaders,
-              method: "GET",
-              redirect: "follow",
-            }
-          );
-
-          if (tokyoResponse.ok) {
-            const responseBody = await tokyoResponse.arrayBuffer();
-            const responseHeaders = new Headers();
-            // 必要なヘッダーのみを転送
-            responseHeaders.set(
-              "Content-Type",
-              tokyoResponse.headers.get("Content-Type") || "application/xml"
-            );
-            responseHeaders.set("Access-Control-Allow-Origin", "*");
-            // Content-Encodingヘッダーは削除（自動的に解凍される）
-            return new NextResponse(responseBody, {
-              status: 200,
-              headers: responseHeaders,
-            });
-          }
-        }
-
-        return new NextResponse(
-          JSON.stringify({
-            error: "Resource not found",
-            details: "The requested Radiko API endpoint returned 404",
-            path: path,
-          }),
-          {
-            status: 404,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-
+      // エラーレスポンスの処理
       const errorResponse = {
-        error: `HTTP error! status: ${response.status}`,
+        error: `HTTP error! status: ${response!.status}`,
         url: url,
         path: path,
         timestamp: new Date().toISOString(),
         timezone: "Asia/Tokyo",
-        headers: requestHeaders,
-        responseStatus: response.status,
-        responseStatusText: response.statusText,
+        headers: {
+          ...requestHeaders,
+          // センシティブな情報を削除
+          "X-Forwarded-For": "***.***.***.*****",
+        },
+        responseStatus: response!.status,
+        responseStatusText: response!.statusText,
       };
 
-      // 認証エラーの場合は特別な処理
-      if (response.status === 401) {
-        return new NextResponse(JSON.stringify(errorResponse), {
-          status: 401,
-          headers: {
-            "Content-Type": "application/json",
-            "WWW-Authenticate": "Bearer",
-          },
-        });
-      }
-
       return new NextResponse(JSON.stringify(errorResponse), {
-        status: response.status,
-        headers: { "Content-Type": "application/json" },
+        status: response!.status,
+        headers: {
+          "Content-Type": "application/json",
+          ...(response!.status === 401 && { "WWW-Authenticate": "Bearer" }),
+        },
       });
     }
 
     // レスポンスの処理
-    const responseBody = await response.arrayBuffer();
+    const responseBody = await response!.arrayBuffer();
     const responseHeaders = new Headers();
-
+    
     // 必要なヘッダーのみを転送
-    responseHeaders.set(
-      "Content-Type",
-      response.headers.get("Content-Type") || "application/xml"
-    );
+    responseHeaders.set("Content-Type", response!.headers.get("Content-Type") || "application/octet-stream");
     responseHeaders.set("Access-Control-Allow-Origin", "*");
     responseHeaders.set("Access-Control-Allow-Methods", "GET, OPTIONS");
     responseHeaders.set("Access-Control-Allow-Headers", "*");
-
+    
     // Radikoの認証関連ヘッダーを転送
-    ["X-Radiko-AuthToken", "X-Radiko-KeyOffset", "X-Radiko-KeyLength"].forEach(
-      (header) => {
-        const value = response.headers.get(header);
-        if (value) responseHeaders.set(header, value);
-      }
-    );
+    ["X-Radiko-AuthToken", "X-Radiko-KeyOffset", "X-Radiko-KeyLength"].forEach(header => {
+      const value = response!.headers.get(header);
+      if (value) responseHeaders.set(header, value);
+    });
 
     return new NextResponse(responseBody, {
-      status: response.status,
+      status: 200,
       headers: responseHeaders,
     });
   } catch (error) {
