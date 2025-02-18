@@ -293,6 +293,8 @@ export default function RadikoPage() {
     setIsClient(true);
   }, []);
 
+  if (!isClient) return null;
+
   return (
     <div className="container mx-auto p-4 pb-32">
       <h1 className="text-2xl font-bold mb-4">Radiko Player</h1>
@@ -360,39 +362,37 @@ export default function RadikoPage() {
       </div>
 
       {/* クライアントサイドでのみaudioを表示 */}
-      {isClient && (
-        <div
-          className={`fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 ${
-            audioUrl ? "block" : "hidden"
-          }`}
-        >
-          <div className="container mx-auto max-w-7xl">
-            <h2 className="text-xl font-semibold mb-2">再生</h2>
-            <div className="flex flex-col gap-2">
-              <audio
-                ref={audioRef}
-                controls
-                className="w-full"
-                onEnded={handleEnded}
+      <div
+        className={`fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 ${
+          audioUrl ? "block" : "hidden"
+        }`}
+      >
+        <div className="container mx-auto max-w-7xl">
+          <h2 className="text-xl font-semibold mb-2">再生</h2>
+          <div className="flex flex-col gap-2">
+            <audio
+              ref={audioRef}
+              controls
+              className="w-full"
+              onEnded={handleEnded}
+            />
+            <div className="flex items-center gap-2">
+              <span className="text-sm">
+                再生速度: {playbackRate.toFixed(1)}x
+              </span>
+              <input
+                type="range"
+                min="0.5"
+                max="3.0"
+                step="0.1"
+                value={playbackRate}
+                onChange={handlePlaybackRateChange}
+                className="flex-grow"
               />
-              <div className="flex items-center gap-2">
-                <span className="text-sm">
-                  再生速度: {playbackRate.toFixed(1)}x
-                </span>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="3.0"
-                  step="0.1"
-                  value={playbackRate}
-                  onChange={handlePlaybackRateChange}
-                  className="flex-grow"
-                />
-              </div>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
