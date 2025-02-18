@@ -86,7 +86,7 @@ export class RadikoClient {
       }
 
       // パーシャルキーの生成
-      const AUTH_KEY = process.env.NEXT_PUBLIC_RADIKO_AUTH_KEY || "";
+      const AUTH_KEY = "bcd151073c03b352e1ef2fd66c32209da9ca0afa";
       const offset = parseInt(keyOffset, 10);
       const length = parseInt(keyLength, 10);
       const partialKey = btoa(AUTH_KEY.substring(offset, offset + length));
