@@ -66,6 +66,38 @@ function getRandomJapanIP() {
   return JAPAN_IP_POOL[Math.floor(Math.random() * JAPAN_IP_POOL.length)];
 }
 
+// クライアントIPを取得する関数
+function getClientIP(request: NextRequest): string {
+  // Vercelの場合、X-Forwarded-ForやX-Real-IPヘッダーにクライアントのIPが含まれる
+  const forwarded = request.headers.get("x-forwarded-for");
+  const realIP = request.headers.get("x-real-ip");
+  
+  // クライアントIPが取得できない場合は日本のIPをフォールバックとして使用
+  if (!forwarded && !realIP) {
+    return "133.203.1.1"; // フォールバックIP
+  }
+
+  // X-Forwarded-Forがある場合は最初のIPを使用（クライアントIP）
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+
+  return realIP || "133.203.1.1";
+}
+
+// IPが日本のものかチェックする関数
+async function isJapaneseIP(ip: string): Promise<boolean> {
+  try {
+    // IP-APIを使用して国コードを取得
+    const response = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`);
+    const data = await response.json();
+    return data.countryCode === "JP";
+  } catch (error) {
+    console.error("IP location check failed:", error);
+    return true; // エラーの場合は日本のIPとして扱う
+  }
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const path = searchParams.get("path");
@@ -76,6 +108,27 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // クライアントIPを取得
+    const clientIP = getClientIP(request);
+    
+    // 本番環境でのみIPチェックを実行
+    if (process.env.NODE_ENV === "production") {
+      const isJapanese = await isJapaneseIP(clientIP);
+      if (!isJapanese) {
+        return new NextResponse(
+          JSON.stringify({
+            error: "Access denied: Non-Japanese IP address",
+            timestamp: new Date().toISOString(),
+            timezone: "Asia/Tokyo",
+          }),
+          {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
     let url;
     if (path === "v2/area") {
       url = AREA_URL;
@@ -91,8 +144,9 @@ export async function GET(request: NextRequest) {
     const requestHeaders: CustomHeadersInit = {
       ...RADIKO_HEADERS,
       ...headers,
-      // 日本のIPアドレスを設定
-      "X-Forwarded-For": getRandomJapanIP(),
+      // クライアントIPを設定
+      "X-Forwarded-For": clientIP,
+      "X-Real-IP": clientIP,
       // Accept-Encodingを指定して圧縮形式を制御
       "Accept-Encoding": "gzip, deflate",
       // Origin と Referer を追加
