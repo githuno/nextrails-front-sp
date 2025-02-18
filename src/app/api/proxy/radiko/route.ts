@@ -31,8 +31,7 @@ type CustomHeadersInit = HeadersInit & {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const path = searchParams.get("path");
-  const authToken = searchParams.get("authToken");
-  const customHeaders = JSON.parse(searchParams.get("headers") || "{}");
+  const headers = JSON.parse(searchParams.get("headers") || "{}");
 
   if (!path) {
     return new NextResponse("Path parameter is required", { status: 400 });
@@ -47,42 +46,27 @@ export async function GET(request: NextRequest) {
     } else {
       const baseUrl = path.startsWith("v2/") ? V2_URL : V3_URL;
       const cleanPath = path.replace(/^v[23]\//, "");
-      const urlObj = new URL(cleanPath, baseUrl);
-      searchParams.forEach((value, key) => {
-        if (!["path", "authToken", "headers"].includes(key)) {
-          urlObj.searchParams.set(key, value);
-        }
-      });
-      url = urlObj.toString();
+      url = new URL(cleanPath, baseUrl).toString();
     }
 
-    const headers: CustomHeadersInit = {
+    // Radikoの認証ヘッダーを設定
+    const requestHeaders: CustomHeadersInit = {
       ...RADIKO_HEADERS,
-      ...customHeaders,
+      ...headers,
     };
-
-    if (authToken) {
-      headers["X-Radiko-AuthToken"] = authToken;
-    }
 
     // ストリーミング用のヘッダーを追加
     if (url.includes(".m3u8") || url.includes(".aac")) {
-      headers["Origin"] = "https://radiko.jp";
-      headers["Referer"] = "https://radiko.jp/";
+      requestHeaders["Origin"] = "https://radiko.jp";
+      requestHeaders["Referer"] = "https://radiko.jp/";
     }
 
-    // console.log("Making request to:", {
-    //   url,
-    //   headers: Object.fromEntries(Object.entries(headers)),
-    // });
-
     const response = await fetch(url, {
-      headers,
+      headers: requestHeaders,
       method: "GET",
       redirect: "follow",
     });
 
-    // エラーレスポンスの詳細をログ
     if (!response.ok) {
       console.error("Radiko API Error:", {
         url,
@@ -95,9 +79,8 @@ export async function GET(request: NextRequest) {
 
     const responseHeaders = new Headers();
 
-    // レスポンスヘッダーの設定を改善
+    // レスポンスヘッダーの処理
     Array.from(response.headers.entries()).forEach(([key, value]) => {
-      // 重要なヘッダーを保持
       if (
         key.toLowerCase().startsWith("x-radiko-") ||
         key.toLowerCase() === "content-type" ||
@@ -107,7 +90,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // CORSヘッダーの設定を改善
+    // CORSヘッダーの設定
     responseHeaders.set("Access-Control-Allow-Origin", "*");
     responseHeaders.set("Access-Control-Allow-Methods", "GET, OPTIONS");
     responseHeaders.set("Access-Control-Allow-Headers", "*");
@@ -116,7 +99,7 @@ export async function GET(request: NextRequest) {
       "x-radiko-authtoken, x-radiko-keyoffset, x-radiko-keylength, content-type, content-length"
     );
 
-    // Content-Typeの設定を改善
+    // Content-Typeの設定
     if (!responseHeaders.has("Content-Type")) {
       if (url.includes(".m3u8")) {
         responseHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
@@ -125,14 +108,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ストリーミング用のヘッダーを追加
+    // ストリーミング用のヘッダー
     if (url.includes(".m3u8") || url.includes(".aac")) {
       responseHeaders.set("Accept-Ranges", "bytes");
       responseHeaders.set("Connection", "keep-alive");
-      responseHeaders.set("Transfer-Encoding", "chunked");
     }
 
-    // キャッシュ制御の追加
+    // キャッシュ制御
     responseHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate");
     responseHeaders.set("Pragma", "no-cache");
     responseHeaders.set("Expires", "0");

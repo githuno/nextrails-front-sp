@@ -1,4 +1,6 @@
 const PROXY_URL = "/api/proxy/radiko";
+const AUTH_TOKEN_KEY = "radiko_auth_token";
+const AREA_ID_KEY = "radiko_area_id";
 
 // ヘッダーの型定義を修正
 type RadikoHeaders = Record<string, string> & {
@@ -13,6 +15,16 @@ type RadikoHeaders = Record<string, string> & {
 export class RadikoClient {
   private authToken: string = "";
   private areaId: string = "";
+
+  constructor() {
+    // ローカルストレージから認証情報を復元
+    if (typeof window !== "undefined") {
+      const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
+      const storedAreaId = localStorage.getItem(AREA_ID_KEY);
+      if (storedToken) this.authToken = storedToken;
+      if (storedAreaId) this.areaId = storedAreaId;
+    }
+  }
 
   private getDefaultHeaders(): RadikoHeaders {
     return {
@@ -49,6 +61,10 @@ export class RadikoClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // 認証エラーの場合は保存された認証情報をクリア
+        this.clearAuth();
+      }
       const error = await response.text();
       throw new Error(`Proxy request failed: ${error}`);
     }
@@ -83,21 +99,39 @@ export class RadikoClient {
         } as RadikoHeaders,
       });
 
-      // console.log("Authentication successful with token:", this.authToken);
+      // 認証成功時にローカルストレージに保存
+      if (typeof window !== "undefined") {
+        localStorage.setItem(AUTH_TOKEN_KEY, this.authToken);
+      }
     } catch (error) {
-      this.authToken = "";
+      this.clearAuth();
       throw error;
+    }
+  }
+
+  private clearAuth(): void {
+    this.authToken = "";
+    this.areaId = "";
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(AREA_ID_KEY);
     }
   }
 
   async init(): Promise<void> {
     try {
-      await this.authenticate();
-      this.areaId = await this.getAreaId();
+      if (!this.authToken) {
+        await this.authenticate();
+      }
+      if (!this.areaId) {
+        this.areaId = await this.getAreaId();
+        if (typeof window !== "undefined") {
+          localStorage.setItem(AREA_ID_KEY, this.areaId);
+        }
+      }
     } catch (error) {
       console.error("Initialization failed:", error);
-      this.authToken = "";
-      this.areaId = "";
+      this.clearAuth();
       throw error;
     }
   }
@@ -159,6 +193,7 @@ export class RadikoClient {
     to: string
   ): Promise<string> {
     try {
+      // 認証状態を確認し、必要に応じて再認証
       if (!this.authToken) {
         await this.authenticate();
       }
@@ -170,9 +205,19 @@ export class RadikoClient {
         l: "15",
       });
 
+      // プレイリストの取得時に完全な認証ヘッダーを含める
       const response = await this.proxyFetch(
-        `v2/api/ts/playlist.m3u8?${queryParams}`
+        `v2/api/ts/playlist.m3u8?${queryParams}`,
+        {
+          headers: {
+            "X-Radiko-AuthToken": this.authToken,
+          },
+        }
       );
+
+      if (!response.ok) {
+        throw new Error(`Failed to get playlist: ${response.status}`);
+      }
 
       const m3u8Text = await response.text();
       const masterPlaylistUrl = m3u8Text
@@ -183,13 +228,21 @@ export class RadikoClient {
         throw new Error("No playlist URL found");
       }
 
+      // プロキシURLを構築し、認証情報を含める
       const proxyUrl = new URL(PROXY_URL, window.location.origin);
       proxyUrl.searchParams.set("path", masterPlaylistUrl);
-      proxyUrl.searchParams.set("authToken", this.authToken);
+      proxyUrl.searchParams.set(
+        "headers",
+        JSON.stringify({
+          ...this.getDefaultHeaders(),
+          "X-Radiko-AuthToken": this.authToken,
+        })
+      );
 
       return proxyUrl.toString();
     } catch (error) {
       if (error instanceof Error && error.message.includes("401")) {
+        // 認証エラーの場合は再認証を試みる
         await this.authenticate();
         return this.getStreamUrl(stationId, ft, to);
       }
