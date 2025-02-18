@@ -53,13 +53,16 @@ export async function GET(request: NextRequest) {
     const requestHeaders: CustomHeadersInit = {
       ...RADIKO_HEADERS,
       ...headers,
+      // 日本の固定IPアドレスを設定（東京のIPアドレス範囲の例）
+      "X-Forwarded-For": "133.203.1.1",
+      // User-Agentを固定（一般的なブラウザとして認識されるように）
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      // Accept-Encodingを指定して圧縮形式を制御
+      "Accept-Encoding": "gzip, deflate",
+      // Origin と Referer を追加
+      "Origin": "https://radiko.jp",
+      "Referer": "https://radiko.jp/"
     };
-
-    // ストリーミング用のヘッダーを追加
-    if (url.includes(".m3u8") || url.includes(".aac")) {
-      requestHeaders["Origin"] = "https://radiko.jp";
-      requestHeaders["Referer"] = "https://radiko.jp/";
-    }
 
     const response = await fetch(url, {
       headers: requestHeaders,
@@ -67,81 +70,72 @@ export async function GET(request: NextRequest) {
       redirect: "follow",
     });
 
-    // 404エラーの場合、より詳細なエラーメッセージを返す
-    if (response.status === 404) {
-      console.error("Radiko API 404 Error:", {
-        url,
-        path,
-        headers: requestHeaders,
-      });
-      return new NextResponse(
-        JSON.stringify({
-          error: "Resource not found",
-          details: "The requested Radiko API endpoint returned 404",
-          path: path
-        }),
-        {
-          status: 404,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
+    // エラーハンドリング
     if (!response.ok) {
       console.error("Radiko API Error:", {
         url,
         status: response.status,
         statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
+        path,
+        headers: requestHeaders,
       });
+
+      if (response.status === 404) {
+        // エリア情報の取得に失敗した場合、デフォルトの東京エリアを使用
+        if (path.includes("station/list/OUT.xml")) {
+          const tokyoResponse = await fetch(url.replace("OUT.xml", "JP13.xml"), {
+            headers: requestHeaders,
+            method: "GET",
+            redirect: "follow",
+          });
+          
+          if (tokyoResponse.ok) {
+            const responseBody = await tokyoResponse.arrayBuffer();
+            const responseHeaders = new Headers();
+            // 必要なヘッダーのみを転送
+            responseHeaders.set("Content-Type", tokyoResponse.headers.get("Content-Type") || "application/xml");
+            responseHeaders.set("Access-Control-Allow-Origin", "*");
+            // Content-Encodingヘッダーは削除（自動的に解凍される）
+            return new NextResponse(responseBody, {
+              status: 200,
+              headers: responseHeaders,
+            });
+          }
+        }
+
+        return new NextResponse(
+          JSON.stringify({
+            error: "Resource not found",
+            details: "The requested Radiko API endpoint returned 404",
+            path: path,
+          }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
+    // レスポンスの処理
+    const responseBody = await response.arrayBuffer();
     const responseHeaders = new Headers();
-
-    // レスポンスヘッダーの処理
-    Array.from(response.headers.entries()).forEach(([key, value]) => {
-      if (
-        key.toLowerCase().startsWith("x-radiko-") ||
-        key.toLowerCase() === "content-type" ||
-        key.toLowerCase() === "content-length"
-      ) {
-        responseHeaders.set(key, value);
-      }
-    });
-
-    // CORSヘッダーの設定
+    
+    // 必要なヘッダーのみを転送
+    responseHeaders.set("Content-Type", response.headers.get("Content-Type") || "application/xml");
     responseHeaders.set("Access-Control-Allow-Origin", "*");
     responseHeaders.set("Access-Control-Allow-Methods", "GET, OPTIONS");
     responseHeaders.set("Access-Control-Allow-Headers", "*");
-    responseHeaders.set(
-      "Access-Control-Expose-Headers",
-      "x-radiko-authtoken, x-radiko-keyoffset, x-radiko-keylength, content-type, content-length"
-    );
+    
+    // Radikoの認証関連ヘッダーを転送
+    ["X-Radiko-AuthToken", "X-Radiko-KeyOffset", "X-Radiko-KeyLength"].forEach(header => {
+      const value = response.headers.get(header);
+      if (value) responseHeaders.set(header, value);
+    });
 
-    // Content-Typeの設定
-    if (!responseHeaders.has("Content-Type")) {
-      if (url.includes(".m3u8")) {
-        responseHeaders.set("Content-Type", "application/vnd.apple.mpegurl");
-      } else if (url.includes(".aac")) {
-        responseHeaders.set("Content-Type", "audio/aac");
-      }
-    }
-
-    // ストリーミング用のヘッダー
-    if (url.includes(".m3u8") || url.includes(".aac")) {
-      responseHeaders.set("Accept-Ranges", "bytes");
-      responseHeaders.set("Connection", "keep-alive");
-    }
-
-    // キャッシュ制御
-    responseHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate");
-    responseHeaders.set("Pragma", "no-cache");
-    responseHeaders.set("Expires", "0");
-
-    return new NextResponse(await response.arrayBuffer(), {
+    return new NextResponse(responseBody, {
       status: response.status,
       headers: responseHeaders,
     });
@@ -154,7 +148,7 @@ export async function GET(request: NextRequest) {
       JSON.stringify({
         error: errorMessage,
         timestamp: new Date().toISOString(),
-        timezone: "UTC"
+        timezone: "Asia/Tokyo"
       }),
       {
         status: status,

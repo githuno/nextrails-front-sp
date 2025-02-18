@@ -60,6 +60,8 @@ export default function RadikoPage() {
     return new Date(utc + (jstOffset * 60 * 1000));
   });
   const [selectedTab, setSelectedTab] = useState<number>(0);
+  const [error, setError] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // LocalStorageのキー
   const PLAYBACK_STATE_KEY = "radiko_playback_state";
@@ -216,11 +218,23 @@ export default function RadikoPage() {
 
   const loadPrograms = async () => {
     if (selectedStation) {
-      const programList = await client.getPrograms(
-        selectedStation,
-        selectedDate
-      );
-      setPrograms(programList);
+      setIsLoading(true);
+      setError("");
+      try {
+        const programList = await client.getPrograms(
+          selectedStation,
+          selectedDate
+        );
+        setPrograms(programList);
+        if (programList.length === 0) {
+          setError("番組情報を取得できませんでした。後ほど再度お試しください。");
+        }
+      } catch (err) {
+        console.error("Program loading error:", err);
+        setError("番組情報の取得中にエラーが発生しました。");
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -306,6 +320,12 @@ export default function RadikoPage() {
     <div className="container mx-auto p-4 pb-32">
       <h1 className="text-2xl font-bold mb-4">Radiko Player</h1>
 
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <h2 className="text-xl font-semibold mb-2">放送局</h2>
@@ -351,21 +371,33 @@ export default function RadikoPage() {
             ))}
           </div>
 
-          <div className="space-y-2 max-h-[600px] overflow-y-auto">
-            {programs.map((program, index) => (
-              <button
-                key={index}
-                onClick={() => handleProgramSelect(program)}
-                className="w-full p-2 text-left border rounded hover:bg-gray-100"
-              >
-                {program.title}
-                <div className="text-sm text-gray-600">
-                  {formatRadikoTime(program.startTime)} -
-                  {formatRadikoTime(program.endTime)}
+          {isLoading ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {programs.length > 0 ? (
+                programs.map((program, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleProgramSelect(program)}
+                    className="w-full p-2 text-left border rounded hover:bg-gray-100"
+                  >
+                    {program.title}
+                    <div className="text-sm text-gray-600">
+                      {formatRadikoTime(program.startTime)} -
+                      {formatRadikoTime(program.endTime)}
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  {error || "番組情報がありません"}
                 </div>
-              </button>
-            ))}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

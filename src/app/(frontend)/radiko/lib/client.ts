@@ -68,22 +68,43 @@ export class RadikoClient {
 
     url.searchParams.set("headers", JSON.stringify(headers));
 
-    const response = await fetch(url.toString(), {
-      ...options,
-      headers: undefined,
-      credentials: "include",
-    });
+    try {
+      const response = await fetch(url.toString(), {
+        ...options,
+        headers: undefined,
+        credentials: "include",
+      });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        // 認証エラーの場合は保存された認証情報をクリア
-        this.clearAuth();
+      if (!response.ok) {
+        if (response.status === 401) {
+          // 認証エラーの場合は保存された認証情報をクリア
+          this.clearAuth();
+          // 再認証を試みる
+          await this.authenticate();
+          // リクエストを再試行
+          return this.proxyFetch(path, options);
+        }
+
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const error = await response.json();
+          throw new Error(JSON.stringify(error));
+        } else {
+          const error = await response.text();
+          throw new Error(`Proxy request failed: ${error}`);
+        }
       }
-      const error = await response.text();
-      throw new Error(`Proxy request failed: ${error}`);
-    }
 
-    return response;
+      return response;
+    } catch (error) {
+      console.error("Proxy fetch error:", error);
+      if (error instanceof Error && error.message.includes("Failed to fetch")) {
+        // ネットワークエラーの場合は少し待ってから再試行
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return this.proxyFetch(path, options);
+      }
+      throw error;
+    }
   }
 
   private async authenticate(): Promise<void> {
@@ -151,10 +172,21 @@ export class RadikoClient {
   }
 
   private async getAreaId(): Promise<string> {
-    const response = await this.proxyFetch("v2/area");
-    const text = await response.text();
-    const match = text.match(/"(.*?)"/);
-    return match ? match[1] : "JP13"; // デフォルトは東京
+    try {
+      const response = await this.proxyFetch("v2/area");
+      const text = await response.text();
+      const match = text.match(/"(.*?)"/);
+      const areaId = match ? match[1] : "";
+      
+      // OUT（国外）や空の場合は東京のエリアIDを使用
+      if (!areaId || areaId === "OUT") {
+        return "JP13"; // 東京
+      }
+      return areaId;
+    } catch (error) {
+      console.warn("Error getting area ID, defaulting to Tokyo:", error);
+      return "JP13"; // エラー時も東京をデフォルトとする
+    }
   }
 
   // 認証トークンを取得するメソッドを追加
@@ -163,40 +195,68 @@ export class RadikoClient {
   }
 
   async getStations() {
-    if (!this.areaId) await this.init();
-    const response = await this.proxyFetch(
-      `v3/station/list/${this.areaId}.xml`
-    );
-    const text = await response.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, "text/xml");
+    try {
+      if (!this.areaId) await this.init();
+      // エリアIDが不正な場合は東京に設定
+      if (this.areaId === "OUT" || !this.areaId) {
+        this.areaId = "JP13";
+      }
+      
+      const response = await this.proxyFetch(
+        `v3/station/list/${this.areaId}.xml`
+      );
+      const text = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "text/xml");
 
-    return Array.from(doc.querySelectorAll("station")).map((station) => ({
-      id: station.querySelector("id")?.textContent || "",
-      name: station.querySelector("name")?.textContent || "",
-      url: station.querySelector("href")?.textContent || "",
-    }));
+      return Array.from(doc.querySelectorAll("station")).map((station) => ({
+        id: station.querySelector("id")?.textContent || "",
+        name: station.querySelector("name")?.textContent || "",
+        url: station.querySelector("href")?.textContent || "",
+      }));
+    } catch (error) {
+      console.error("Failed to get stations:", error);
+      // エラー時は空の配列を返す
+      return [];
+    }
   }
 
   async getPrograms(stationId: string, date: Date) {
-    if (!this.authToken) await this.init();
-    
-    // 日付文字列をJSTベースで生成
-    const dateStr = formatJSTDate(date);
+    try {
+      if (!this.authToken) await this.init();
+      
+      // 日付文字列をJSTベースで生成
+      const dateStr = formatJSTDate(date);
 
-    const response = await this.proxyFetch(
-      `v3/program/station/date/${dateStr}/${stationId}.xml`
-    );
-    const text = await response.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, "text/xml");
+      const response = await this.proxyFetch(
+        `v3/program/station/date/${dateStr}/${stationId}.xml`
+      );
 
-    return Array.from(doc.querySelectorAll("prog")).map((prog) => ({
-      title: prog.querySelector("title")?.textContent || "",
-      startTime: prog.getAttribute("ft") || "",
-      endTime: prog.getAttribute("to") || "",
-      url: prog.querySelector("url")?.textContent || "",
-    }));
+      const text = await response.text();
+      if (!text || text.trim() === "") {
+        throw new Error("Empty response from server");
+      }
+
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "text/xml");
+
+      // XMLパースエラーのチェック
+      const parseError = doc.querySelector("parsererror");
+      if (parseError) {
+        throw new Error("Failed to parse XML response");
+      }
+
+      return Array.from(doc.querySelectorAll("prog")).map((prog) => ({
+        title: prog.querySelector("title")?.textContent || "",
+        startTime: prog.getAttribute("ft") || "",
+        endTime: prog.getAttribute("to") || "",
+        url: prog.querySelector("url")?.textContent || "",
+      }));
+    } catch (error) {
+      console.error("Failed to get programs:", error);
+      // エラー発生時は空の配列を返す
+      return [];
+    }
   }
 
   async getStreamUrl(
