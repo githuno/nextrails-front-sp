@@ -1,121 +1,109 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Carousel, CarouselItem } from "@/components";
+import React, { useEffect, useState } from "react";
+import { Carousel, CarouselItem } from "@/components/atoms";
 import {
   useImageset,
-  type File,
-  Imageset,
   ImagesetState,
 } from "@/components/camera";
-import { useIdb, LoadingSpinner } from "@/components/camera/_utils";
-import { useCloud } from "./hooks/useCloud";
+import { LoadingSpinner } from "@/components/camera/_utils";
 import { LinesIcon } from "@/components/Icons";
 import Image from "next/image";
-import { useSession } from "@/app/layout";
+import { useSyncLatests } from "./hooks/useSyncLatests";
 
 const DrawerImagesets = () => {
-  const { session } = useSession();
-  const { dbName, imageset, setImageset } = useImageset();
-  const { idb } = useIdb<File>(dbName);
-  const { cloudState, cloudGetImagesets, cloudGetFiles, checkUpdatedAt } =
-    useCloud();
+  const { imageset, setImageset } = useImageset();
+  const { isLoading, syncPullLatests, latestImagesets } = useSyncLatests();
 
-  const [latestImagesets, setLatestImagesets] = useState<Imageset[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  // const pullLatests = useCallback(async (): Promise<
+  //   { storeName: string; files: File[] }[]
+  // > => {
+  //   try {
+  //     // cloudから最新のimageSetsを取得（※ここでidbId, blob, fetcedAtもセット済み）
+  //     const cloudLatestSets: Imageset[] = await syncPullLatests({
+  //       params: `updatedAt=latest`,
+  //       excludeSetName: imageset.name,
+  //     });
 
-  const pullLatests = useCallback(async (): Promise<
-    { storeName: string; files: File[] }[]
-  > => {
-    try {
-      // cloudから最新のimageSetsを取得（※ここでidbId, blob, fetcedAtもセット済み）
-      const cloudLatestSets: Imageset[] = await cloudGetImagesets({
-        params: `updatedAt=latest`,
-        excludeSetName: imageset.name,
-      });
+  //     return cloudLatestSets
+  //       .filter((set) => set.name !== imageset.name && set.files.length > 0)
+  //       .map((set) => ({
+  //         storeName: set.name,
+  //         files: set.files,
+  //       }));
+  //   } catch (error) {
+  //     console.error("Error updating media:", error);
+  //     return [];
+  //   }
+  // }, [syncPullLatests, imageset.name]);
 
-      return cloudLatestSets
-        .filter((set) => set.name !== imageset.name && set.files.length > 0)
-        .map((set) => ({
-          storeName: set.name,
-          files: set.files,
-        }));
-    } catch (error) {
-      console.error("Error updating media:", error);
-      return [];
-    }
-  }, [cloudGetImagesets, imageset.name]);
-
-  const getLatestImagesets = useCallback(
-    async ({ isOnline }: { isOnline: boolean | null }) => {
-      console.log("⚡️ getLatestImagesets", isOnline);
-      interface SyncSetType {
-        storeName: string;
-        files: File[];
-      }
-      try {
-        let forSyncSets: SyncSetType[] = [];
-        setIsLoading(true);
-        // 1. オンラインの場合、クラウドのimageSetsを取得
-        if (isOnline && session ) {
-          forSyncSets = await pullLatests();
-        }
-        // 2. 同期
-        const syncedSets: SyncSetType[] = await idb.syncLatests({
-          dateKey: "updatedAt",
-          set: forSyncSets,
-        });
-        // 3. Imageset型に更新して更新日降順で並び替え
-        const updatedSets: Imageset[] = syncedSets.map((set) => ({
-          id: set.files[0] ? set.files[0].updatedAt : 0, // 仮のセットID
-          name: set.storeName,
-          status: ImagesetState.DRAFT,
-          files: set.files,
-        }));
-        // 4. idの降順で並び替え
-        updatedSets.sort((a, b) => b.id - a.id);
-        setLatestImagesets(updatedSets);
-        setIsLoading(false);
-        // -----------------------------------------------------------------------
-        // 特別. 非同期で各storeのcloudfilesをidbに同期しておく
-        const syncPromises = latestImagesets
-          .filter((set) => set.name !== imageset.name)
-          .map(async (store) => {
-            let params = "deletedAt_null=true&updatedAt_sort=desc";
-            const idbFiles = await idb.get(store.name, {
-              date: { key: "updatedAt", order: "desc" },
-            });
-            // INFO: lengthが1なら今回取得した最新ファイルのため削除されていないファイルを全取得すればよい
-            // INFO: lengthが2以上ならIDBにもともと存在するファイルであり、クラウド上は削除されている可能性があるため"deletedAt_null=true"は使えない
-            if (Array.isArray(idbFiles) && idbFiles.length > 1) {
-              params = `updatedAt_over=${checkUpdatedAt(
-                idbFiles
-              )}&updatedAt_sort=desc`;
-            }
-            try {
-              const cloudfiles = await cloudGetFiles(store.name, {
-                params: params,
-              });
-              await idb.sync(store.name, cloudfiles);
-            } catch (error) {
-              console.error(
-                `Error syncing store ${store} with cloud files:`,
-                error
-              );
-            }
-          });
-        await Promise.all(syncPromises);
-      } catch (error) {
-        console.error("Error updating media:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [idb, setLatestImagesets, imageset.name]
-  );
+  // const getLatestImagesets = useCallback(async () => {
+  //   interface SyncSetType {
+  //     storeName: string;
+  //     files: File[];
+  //   }
+  //   try {
+  //     let forSyncSets: SyncSetType[] = [];
+  //     setIsLoading(true);
+  //     // 1. オンラインの場合、クラウドのimageSetsを取得
+  //     const cloudLatests = await syncPullLatests();
+  //     forSyncSets;
+  //     // 2. 同期
+  //     const syncedSets: SyncSetType[] = await idb.syncLatests({
+  //       dateKey: "updatedAt",
+  //       set: forSyncSets,
+  //     });
+  //     // 3. Imageset型に更新して更新日降順で並び替え
+  //     const updatedSets: Imageset[] = syncedSets.map((set) => ({
+  //       id: set.files[0] ? BigInt(set.files[0].updatedAt) : BigInt(0), // 仮のセットID
+  //       name: set.storeName,
+  //       status: ImagesetState.DRAFT,
+  //       files: set.files,
+  //     }));
+  //     // 4. idの降順で並び替え
+  //     updatedSets.sort((a, b) => Number(b.id) - Number(a.id));
+  //     setLatestImagesets(updatedSets);
+  //     setIsLoading(false);
+  //     // -----------------------------------------------------------------------
+  //     // 特別. 非同期で各storeのcloudfilesをidbに同期しておく
+  //     const syncPromises = latestImagesets
+  //       .filter((set) => set.name !== imageset.name)
+  //       .map(async (store) => {
+  //         let params = "deletedAt_null=true&updatedAt_sort=desc";
+  //         const idbFiles = await idb.get(store.name, {
+  //           date: { key: "updatedAt", order: "desc" },
+  //         });
+  //         // INFO: lengthが1なら今回取得した最新ファイルのため削除されていないファイルを全取得すればよい
+  //         // INFO: lengthが2以上ならIDBにもともと存在するファイルであり、クラウド上は削除されている可能性があるため"deletedAt_null=true"は使えない
+  //         if (Array.isArray(idbFiles) && idbFiles.length > 1) {
+  //           params = `updatedAt_over=${checkUpdatedAt(
+  //             idbFiles
+  //           )}&updatedAt_sort=desc`;
+  //         }
+  //         try {
+  //           const cloudfiles = await syncPullLatests({
+  //             params,
+  //             excludeSetName: store.name,
+  //           });
+  //           const files = cloudfiles.flatMap((set) => set.files as File[]);
+  //           await idb.sync(store.name, files);
+  //         } catch (error) {
+  //           console.error(
+  //             `Error syncing store ${store} with cloud files:`,
+  //             error
+  //           );
+  //         }
+  //       });
+  //     await Promise.all(syncPromises);
+  //   } catch (error) {
+  //     console.error("Error updating media:", error);
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // }, [idb, setLatestImagesets, imageset.name]);
 
   const handleCarouselItemClick = (name: string) => {
     if (name !== imageset.name) {
       setImageset({
-        id: Date.now(),
+        id: BigInt(Date.now()),
         name: name,
         status: ImagesetState.DRAFT,
         files: [],
@@ -138,17 +126,17 @@ const DrawerImagesets = () => {
       // 実行前に1秒待つ
       timeoutId = await new Promise((resolve) => setTimeout(resolve, 1000));
       if (requireCloudState) {
-        getLatestImagesets({ isOnline: cloudState.isOnline });
+        syncPullLatests();
         setRequireCloudState(false);
       } else {
-        getLatestImagesets({ isOnline: false });
+        syncPullLatests();
       }
     };
     fetchLatests();
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [cloudState.isOnline, imageset.files]);
+  }, [imageset.files]);
 
   return (
     // ドロワー

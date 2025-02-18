@@ -1,11 +1,9 @@
 import React, { createContext, useEffect, useState } from "react";
-import { CameraContextProvider, IdbFile, useCamera } from "./_utils";
+import { IdbFile, useStorage } from "@/components/storage";
+import { CameraContextProvider, useCamera } from "./_utils";
 import { Preview } from "./preview";
 import { Controller } from "./controls";
 import { Showcase } from "./showcase";
-import { useSession } from "@/app/layout";
-
-import { CloudProvider } from "./showcase/hooks/useCloud";
 
 // ----------------------------------------------------------------------------- ImagesetType
 interface File extends IdbFile {
@@ -37,7 +35,7 @@ enum ImagesetState { // TODO: enumは書き換える必要ありそう：https:/
 }
 
 interface Imageset {
-  id: number;
+  id: bigint;
   name: string;
   status: ImagesetState;
   files: File[];
@@ -56,15 +54,30 @@ const ImagesetContext = createContext<ImagesetContextProps | undefined>(
 const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { session } = useSession();
+  const { dbName } = useStorage();
   // 以下の値変更は子孫の再レンダリングを伴う
-  const dbName = `user-${session ? session.user.id : "0"}`;
   const [imageset, setImageset] = useState<Imageset>({
-    id: Date.now(),
+    id: BigInt(Date.now()),
     name: "1",
     status: ImagesetState.DRAFT,
     files: [],
   });
+
+  // 前回のdbNameを保持するためのref
+  const prevDbNameRef = React.useRef(dbName);
+
+  // dbNameが異なる値に変更されたときだけ、imagesetを初期化する
+  useEffect(() => {
+    if (dbName && dbName !== prevDbNameRef.current) {
+      setImageset({
+        id: BigInt(Date.now()),
+        name: "1",
+        status: ImagesetState.DRAFT,
+        files: [],
+      });
+      prevDbNameRef.current = dbName;
+    }
+  }, [dbName]);
 
   return (
     <ImagesetContext.Provider value={{ dbName, imageset, setImageset }}>
@@ -147,9 +160,7 @@ const ImagesetContent: React.FC = () => {
         </div>
       )}
       <div className="fixed top-1 left-0 w-full p-2">
-        <CloudProvider>
-          <Showcase />
-        </CloudProvider>
+        <Showcase />
       </div>
     </>
   );
@@ -157,11 +168,11 @@ const ImagesetContent: React.FC = () => {
 
 // ----------------------------------------------------------------------------- Camera
 const Camera: React.FC = () => (
-  <CameraContextProvider>
-    <ImagesetContextProvider>
-      <ImagesetContent />
-    </ImagesetContextProvider>
-  </CameraContextProvider>
+    <CameraContextProvider>
+      <ImagesetContextProvider>
+        <ImagesetContent />
+      </ImagesetContextProvider>
+    </CameraContextProvider>
 );
 export default Camera;
 

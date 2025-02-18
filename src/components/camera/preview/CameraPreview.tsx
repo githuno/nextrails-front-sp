@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { useModal } from "@/components";
+import { useModal } from "@/components/atoms";
 import { useImageset } from "@/components/camera";
 import { useCamera, LoadingSpinner } from "@/components/camera/_utils";
 
