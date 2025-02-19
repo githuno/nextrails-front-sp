@@ -1,5 +1,5 @@
 const PROXY_URL = "/api/proxy/radiko";
-const AUTH_KEY = "bcd151073c03b352e1ef2fd66c32209da9ca0afa";
+const AUTH_KEY = process.env.NEXT_PUBLIC_RADIKO_AUTH_KEY || "";
 
 const formatJSTDate = (date: Date): string => {
   const jstDate = new Date(

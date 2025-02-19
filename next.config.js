@@ -1,11 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-  experimental: {
-    serverActions: true,
-    runtime: "edge",
-    regions: ["hnd1"],
-  },
   headers: async () => [
     {
       source: "/api/proxy/radiko/:path*",
