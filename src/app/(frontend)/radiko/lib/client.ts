@@ -36,33 +36,47 @@ export class RadikoClient {
         "X-Radiko-App-Version": "0.0.1",
         "X-Radiko-User": "dummy_user",
         "X-Radiko-Device": "pc",
+        // 追加のヘッダー
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+        Accept: "*/*",
+        Origin: "https://radiko.jp",
+        Referer: "https://radiko.jp/",
       };
 
+      // 認証1
       const auth1Response = await this.proxyFetch("v2/api/auth1", {
         headers: auth1Headers,
       });
+      if (!auth1Response.ok) {
+        throw new Error(`Auth1 failed: ${auth1Response.status}`);
+      }
 
       // JSONとして認証情報を取得
       const authInfo = await auth1Response.json();
-
       const authToken = authInfo.authtoken;
-      const keyOffset = authInfo.keyoffset;
-      const keyLength = authInfo.keylength;
 
-      if (!authToken || !keyOffset || !keyLength) {
-        throw new Error("Authentication failed: Missing auth1 headers");
-      }
+      const keyOffset = parseInt(authInfo.keyoffset);
+      const keyLength = parseInt(authInfo.keylength);
+      // const keyOffset = authInfo.keyoffset;
+      // const keyLength = authInfo.keylength;
+      // if (!authToken || !keyOffset || !keyLength) {
+      //   throw new Error("Authentication failed: Missing auth1 headers");
+      // }
 
-      const offset = parseInt(keyOffset);
-      const length = parseInt(keyLength);
-      const partialKey = btoa(AUTH_KEY.substring(offset, offset + length));
+      // partialKeyの生成を修正
+      const partialKey = window.btoa(
+        AUTH_KEY.slice(keyOffset, keyOffset + keyLength)
+      );
+      // const offset = parseInt(keyOffset);
+      // const length = parseInt(keyLength);
+      // const partialKey = btoa(AUTH_KEY.substring(offset, offset + length));
 
+      // 認証2
       const auth2Headers = {
         ...auth1Headers,
         "X-Radiko-AuthToken": authToken,
         "X-Radiko-Partialkey": partialKey,
       };
-
       const auth2Response = await this.proxyFetch("v2/api/auth2", {
         headers: auth2Headers,
       });
@@ -113,14 +127,14 @@ export class RadikoClient {
   ): Promise<Response> {
     const url = new URL(PROXY_URL);
     url.searchParams.set("path", path);
-  
+
     const headers = {
       ...this.getDefaultHeaders(),
       ...(options.headers || {}),
     };
-  
+
     url.searchParams.set("headers", JSON.stringify(headers));
-  
+
     try {
       const response = await fetch(url.toString(), {
         ...options,
@@ -128,7 +142,7 @@ export class RadikoClient {
         credentials: "include",
         cache: "no-store",
       });
-  
+
       // エラー処理
       if (!response.ok) {
         if (response.status === 401 && this.retryCount < this.maxRetries) {
@@ -139,13 +153,15 @@ export class RadikoClient {
         }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-  
+
       this.retryCount = 0;
       return response;
     } catch (error) {
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
-        await new Promise((resolve) => setTimeout(resolve, 1000 * this.retryCount));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000 * this.retryCount)
+        );
         return this.proxyFetch(path, options);
       }
       throw error;
@@ -227,53 +243,56 @@ export class RadikoClient {
     ft: string,
     to: string,
     clientIP: string,
-    startPosition?: number  // 追加
-  ): Promise<{ url: string; offset: number }> {  // 戻り値の型を変更
+    startPosition?: number // 追加
+  ): Promise<{ url: string; offset: number }> {
     try {
       if (!this.authToken) {
         await this.init();
       }
-  
+
       const queryParams = new URLSearchParams({
         station_id: stationId,
         ft: ft,
         to: to,
         l: "15",
       });
-  
+
       const response = await this.proxyFetch(
         `v2/api/ts/playlist.m3u8?${queryParams}`,
         {
-          headers: { 
+          headers: {
             ...this.getDefaultHeaders(),
-            "X-Client-IP": clientIP 
+            "X-Client-IP": clientIP,
           },
         }
       );
-  
+
       const m3u8Text = await response.text();
       const masterPlaylistUrl = m3u8Text
         .split("\n")
         .find((line) => line.trim() && !line.startsWith("#"));
-  
+
       if (!masterPlaylistUrl) {
         throw new Error("No playlist URL found");
       }
-  
+
       // チャンクリストURLもプロキシ経由でアクセス
       const proxyUrl = new URL(PROXY_URL);
       proxyUrl.searchParams.set("path", masterPlaylistUrl);
-      proxyUrl.searchParams.set("headers", JSON.stringify({
-        ...this.getDefaultHeaders(),
-        "X-Client-IP": clientIP
-      }));
-  
+      proxyUrl.searchParams.set(
+        "headers",
+        JSON.stringify({
+          ...this.getDefaultHeaders(),
+          "X-Client-IP": clientIP,
+        })
+      );
+
       // 開始時刻からのオフセットを計算
       const offset = startPosition || 0;
 
       return {
         url: proxyUrl.toString(),
-        offset
+        offset,
       };
     } catch (error) {
       console.error("Stream URL error:", error);
