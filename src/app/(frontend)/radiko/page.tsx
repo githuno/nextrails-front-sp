@@ -3,6 +3,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { RadikoClient } from "./lib/client";
 import Hls from "hls.js";
 
+const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
+
 interface Station {
   id: string;
   name: string;
@@ -45,6 +47,12 @@ const formatRadikoTime = (timeStr: string): string => {
     hour12: false,
     timeZone: "Asia/Tokyo",
   }).format(jstDate);
+};
+
+const getClientIP = async (): Promise<string> => {
+  const response = await fetch("https://api64.ipify.org?format=json");
+  const data = await response.json();
+  return data.ip;
 };
 
 export default function RadikoPage() {
@@ -91,40 +99,39 @@ export default function RadikoPage() {
   const setupHls = useCallback(
     async (url: string, initialTime?: number) => {
       if (!audioRef.current) return null;
-
+  
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
-
+  
+      const clientIP = await getClientIP();
+  
       const hls = new Hls({
         enableWorker: true,
         debug: false,
-        manifestLoadingTimeOut: 10000,
-        manifestLoadingMaxRetry: 2,
-        xhrSetup: (xhr, url) => {
-          if (url.includes(".m3u8") || url.includes(".aac")) {
-            const proxyUrl = new URL(
-              "/api/proxy/radiko",
-              window.location.origin
-            );
-            proxyUrl.searchParams.set("path", url);
-            proxyUrl.searchParams.set("authToken", client.getAuthToken());
-            xhr.open("GET", proxyUrl.toString(), true);
-          }
+        xhrSetup: (xhr, requestUrl) => {
+          // すべてのHLSリクエストをプロキシ経由に変更
+          const proxyUrl = new URL(PROXY_URL);
+          proxyUrl.searchParams.set("path", requestUrl);
+          proxyUrl.searchParams.set("headers", JSON.stringify({
+            "X-Radiko-AuthToken": client.getAuthToken(),
+            "X-Client-IP": clientIP
+          }));
+          xhr.open('GET', proxyUrl.toString(), true);
         },
       });
-
+  
       return new Promise<Hls>((resolve, reject) => {
         hls.attachMedia(audioRef.current!);
-
+  
         const onError = (_: any, data: { fatal: boolean }) => {
           if (data.fatal) {
             hls.destroy();
             reject(new Error("HLS setup failed"));
           }
         };
-
+  
         hls.on(Hls.Events.ERROR, onError);
         hls.on(Hls.Events.MEDIA_ATTACHED, () => {
           hls.loadSource(url);
@@ -174,10 +181,12 @@ export default function RadikoPage() {
       setPlaybackRate(state.playbackRate);
 
       await client.init();
+      const clientIP = await getClientIP();
       const streamUrl = await client.getStreamUrl(
         state.stationId,
         state.programStartTime,
-        state.programEndTime
+        state.programEndTime,
+        clientIP
       );
 
       const hls = await setupHls(streamUrl, state.currentTime);
@@ -265,8 +274,14 @@ export default function RadikoPage() {
         if (!selectedStation || !audioRef.current) return;
 
         setError("");
+        const clientIP = await getClientIP();
         const streamUrl = await client
-          .getStreamUrl(selectedStation, program.startTime, program.endTime)
+          .getStreamUrl(
+            selectedStation,
+            program.startTime,
+            program.endTime,
+            clientIP
+          )
           .catch((error) => {
             console.error("Stream URL error:", error);
             setError("ストリームURLの取得に失敗しました。");

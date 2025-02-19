@@ -1,4 +1,4 @@
-const PROXY_URL = "/api/proxy/radiko";
+const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
 const AUTH_KEY = process.env.NEXT_PUBLIC_RADIKO_AUTH_KEY || "";
 
 const formatJSTDate = (date: Date): string => {
@@ -29,7 +29,6 @@ export class RadikoClient {
 
   private async authenticate(): Promise<void> {
     try {
-      // Rustの実装を参考に、auth1とauth2を一連のトランザクションとして扱う
       const auth1Headers = {
         "X-Radiko-App": "pc_html5",
         "X-Radiko-App-Version": "0.0.1",
@@ -37,26 +36,25 @@ export class RadikoClient {
         "X-Radiko-Device": "pc",
       };
 
-      // auth1: 認証トークンと鍵情報の取得
       const auth1Response = await this.proxyFetch("v2/api/auth1", {
         headers: auth1Headers,
       });
 
-      const authToken = auth1Response.headers.get("x-radiko-authtoken");
-      const keyOffset = auth1Response.headers.get("x-radiko-keyoffset");
-      const keyLength = auth1Response.headers.get("x-radiko-keylength");
+      // JSONとして認証情報を取得
+      const authInfo = await auth1Response.json();
+
+      const authToken = authInfo.authtoken;
+      const keyOffset = authInfo.keyoffset;
+      const keyLength = authInfo.keylength;
 
       if (!authToken || !keyOffset || !keyLength) {
         throw new Error("Authentication failed: Missing auth1 headers");
       }
 
-      // パーシャルキーの生成（Rustの実装と同じロジック）
       const offset = parseInt(keyOffset);
       const length = parseInt(keyLength);
       const partialKey = btoa(AUTH_KEY.substring(offset, offset + length));
 
-      // auth2: パーシャルキーを使用した認証
-      // auth1で取得したトークンと生成したパーシャルキーを使用
       const auth2Headers = {
         ...auth1Headers,
         "X-Radiko-AuthToken": authToken,
@@ -72,13 +70,9 @@ export class RadikoClient {
         throw new Error("Authentication failed at auth2");
       }
 
-      // 認証成功時のみトークンを設定
       this.authToken = authToken;
-
-      // エリア情報も取得（Rustの実装と同様）
       await this.fetchAreaId();
     } catch (error) {
-      // エラー時は認証情報をクリア
       this.authToken = "";
       this.areaId = "";
       throw error;
@@ -89,10 +83,10 @@ export class RadikoClient {
     try {
       const response = await this.proxyFetch("v2/api/auth2");
       const areaId = response.headers.get("x-radiko-areaid");
-      this.areaId = areaId || "JP13"; // デフォルトは東京
+      this.areaId = areaId || "JP13";
     } catch (error) {
       console.error("Failed to fetch area ID:", error);
-      this.areaId = "JP13"; // エラー時は東京をデフォルトとする
+      this.areaId = "JP13";
     }
   }
 
@@ -111,34 +105,29 @@ export class RadikoClient {
     return headers;
   }
 
-  // リクエスト共通処理の改善
   private async proxyFetch(
     path: string,
     options: RequestInit = {}
   ): Promise<Response> {
-    const url = new URL(PROXY_URL, window.location.origin);
+    const url = new URL(PROXY_URL);
     url.searchParams.set("path", path);
-
-    // Rustの実装を参考にヘッダーを設定
+  
     const headers = {
-      ...(options.headers || this.getDefaultHeaders()),
-      Accept: "*/*",
-      "Accept-Language": "ja",
-      Connection: "keep-alive",
-      // クライアントIPを明示的に要求
-      "x-forwarded-for": "true"
+      ...this.getDefaultHeaders(),
+      ...(options.headers || {}),
     };
-
+  
     url.searchParams.set("headers", JSON.stringify(headers));
-
+  
     try {
       const response = await fetch(url.toString(), {
         ...options,
         headers: undefined,
-        credentials: "same-origin",
+        credentials: "include",
         cache: "no-store",
       });
-
+  
+      // エラー処理
       if (!response.ok) {
         if (response.status === 401 && this.retryCount < this.maxRetries) {
           this.retryCount++;
@@ -148,15 +137,13 @@ export class RadikoClient {
         }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
+  
       this.retryCount = 0;
       return response;
     } catch (error) {
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
-        await new Promise((resolve) =>
-          setTimeout(resolve, 1000 * this.retryCount)
-        );
+        await new Promise((resolve) => setTimeout(resolve, 1000 * this.retryCount));
         return this.proxyFetch(path, options);
       }
       throw error;
@@ -176,7 +163,6 @@ export class RadikoClient {
   async getStations() {
     try {
       if (!this.areaId) await this.init();
-      // エリアIDが不正な場合は東京に設定
       if (this.areaId === "OUT" || !this.areaId) {
         this.areaId = "JP13";
       }
@@ -195,7 +181,6 @@ export class RadikoClient {
       }));
     } catch (error) {
       console.error("Failed to get stations:", error);
-      // エラー時は空の配列を返す
       return [];
     }
   }
@@ -204,7 +189,6 @@ export class RadikoClient {
     try {
       if (!this.authToken) await this.init();
 
-      // 日付文字列をJSTベースで生成
       const dateStr = formatJSTDate(date);
 
       const response = await this.proxyFetch(
@@ -219,7 +203,6 @@ export class RadikoClient {
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, "text/xml");
 
-      // XMLパースエラーのチェック
       const parseError = doc.querySelector("parsererror");
       if (parseError) {
         throw new Error("Failed to parse XML response");
@@ -233,7 +216,6 @@ export class RadikoClient {
       }));
     } catch (error) {
       console.error("Failed to get programs:", error);
-      // エラー発生時は空の配列を返す
       return [];
     }
   }
@@ -241,40 +223,48 @@ export class RadikoClient {
   async getStreamUrl(
     stationId: string,
     ft: string,
-    to: string
+    to: string,
+    clientIP: string
   ): Promise<string> {
     try {
       if (!this.authToken) {
         await this.init();
       }
-
+  
       const queryParams = new URLSearchParams({
         station_id: stationId,
-        ft: ft, // そのまま使用（すでにJST形式）
-        to: to, // そのまま使用（すでにJST形式）
+        ft: ft,
+        to: to,
         l: "15",
       });
-
+  
       const response = await this.proxyFetch(
-        `v2/api/ts/playlist.m3u8?${queryParams}`
+        `v2/api/ts/playlist.m3u8?${queryParams}`,
+        {
+          headers: { 
+            ...this.getDefaultHeaders(),
+            "X-Client-IP": clientIP 
+          },
+        }
       );
-
+  
       const m3u8Text = await response.text();
       const masterPlaylistUrl = m3u8Text
         .split("\n")
         .find((line) => line.trim() && !line.startsWith("#"));
-
+  
       if (!masterPlaylistUrl) {
         throw new Error("No playlist URL found");
       }
-
-      const proxyUrl = new URL(PROXY_URL, window.location.origin);
+  
+      // チャンクリストURLもプロキシ経由でアクセス
+      const proxyUrl = new URL(PROXY_URL);
       proxyUrl.searchParams.set("path", masterPlaylistUrl);
-      proxyUrl.searchParams.set(
-        "headers",
-        JSON.stringify(this.getDefaultHeaders())
-      );
-
+      proxyUrl.searchParams.set("headers", JSON.stringify({
+        ...this.getDefaultHeaders(),
+        "X-Client-IP": clientIP
+      }));
+  
       return proxyUrl.toString();
     } catch (error) {
       console.error("Stream URL error:", error);
