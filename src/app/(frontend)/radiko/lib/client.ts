@@ -2,14 +2,10 @@ const PROXY_URL = "/api/proxy/radiko";
 const AUTH_TOKEN_KEY = "radiko_auth_token";
 const AREA_ID_KEY = "radiko_area_id";
 
-// JST日付操作のためのヘルパー関数を修正
-const getJSTDate = (date: Date = new Date()): Date => {
-  const jstDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-  return jstDate;
-};
-
 const formatJSTDate = (date: Date): string => {
-  const jstDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+  const jstDate = new Date(
+    date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" })
+  );
   return (
     jstDate.getFullYear().toString() +
     String(jstDate.getMonth() + 1).padStart(2, "0") +
@@ -17,74 +13,25 @@ const formatJSTDate = (date: Date): string => {
   );
 };
 
-// JST日付操作のためのヘルパー関数を追加
-const getJSTTime = (date: Date = new Date()): string => {
-  const jstDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-  return (
-    jstDate.getFullYear().toString() +
-    String(jstDate.getMonth() + 1).padStart(2, "0") +
-    String(jstDate.getDate()).padStart(2, "0") +
-    String(jstDate.getHours()).padStart(2, "0") +
-    String(jstDate.getMinutes()).padStart(2, "0") +
-    "00"
-  );
-};
-
-const parseRadikoTime = (timeStr: string): Date => {
-  const year = parseInt(timeStr.substring(0, 4));
-  const month = parseInt(timeStr.substring(4, 6)) - 1;
-  const day = parseInt(timeStr.substring(6, 8));
-  const hour = parseInt(timeStr.substring(8, 10));
-  const minute = parseInt(timeStr.substring(10, 12));
-  
-  const date = new Date(Date.UTC(year, month, day, hour - 9, minute));
-  return date;
-};
-
-const formatRadikoTime = (date: Date): string => {
-  const utc = new Date(date.getTime() + (date.getTimezoneOffset() * 60 * 1000));
-  const jst = new Date(utc.getTime() + (9 * 60 * 60 * 1000));
-  
-  return (
-    jst.getFullYear().toString() +
-    String(jst.getMonth() + 1).padStart(2, "0") +
-    String(jst.getDate()).padStart(2, "0") +
-    String(jst.getHours()).padStart(2, "0") +
-    String(jst.getMinutes()).padStart(2, "0") +
-    "00"
-  );
-};
-
-// ヘッダーの型定義を修正
-type RadikoHeaders = Record<string, string> & {
-  "X-Radiko-App": string;
-  "X-Radiko-App-Version": string;
-  "X-Radiko-User": string;
-  "X-Radiko-Device": string;
-  "X-Radiko-AuthToken"?: string;
-  "X-Radiko-Partialkey"?: string;
-};
-
 export class RadikoClient {
   private authToken: string = "";
   private areaId: string = "";
 
   constructor() {
-    // ローカルストレージから認証情報を復元
+    // キャッシュから認証情報を復元
     if (typeof window !== "undefined") {
-      const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
-      const storedAreaId = localStorage.getItem(AREA_ID_KEY);
-      if (storedToken) this.authToken = storedToken;
-      if (storedAreaId) this.areaId = storedAreaId;
+      this.authToken = sessionStorage.getItem(AUTH_TOKEN_KEY) || "";
+      this.areaId = sessionStorage.getItem(AREA_ID_KEY) || "";
     }
   }
 
-  private getDefaultHeaders(): RadikoHeaders {
+  private getHeaders(): Record<string, string> {
     return {
       "X-Radiko-App": "pc_html5",
       "X-Radiko-App-Version": "0.0.1",
       "X-Radiko-User": "dummy_user",
       "X-Radiko-Device": "pc",
+      ...(this.authToken && { "X-Radiko-AuthToken": this.authToken }),
     };
   }
 
@@ -94,119 +41,80 @@ export class RadikoClient {
   ): Promise<Response> {
     const url = new URL(PROXY_URL, window.location.origin);
     url.searchParams.set("path", path);
+    url.searchParams.set(
+      "headers",
+      JSON.stringify({
+        ...this.getHeaders(),
+        ...options.headers,
+      })
+    );
 
-    // ヘッダーの処理を修正
-    const headers = {
-      ...this.getDefaultHeaders(),
-      ...((options.headers as Partial<RadikoHeaders>) || {}),
-    } as RadikoHeaders;
+    const response = await fetch(url.toString(), {
+      ...options,
+      headers: undefined,
+      credentials: "same-origin",
+      cache: "no-store",
+    });
 
-    if (this.authToken) {
-      headers["X-Radiko-AuthToken"] = this.authToken;
-    }
-
-    url.searchParams.set("headers", JSON.stringify(headers));
-
-    try {
-      const response = await fetch(url.toString(), {
-        ...options,
-        headers: undefined,
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          // 認証エラーの場合は保存された認証情報をクリア
-          this.clearAuth();
-          // 再認証を試みる
-          await this.authenticate();
-          // リクエストを再試行
-          return this.proxyFetch(path, options);
-        }
-
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const error = await response.json();
-          throw new Error(JSON.stringify(error));
-        } else {
-          const error = await response.text();
-          throw new Error(`Proxy request failed: ${error}`);
-        }
-      }
-
-      return response;
-    } catch (error) {
-      console.error("Proxy fetch error:", error);
-      if (error instanceof Error && error.message.includes("Failed to fetch")) {
-        // ネットワークエラーの場合は少し待ってから再試行
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (!response.ok) {
+      if (response.status === 401) {
+        // 認証エラー時は認証情報をクリアして再認証
+        this.clearAuth();
+        await this.authenticate();
         return this.proxyFetch(path, options);
       }
-      throw error;
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    return response;
   }
 
   private async authenticate(): Promise<void> {
-    try {
-      // Auth1: 認証トークンと鍵情報の取得
-      const auth1Response = await this.proxyFetch("v2/api/auth1");
+    const auth1Response = await this.proxyFetch("v2/api/auth1");
+    const authToken = auth1Response.headers.get("x-radiko-authtoken");
+    const keyOffset = auth1Response.headers.get("x-radiko-keyoffset");
+    const keyLength = auth1Response.headers.get("x-radiko-keylength");
 
-      const authToken = auth1Response.headers.get("x-radiko-authtoken");
-      const keyOffset = auth1Response.headers.get("x-radiko-keyoffset");
-      const keyLength = auth1Response.headers.get("x-radiko-keylength");
-
-      if (!authToken || !keyOffset || !keyLength) {
-        throw new Error("Auth1: Missing required headers");
-      }
-
-      // パーシャルキーの生成
-      const AUTH_KEY = "bcd151073c03b352e1ef2fd66c32209da9ca0afa";
-      const offset = parseInt(keyOffset, 10);
-      const length = parseInt(keyLength, 10);
-      const partialKey = btoa(AUTH_KEY.substring(offset, offset + length));
-
-      // Auth2: パーシャルキーでの認証
-      this.authToken = authToken;
-      await this.proxyFetch("v2/api/auth2", {
-        headers: {
-          "X-Radiko-Partialkey": partialKey,
-        } as RadikoHeaders,
-      });
-
-      // 認証成功時にローカルストレージに保存
-      if (typeof window !== "undefined") {
-        localStorage.setItem(AUTH_TOKEN_KEY, this.authToken);
-      }
-    } catch (error) {
-      this.clearAuth();
-      throw error;
+    if (!authToken || !keyOffset || !keyLength) {
+      throw new Error("Authentication failed: Missing headers");
     }
+
+    this.authToken = authToken;
+    const partialKey = this.generatePartialKey(
+      parseInt(keyOffset),
+      parseInt(keyLength)
+    );
+
+    const auth2Response = await this.proxyFetch("v2/api/auth2", {
+      headers: { "X-Radiko-Partialkey": partialKey },
+    });
+
+    if (!auth2Response.ok) {
+      throw new Error("Authentication failed at auth2");
+    }
+
+    sessionStorage.setItem(AUTH_TOKEN_KEY, this.authToken);
+  }
+
+  private generatePartialKey(offset: number, length: number): string {
+    const AUTH_KEY = "bcd151073c03b352e1ef2fd66c32209da9ca0afa";
+    return btoa(AUTH_KEY.substring(offset, offset + length));
   }
 
   private clearAuth(): void {
     this.authToken = "";
     this.areaId = "";
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-      localStorage.removeItem(AREA_ID_KEY);
-    }
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    sessionStorage.removeItem(AREA_ID_KEY);
   }
 
   async init(): Promise<void> {
-    try {
-      if (!this.authToken) {
-        await this.authenticate();
-      }
-      if (!this.areaId) {
-        this.areaId = await this.getAreaId();
-        if (typeof window !== "undefined") {
-          localStorage.setItem(AREA_ID_KEY, this.areaId);
-        }
-      }
-    } catch (error) {
-      console.error("Initialization failed:", error);
-      this.clearAuth();
-      throw error;
+    if (!this.authToken) {
+      await this.authenticate();
+    }
+    if (!this.areaId) {
+      this.areaId = await this.getAreaId();
+      sessionStorage.setItem(AREA_ID_KEY, this.areaId);
     }
   }
 
@@ -215,16 +123,9 @@ export class RadikoClient {
       const response = await this.proxyFetch("v2/area");
       const text = await response.text();
       const match = text.match(/"(.*?)"/);
-      const areaId = match ? match[1] : "";
-
-      // OUT（国外）や空の場合は東京のエリアIDを使用
-      if (!areaId || areaId === "OUT") {
-        return "JP13"; // 東京
-      }
-      return areaId;
-    } catch (error) {
-      console.warn("Error getting area ID, defaulting to Tokyo:", error);
-      return "JP13"; // エラー時も東京をデフォルトとする
+      return match?.[1] || "JP13";
+    } catch {
+      return "JP13";
     }
   }
 
@@ -310,8 +211,8 @@ export class RadikoClient {
 
       const queryParams = new URLSearchParams({
         station_id: stationId,
-        ft: ft,  // そのまま使用（すでにJST形式）
-        to: to,  // そのまま使用（すでにJST形式）
+        ft: ft,
+        to: to,
         l: "15",
       });
 
@@ -323,17 +224,6 @@ export class RadikoClient {
           },
         }
       );
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          // 認証エラーの場合、認証をクリアして再認証
-          this.clearAuth();
-          await this.init();
-          // 再帰的に再試行
-          return this.getStreamUrl(stationId, ft, to);
-        }
-        throw new Error(`Failed to get playlist: ${response.status}`);
-      }
 
       const m3u8Text = await response.text();
       const masterPlaylistUrl = m3u8Text
@@ -349,7 +239,7 @@ export class RadikoClient {
       proxyUrl.searchParams.set(
         "headers",
         JSON.stringify({
-          ...this.getDefaultHeaders(),
+          ...this.getHeaders(),
           "X-Radiko-AuthToken": this.authToken,
         })
       );
@@ -357,16 +247,6 @@ export class RadikoClient {
       return proxyUrl.toString();
     } catch (error) {
       console.error("Stream URL error:", error);
-      if (
-        error instanceof Error &&
-        (error.message.includes("401") || error.message.includes("auth"))
-      ) {
-        // 認証関連のエラーの場合、認証をクリアして再認証
-        this.clearAuth();
-        await this.init();
-        // 再帰的に再試行（最大1回）
-        return this.getStreamUrl(stationId, ft, to);
-      }
       throw error;
     }
   }
