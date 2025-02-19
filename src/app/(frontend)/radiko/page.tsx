@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { ErrorBoundary } from "./errorBoundary";
 import { RadikoClient } from "./lib/client";
 import Hls from "hls.js";
 
@@ -207,7 +208,7 @@ export default function RadikoPage() {
       setAudioUrl(streamInfo);
       audioRef.current.playbackRate = state.playbackRate;
     } catch (error) {
-      console.error("Error restoring playback state:", error);
+      console.error("Playback state restore error:", error);
       clearPlaybackState();
     }
   }, [client, clearPlaybackState, setupHls]);
@@ -336,7 +337,7 @@ export default function RadikoPage() {
 
         audioRef.current.playbackRate = playbackRate;
       } catch (error) {
-        console.error("Failed to play:", error);
+        console.error("Playback error:", error);
         setError("再生の準備中にエラーが発生しました。");
       }
     },
@@ -410,6 +411,7 @@ export default function RadikoPage() {
   if (!isClient) return null;
 
   return (
+    <ErrorBoundary>
     <div className="container mx-auto p-4 pb-32">
       <h1 className="text-2xl font-bold mb-4">Radiko Player</h1>
 
@@ -573,5 +575,6 @@ export default function RadikoPage() {
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }
