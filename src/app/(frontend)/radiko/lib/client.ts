@@ -1,5 +1,4 @@
-import { start } from "repl";
-
+import { Result, Station } from "@/app/(frontend)/radiko/page"
 const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
 const AUTH_KEY = process.env.NEXT_PUBLIC_RADIKO_AUTH_KEY || "";
 
@@ -190,7 +189,7 @@ export class RadikoClient {
     return this.authToken;
   }
 
-  async getStations() {
+  async getStations(): Promise<Result<Station[]>> {
     try {
       if (!this.areaId) await this.init();
       if (this.areaId === "OUT" || !this.areaId) {
@@ -204,14 +203,19 @@ export class RadikoClient {
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, "text/xml");
 
-      return Array.from(doc.querySelectorAll("station")).map((station) => ({
+      const stations = Array.from(doc.querySelectorAll("station")).map((station) => ({
         id: station.querySelector("id")?.textContent || "",
         name: station.querySelector("name")?.textContent || "",
         url: station.querySelector("href")?.textContent || "",
       }));
+
+      return { data: stations };
     } catch (error) {
       console.error("Failed to get stations:", error);
-      return [];
+      return { 
+        data: [], 
+        error: error instanceof Error ? error : new Error("Failed to get stations") 
+      };
     }
   }
 
@@ -238,15 +242,19 @@ export class RadikoClient {
         throw new Error("Failed to parse XML response");
       }
 
-      return Array.from(doc.querySelectorAll("prog")).map((prog) => ({
+      const programs = Array.from(doc.querySelectorAll("prog")).map((prog) => ({
         title: prog.querySelector("title")?.textContent || "",
         startTime: prog.getAttribute("ft") || "",
         endTime: prog.getAttribute("to") || "",
         url: prog.querySelector("url")?.textContent || "",
       }));
+      return { data: programs };
     } catch (error) {
       console.error("Failed to get programs:", error);
-      return [];
+      return {
+        data: [],
+        error: error instanceof Error ? error : new Error("Failed to get programs"),
+      }
     }
   }
 

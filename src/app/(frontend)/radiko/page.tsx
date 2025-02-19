@@ -7,7 +7,12 @@ import Hls from "hls.js";
 
 const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
 
-interface Station {
+export interface Result<T> {
+  data: T;
+  error?: Error;
+}
+
+export interface Station {
   id: string;
   name: string;
   url: string;
@@ -257,15 +262,16 @@ export default function RadikoPage() {
 
   useEffect(() => {
     const initializeStations = async () => {
-      let stationList: Station[] = [];
       try {
         await client.init();
-        stationList = await client.getStations();
+        const result = await client.getStations();
+        if (result.error) {
+          handleError(result.error);
+        }
+        setStations(result.data);
       } catch (error) {
         console.error("Station loading error:", error);
         handleError(error);
-      } finally {
-        setStations(stationList);
       }
     };
     initializeStations();
@@ -286,8 +292,8 @@ export default function RadikoPage() {
           selectedStation,
           selectedDate
         );
-        setPrograms(programList);
-        if (programList.length === 0) {
+        setPrograms(programList.data);
+        if (programList.data.length === 0) {
           throw new Error(
             "番組情報を取得できませんでした。後ほど再度お試しください。"
           );
