@@ -48,7 +48,7 @@ const publicUrlProviders: PublicUrlProvider[] = [
   },
   // R2用 (デフォルトプロバイダー)
   {
-    isProviderFile: (key: string) => !key.includes("/"),
+    isProviderFile: (key: string) => !key.startsWith("gdrive/"),
     getPublicUrl: async (key: string) => key,
   },
 ];
