@@ -1,3 +1,5 @@
+import { start } from "repl";
+
 const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
 const AUTH_KEY = process.env.NEXT_PUBLIC_RADIKO_AUTH_KEY || "";
 
@@ -224,8 +226,9 @@ export class RadikoClient {
     stationId: string,
     ft: string,
     to: string,
-    clientIP: string
-  ): Promise<string> {
+    clientIP: string,
+    startPosition?: number  // 追加
+  ): Promise<{ url: string; offset: number }> {  // 戻り値の型を変更
     try {
       if (!this.authToken) {
         await this.init();
@@ -265,7 +268,13 @@ export class RadikoClient {
         "X-Client-IP": clientIP
       }));
   
-      return proxyUrl.toString();
+      // 開始時刻からのオフセットを計算
+      const offset = startPosition || 0;
+
+      return {
+        url: proxyUrl.toString(),
+        offset
+      };
     } catch (error) {
       console.error("Stream URL error:", error);
       throw error;

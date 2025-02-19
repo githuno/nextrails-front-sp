@@ -62,7 +62,10 @@ export default function RadikoPage() {
   const [stations, setStations] = useState<Station[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selectedStation, setSelectedStation] = useState<string>("");
-  const [audioUrl, setAudioUrl] = useState<string>("");
+  const [audioUrl, setAudioUrl] = useState<{
+    url: string;
+    offset: number;
+  } | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [selectedTab, setSelectedTab] = useState<number>(0);
   const [error, setError] = useState<string>("");
@@ -97,44 +100,50 @@ export default function RadikoPage() {
   });
 
   const setupHls = useCallback(
-    async (url: string, initialTime?: number) => {
+    async (
+      streamInfo: { url: string; offset: number },
+      initialTime?: number
+    ) => {
       if (!audioRef.current) return null;
-  
+
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
-  
+
       const clientIP = await getClientIP();
-  
+
       const hls = new Hls({
         enableWorker: true,
         debug: false,
+        startPosition: initialTime || streamInfo.offset || -1, // offsetを使用
         xhrSetup: (xhr, requestUrl) => {
-          // すべてのHLSリクエストをプロキシ経由に変更
           const proxyUrl = new URL(PROXY_URL);
           proxyUrl.searchParams.set("path", requestUrl);
-          proxyUrl.searchParams.set("headers", JSON.stringify({
-            "X-Radiko-AuthToken": client.getAuthToken(),
-            "X-Client-IP": clientIP
-          }));
-          xhr.open('GET', proxyUrl.toString(), true);
+          proxyUrl.searchParams.set(
+            "headers",
+            JSON.stringify({
+              "X-Radiko-AuthToken": client.getAuthToken(),
+              "X-Client-IP": clientIP,
+            })
+          );
+          xhr.open("GET", proxyUrl.toString(), true);
         },
       });
-  
+
       return new Promise<Hls>((resolve, reject) => {
         hls.attachMedia(audioRef.current!);
-  
+
         const onError = (_: any, data: { fatal: boolean }) => {
           if (data.fatal) {
             hls.destroy();
             reject(new Error("HLS setup failed"));
           }
         };
-  
+
         hls.on(Hls.Events.ERROR, onError);
         hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          hls.loadSource(url);
+          hls.loadSource(streamInfo.url);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             hlsRef.current = hls;
             if (initialTime !== undefined && audioRef.current) {
@@ -182,17 +191,18 @@ export default function RadikoPage() {
 
       await client.init();
       const clientIP = await getClientIP();
-      const streamUrl = await client.getStreamUrl(
+      const streamInfo = await client.getStreamUrl(
         state.stationId,
         state.programStartTime,
         state.programEndTime,
-        clientIP
+        clientIP,
+        state.currentTime // 現在の再生位置を渡す
       );
 
-      const hls = await setupHls(streamUrl, state.currentTime);
+      const hls = await setupHls(streamInfo, state.currentTime);
       if (!hls || !audioRef.current) return;
 
-      setAudioUrl(streamUrl);
+      setAudioUrl(streamInfo);
       audioRef.current.playbackRate = state.playbackRate;
     } catch (error) {
       console.error("Error restoring playback state:", error);
@@ -205,25 +215,60 @@ export default function RadikoPage() {
     restorePlaybackState();
   }, [restorePlaybackState]);
 
-  // 定期的に再生位置を保存（修正）
-  useEffect(() => {
-    if (!audioUrl) return;
+  // 定期的に再生位置を保存
+  // useEffect(() => {
+  //   if (!audioUrl) return;
 
-    const saveCurrentPosition = () => {
-      if (audioRef.current && !audioRef.current.paused) {
-        const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
-        if (savedState) {
-          const state = JSON.parse(savedState) as PlaybackState;
-          state.currentTime = audioRef.current.currentTime;
-          state.playbackRate = playbackRate; // 再生速度も保存
-          localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
-        }
+  //   const saveCurrentPosition = () => {
+  //     if (audioRef.current && !audioRef.current.paused) {
+  //       const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
+  //       if (savedState) {
+  //         const state = JSON.parse(savedState) as PlaybackState;
+  //         state.currentTime = audioRef.current.currentTime;
+  //         state.playbackRate = playbackRate; // 再生速度も保存
+  //         localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
+  //       }
+  //     }
+  //   };
+
+  //   const interval = setInterval(saveCurrentPosition, 5000); // 5秒ごとに保存
+  //   return () => clearInterval(interval);
+  // }, [audioUrl, playbackRate]); // playbackRateを依存配列に追加
+
+  // audioタグにイベントリスナーを追加
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const savePosition = () => {
+      const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
+      if (savedState) {
+        const state = JSON.parse(savedState) as PlaybackState;
+        state.currentTime = audio.currentTime;
+        state.playbackRate = playbackRate;
+        localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
       }
     };
 
-    const interval = setInterval(saveCurrentPosition, 5000);
-    return () => clearInterval(interval);
-  }, [audioUrl, playbackRate]); // playbackRateを依存配列に追加
+    // 以下のイベントで保存を実行
+    audio.addEventListener("pause", savePosition);
+    audio.addEventListener("seeking", savePosition);
+    audio.addEventListener("volumechange", savePosition);
+    window.addEventListener("beforeunload", savePosition);
+
+    // 定期保存も維持
+    const interval = setInterval(savePosition, 5000);
+
+    return () => {
+      audio.removeEventListener("pause", savePosition);
+      audio.removeEventListener("seeking", savePosition);
+      audio.removeEventListener("volumechange", savePosition);
+      window.removeEventListener("beforeunload", savePosition);
+      clearInterval(interval);
+      // クリーンアップ時にも保存
+      savePosition();
+    };
+  }, [audioRef.current, playbackRate]);
 
   useEffect(() => {
     const initializeStations = async () => {
@@ -358,6 +403,11 @@ export default function RadikoPage() {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
     setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    // DEBUG: ローカルストレージに保存された再生状態を確認
+    console.log("Playback state:", localStorage.getItem(PLAYBACK_STATE_KEY));
   }, []);
 
   if (!isClient) return null;
