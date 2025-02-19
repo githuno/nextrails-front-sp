@@ -67,7 +67,7 @@ export default function RadikoPage() {
     offset: number;
   } | null>(null);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
-  const [selectedTab, setSelectedTab] = useState<number>(0);
+  const [selectedTab, setSelectedTab] = useState<number>(6);
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -75,15 +75,17 @@ export default function RadikoPage() {
   const PLAYBACK_STATE_KEY = "radiko_playback_state";
 
   // 日付タブの一覧を現在時刻から生成するように修正
+  // dates配列を現在時刻から生成する部分を修正
   const getDates = () => {
     const now = new Date();
     const jstOffset = 9 * 60;
     const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
     const jstNow = new Date(utc + jstOffset * 60 * 1000);
 
+    // 順序を逆にして生成（0が最新、6が7日前）
     return Array.from({ length: 7 }, (_, i) => {
       const date = new Date(jstNow);
-      date.setDate(date.getDate() - i);
+      date.setDate(date.getDate() - (6 - i)); // インデックスを逆にする
       return date;
     });
   };
@@ -214,26 +216,6 @@ export default function RadikoPage() {
   useEffect(() => {
     restorePlaybackState();
   }, [restorePlaybackState]);
-
-  // 定期的に再生位置を保存
-  // useEffect(() => {
-  //   if (!audioUrl) return;
-
-  //   const saveCurrentPosition = () => {
-  //     if (audioRef.current && !audioRef.current.paused) {
-  //       const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
-  //       if (savedState) {
-  //         const state = JSON.parse(savedState) as PlaybackState;
-  //         state.currentTime = audioRef.current.currentTime;
-  //         state.playbackRate = playbackRate; // 再生速度も保存
-  //         localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
-  //       }
-  //     }
-  //   };
-
-  //   const interval = setInterval(saveCurrentPosition, 5000); // 5秒ごとに保存
-  //   return () => clearInterval(interval);
-  // }, [audioUrl, playbackRate]); // playbackRateを依存配列に追加
 
   // audioタグにイベントリスナーを追加
   useEffect(() => {
@@ -410,6 +392,21 @@ export default function RadikoPage() {
     console.log("Playback state:", localStorage.getItem(PLAYBACK_STATE_KEY));
   }, []);
 
+  // タブのスクロール用のref
+  const tabsRef = useRef<HTMLDivElement>(null);
+
+  // 初期表示時に当日のタブまでスクロール
+  useEffect(() => {
+    if (tabsRef.current && programs.length > 0) {
+      const scrollWidth = tabsRef.current.scrollWidth;
+      const clientWidth = tabsRef.current.clientWidth;
+      tabsRef.current.scrollTo({
+        left: scrollWidth - clientWidth,
+        behavior: 'smooth'
+      });
+    }
+  }, [programs]);
+
   if (!isClient) return null;
 
   return (
@@ -446,25 +443,28 @@ export default function RadikoPage() {
           <h2 className="text-xl font-semibold mb-2">番組表</h2>
 
           {/* 日付タブ */}
-          <div className="flex overflow-x-auto mb-4 border-b">
-            {dates.map((date, index) => (
-              <button
-                key={date.toISOString()}
-                onClick={() => handleTabChange(index)}
-                className={`px-4 py-2 whitespace-nowrap ${
-                  selectedTab === index
-                    ? "border-b-2 border-blue-500 text-blue-500"
-                    : "text-gray-500"
-                }`}
-              >
-                {date.toLocaleDateString("ja-JP", {
-                  month: "numeric",
-                  day: "numeric",
-                  weekday: "short",
-                  timeZone: "Asia/Tokyo",
-                })}
-              </button>
-            ))}
+          <div className="flex overflow-x-auto mb-4 border-b" ref={tabsRef}>
+            {dates.map((date, index) => {
+              const isToday = date.toDateString() === new Date().toDateString();
+              return (
+                <button
+                  key={date.toISOString()}
+                  onClick={() => handleTabChange(index)}
+                  className={`px-4 py-2 whitespace-nowrap ${
+                    selectedTab === index
+                      ? "border-b-2 border-blue-500 text-blue-500"
+                      : "text-gray-500"
+                  } ${isToday ? "bg-blue-50" : ""}`}
+                >
+                  {date.toLocaleDateString("ja-JP", {
+                    month: "numeric",
+                    day: "numeric",
+                    weekday: "short",
+                    timeZone: "Asia/Tokyo",
+                  })}
+                </button>
+              );
+            })}
           </div>
 
           {isLoading ? (
@@ -474,19 +474,62 @@ export default function RadikoPage() {
           ) : (
             <div className="space-y-2 max-h-[600px] overflow-y-auto">
               {programs.length > 0 ? (
-                programs.map((program, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleProgramSelect(program)}
-                    className="w-full p-2 text-left border rounded hover:bg-gray-100"
-                  >
-                    {program.title}
-                    <div className="text-sm text-gray-600">
-                      {formatRadikoTime(program.startTime)} -
-                      {formatRadikoTime(program.endTime)}
-                    </div>
-                  </button>
-                ))
+                programs.map((program, index) => {
+                  const isCurrentlyPlaying = (() => {
+                    try {
+                      const savedState =
+                        localStorage.getItem(PLAYBACK_STATE_KEY);
+                      if (!savedState) return false;
+
+                      const state = JSON.parse(savedState) as PlaybackState;
+                      return (
+                        audioUrl && program.startTime === state.programStartTime
+                      );
+                    } catch {
+                      return false;
+                    }
+                  })();
+                  const isPast =
+                    new Date(
+                      parseInt(program.endTime.substring(0, 4)),
+                      parseInt(program.endTime.substring(4, 6)) - 1,
+                      parseInt(program.endTime.substring(6, 8)),
+                      parseInt(program.endTime.substring(8, 10)),
+                      parseInt(program.endTime.substring(10, 12))
+                    ) < new Date();
+
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleProgramSelect(program)}
+                      className={`
+                        w-full p-2 text-left border rounded transition-all
+                        ${
+                          isCurrentlyPlaying
+                            ? "bg-blue-100 border-blue-500 shadow-md"
+                            : "hover:bg-gray-100 border-gray-200"
+                        }
+                        ${isPast ? "text-gray-900" : "text-gray-500"}
+                      `}
+                    >
+                      <div
+                        className={`font-medium ${
+                          isCurrentlyPlaying ? "text-blue-700" : ""
+                        }`}
+                      >
+                        {program.title}
+                      </div>
+                      <div
+                        className={`text-sm ${
+                          isPast ? "text-gray-600" : "text-gray-400"
+                        }`}
+                      >
+                        {formatRadikoTime(program.startTime)} -
+                        {formatRadikoTime(program.endTime)}
+                      </div>
+                    </button>
+                  );
+                })
               ) : (
                 <div className="text-center text-gray-500 py-4">
                   {error || "番組情報がありません"}
