@@ -33,7 +33,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const clientIP = validateAndGetClientIP(request);
+  // const clientIP = validateAndGetClientIP(request);
+  // クライアントIPの取得ロジックを改善
+  const clientIP =
+    request.headers.get("x-real-ip") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0] ||
+    request.ip ||
+    "127.0.0.1";
+
   const response = NextResponse.next();
 
   // 共通のヘッダー設定

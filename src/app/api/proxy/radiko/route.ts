@@ -21,13 +21,14 @@ interface RadikoHeaders {
 
 // デフォルトヘッダー
 const DEFAULT_HEADERS: RadikoHeaders = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Accept": "*/*",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "*/*",
   "Accept-Language": "ja",
   "Accept-Encoding": "gzip, deflate",
-  "Connection": "keep-alive",
+  Connection: "keep-alive",
   "Cache-Control": "no-cache",
-  "Pragma": "no-cache",
+  Pragma: "no-cache",
 };
 
 // 認証ヘッダーの生成関数
@@ -42,16 +43,18 @@ function createAuthHeaders(
     "X-Radiko-App-Version": customHeaders["X-Radiko-App-Version"] || "0.0.1",
     "X-Radiko-User": customHeaders["X-Radiko-User"] || "dummy_user",
     "X-Radiko-Device": customHeaders["X-Radiko-Device"] || "pc",
-    "Origin": "https://radiko.jp",
-    "Referer": "https://radiko.jp/",
+    Origin: "https://radiko.jp",
+    Referer: "https://radiko.jp/",
     "X-Forwarded-For": clientIP,
     "X-Real-IP": clientIP,
   };
 
   // クライアントの現在時刻をJSTとして設定
-  const jstDate = new Date(Date.now() + ((new Date().getTimezoneOffset() + 540) * 60 * 1000));
+  const jstDate = new Date(
+    Date.now() + (new Date().getTimezoneOffset() + 540) * 60 * 1000
+  );
   authHeaders["Date"] = jstDate.toUTCString();
-  
+
   return authHeaders;
 }
 
@@ -61,11 +64,11 @@ async function handleRadikoAuth(
   clientIP: string
 ): Promise<Response> {
   const isAuth1 = !customHeaders["X-Radiko-AuthToken"];
-  
+
   try {
     const requestHeaders = createAuthHeaders(customHeaders, clientIP);
     const url = `${RADIKO_BASE_URL}/v2/api/${isAuth1 ? "auth1" : "auth2"}`;
-    
+
     const response = await fetch(url, {
       method: "GET",
       headers: requestHeaders,
@@ -94,7 +97,7 @@ async function handleRadikoAuth(
       "x-radiko-keylength",
       "x-radiko-location",
       "x-radiko-areaid",
-    ].forEach(header => {
+    ].forEach((header) => {
       const value = response.headers.get(header);
       if (value) responseHeaders.set(header, value);
     });
@@ -113,6 +116,10 @@ export async function GET(request: NextRequest) {
   try {
     const headersList = headers();
     const clientIP = headersList.get("x-client-ip");
+
+    // デバッグログを追加
+    console.log("Request headers:", Object.fromEntries(headersList.entries()));
+    console.log("Client IP:", clientIP);
 
     const searchParams = request.nextUrl.searchParams;
     const path = searchParams.get("path");
@@ -164,7 +171,8 @@ export async function GET(request: NextRequest) {
 
     const data = await response.arrayBuffer();
     const responseHeaders = new Headers({
-      "Content-Type": response.headers.get("Content-Type") || "application/octet-stream",
+      "Content-Type":
+        response.headers.get("Content-Type") || "application/octet-stream",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "*",
@@ -178,7 +186,7 @@ export async function GET(request: NextRequest) {
       "x-radiko-keylength",
       "x-radiko-location",
       "x-radiko-areaid",
-    ].forEach(header => {
+    ].forEach((header) => {
       const value = response.headers.get(header);
       if (value) responseHeaders.set(header, value);
     });

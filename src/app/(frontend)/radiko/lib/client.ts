@@ -125,6 +125,8 @@ export class RadikoClient {
       Accept: "*/*",
       "Accept-Language": "ja",
       Connection: "keep-alive",
+      // クライアントIPを明示的に要求
+      "x-forwarded-for": "true"
     };
 
     url.searchParams.set("headers", JSON.stringify(headers));
