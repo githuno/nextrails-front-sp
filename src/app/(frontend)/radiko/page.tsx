@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useErrorBoundary } from '@/hooks/useErrorBoundary';
 import { ErrorBoundary } from "./errorBoundary";
 import { RadikoClient } from "./lib/client";
 import Hls from "hls.js";
@@ -71,6 +72,7 @@ export default function RadikoPage() {
   const [selectedTab, setSelectedTab] = useState<number>(6);
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const { handleError } = useErrorBoundary();
 
   // LocalStorageのキー
   const PLAYBACK_STATE_KEY = "radiko_playback_state";
@@ -279,18 +281,21 @@ export default function RadikoPage() {
         );
         setPrograms(programList);
         if (programList.length === 0) {
-          setError(
-            "番組情報を取得できませんでした。後ほど再度お試しください。"
-          );
+          throw new Error("番組情報を取得できませんでした。後ほど再度お試しください。");
         }
       } catch (err) {
         console.error("Program loading error:", err);
-        setError("番組情報の取得中にエラーが発生しました。");
+        const errorMessage = err instanceof Error ? 
+          err.message : 
+          "番組情報の取得中にエラーが発生しました。";
+        setError(errorMessage);
+        handleError(err); // エラーをトースト表示
       } finally {
         setIsLoading(false);
       }
     }
   };
+
 
   const handleStationSelect = (stationId: string) => {
     setSelectedStation(stationId);
