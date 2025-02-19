@@ -1,0 +1,22 @@
+{
+  "regions": ["hnd1"],
+  "headers": [
+    {
+      "source": "/api/proxy/radiko/(.*)",
+      "headers": [
+        {
+          "key": "x-default-region",
+          "value": "JP13"
+        },
+        {
+          "key": "x-default-timezone",
+          "value": "Asia/Tokyo"
+        }
+      ]
+    }
+  ],
+  "env": {
+    "VERCEL_REGION": "hnd1",
+    "TZ": "Asia/Tokyo"
+  }
+}
