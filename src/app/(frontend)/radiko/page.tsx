@@ -265,66 +265,37 @@ export default function RadikoPage() {
         if (!selectedStation || !audioRef.current) return;
 
         setError("");
-        setIsLoading(true);
+        const streamUrl = await client
+          .getStreamUrl(selectedStation, program.startTime, program.endTime)
+          .catch((error) => {
+            console.error("Stream URL error:", error);
+            setError("ストリームURLの取得に失敗しました。");
+            throw error;
+          });
 
-        // 最大3回まで再試行
-        let attempt = 0;
-        const maxAttempts = 3;
-        let lastError: Error | null = null;
+        // HLSのセットアップ
+        const hls = await setupHls(streamUrl).catch((error) => {
+          console.error("HLS setup error:", error);
+          setError("ストリームの初期化に失敗しました。");
+          throw error;
+        });
 
-        while (attempt < maxAttempts) {
-          try {
-            const streamUrl = await client.getStreamUrl(
-              selectedStation,
-              program.startTime,
-              program.endTime
-            );
+        if (!hls) return;
 
-            // HLSのセットアップ
-            const hls = await setupHls(streamUrl);
-            if (!hls) throw new Error("HLS setup failed");
+        setAudioUrl(streamUrl);
+        savePlaybackState(program);
 
-            setAudioUrl(streamUrl);
-            savePlaybackState(program);
+        // マニフェスト解析完了後に自動再生
+        await audioRef.current.play().catch((error) => {
+          console.error("Playback error:", error);
+          setError("再生の開始に失敗しました。");
+          throw error;
+        });
 
-            // マニフェスト解析完了後に自動再生
-            await audioRef.current.play();
-            audioRef.current.playbackRate = playbackRate;
-
-            // 成功したら終了
-            return;
-          } catch (error) {
-            lastError =
-              error instanceof Error ? error : new Error(String(error));
-            attempt++;
-
-            // 認証エラーの場合はトークンをクリアして再認証
-            if (lastError.message.includes("401")) {
-              await client.init();
-            }
-
-            // 最終試行でなければ待機して再試行
-            if (attempt < maxAttempts) {
-              await new Promise((resolve) =>
-                setTimeout(resolve, 1000 * attempt)
-              );
-              continue;
-            }
-          }
-        }
-
-        // すべての試行が失敗した場合
-        console.error("Failed after all retries:", lastError);
-        setError(
-          `再生の準備中にエラーが発生しました。(${
-            lastError?.message || "不明なエラー"
-          })`
-        );
+        audioRef.current.playbackRate = playbackRate;
       } catch (error) {
-        console.error("Fatal playback error:", error);
-        setError("再生の準備中に致命的なエラーが発生しました。");
-      } finally {
-        setIsLoading(false);
+        console.error("Failed to play:", error);
+        setError("再生の準備中にエラーが発生しました。");
       }
     },
     [client, selectedStation, setupHls, playbackRate]
