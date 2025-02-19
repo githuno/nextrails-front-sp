@@ -1,113 +1,88 @@
-"use client"
+import React, { useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 
-import React, { useContext, createContext, useState, useCallback } from "react"
-import * as Toast from "@radix-ui/react-toast"
-import Image from "next/image"
+// トースト通知の種類
+export type ToastType = "info" | "success" | "error";
 
-import { tv } from "tailwind-variants"
-import { twMerge } from "tailwind-merge"
-
-type AppToastProps = {
-  title: string
-  description?: string
-  variant?: "success" | "warning" | "error"
-  timeout?: number
+// トースト通知の状態
+export interface ToastState {
+  message: string;
+  isVisible: boolean;
+  type: ToastType;
 }
 
-interface ToastContextData {
-  showToast: (props: AppToastProps) => void
-}
-
-interface AppToastProviderProps {
-  children: React.ReactNode
-}
-
-const ToastContext = createContext<ToastContextData>({} as ToastContextData)
-
-const toast = tv({
-  slots: {
-    container: "absolute flex w-full items-center justify-center py-4",
-    description: "",
-    button: "mr-4 flex h-7 w-7 flex-grow-0 items-center justify-center rounded-full bg-white",
-    icon: "",
-  },
-  variants: {
-    variant: {
-      success: {
-        container: "bg-green-500",
-        description: "",
-        icon: "text-green-500",
-      },
-      error: {
-        container: "bg-red-500",
-        description: "text-white",
-        icon: "text-red-500",
-      },
-      warning: {
-        container: "bg-yellow-500",
-        description: "text-black",
-        icon: "text-yellow-500",
-      },
-    },
-  },
-  defaultVariants: {
-    variant: "success",
-  },
-})
-
-const AppToastProvider: React.FC<AppToastProviderProps> = ({ children }) => {
-  const [open, setOpen] = useState(false)
-  const [data, setData] = useState<AppToastProps | null>(null)
-
-  const showToast = useCallback((props: AppToastProps) => {
-    setOpen(true)
-    setData(props)
-  }, [])
-
-  const { container, description, button, icon } = toast({
-    variant: data?.variant,
-  })
+// トースト通知のコンポーネント
+const Toast: React.FC<{ message: string; type: ToastType }> = ({
+  message,
+  type,
+}) => {
+  const backgroundColor = {
+    info: "bg-blue-500",
+    success: "bg-green-500",
+    error: "bg-red-500",
+  }[type];
 
   return (
-    <Toast.Provider swipeDirection="up">
-      <ToastContext.Provider
-        value={{
-          showToast,
-        }}
-      >
-        <Toast.Root
-          className={twMerge(
-            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
-            container(),
-          )}
-          open={open}
-          onOpenChange={setOpen}
-          duration={data?.timeout || 3000}
-        >
-          <div className="flex-1 text-center">
-            <Toast.Title className={twMerge("font-semibold", description())}>{data?.title}</Toast.Title>
-            {data?.description && <Toast.Description className={description()}>{data?.description}</Toast.Description>}
-          </div>
-          <Toast.Close className={button()}>
-            <Image src="/material-icons/clear.svg" width={18} height={18} alt="clear" className={icon()} />
-          </Toast.Close>
-        </Toast.Root>
-        <Toast.Viewport />
+    <div
+      className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-md text-white ${backgroundColor} transition-opacity duration-300 shadow-lg z-50`}
+    >
+      {message}
+    </div>
+  );
+};
 
-        {children}
-      </ToastContext.Provider>
-    </Toast.Provider>
-  )
-}
+// トースト通知のカスタムフック
+export const useToast = () => {
+  const [toast, setToast] = useState<ToastState>({
+    message: "",
+    isVisible: false,
+    type: "info",
+  });
 
-const useToast = (): ToastContextData => {
-  const context = useContext(ToastContext)
+  const showToast = useCallback((message: string, type: ToastType = "info") => {
+    setToast({ message, isVisible: true, type });
+    setTimeout(() => {
+      setToast((prev) => ({ ...prev, isVisible: false }));
+    }, 3000);
+  }, []);
 
-  if (!context) {
-    throw new Error("Must be inside a AppToastProvider")
-  }
+  const showError = useCallback(
+    (error: Error | string) => {
+      const message = error instanceof Error ? error.message : error;
+      showToast(message, "error");
+    },
+    [showToast]
+  );
 
-  return context
-}
+  const showSuccess = useCallback(
+    (message: string) => {
+      showToast(message, "success");
+    },
+    [showToast]
+  );
 
-export { AppToastProvider, useToast }
+  const showInfo = useCallback(
+    (message: string) => {
+      showToast(message, "info");
+    },
+    [showToast]
+  );
+
+  // トースト通知のレンダリング
+  const ToastPortal = useCallback(() => {
+    if (!toast.isVisible) return null;
+
+    return createPortal(
+      <Toast message={toast.message} type={toast.type} />,
+      document.body
+    );
+  }, [toast.isVisible, toast.message, toast.type]);
+
+  return {
+    showToast,
+    showError,
+    showSuccess,
+    showInfo,
+    ToastPortal,
+  };
+};

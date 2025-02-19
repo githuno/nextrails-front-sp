@@ -1,4 +1,5 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
+import { useToast } from "./toast";
 
 /**
  * APIリクエストの基本設定
@@ -78,6 +79,7 @@ const useApiGet = <T>(
   options: RequestInit = {},
   cacheTime: number = 5 * 60 * 1000 // キャッシュの有効期限（デフォルト5分）
 ): HooksApiResponse<T> => {
+  const { showError } = useToast();
   const [state, setState] = useState<HooksApiResponse<T>>({
     data: null,
     error: null,
@@ -105,14 +107,17 @@ const useApiGet = <T>(
       cache.set(path, { data, timestamp: Date.now() });
       setState({ data, error: null, loading: false, refetch: fetchData });
     } catch (error) {
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       setState({
         data: null,
-        error: error instanceof Error ? error : new Error(String(error)),
+        error: errorObj,
         loading: false,
         refetch: fetchData,
       });
+      showError(errorObj);
     }
-  }, [path, cacheTime]);
+  }, [path, cacheTime, showError]);
 
   useEffect(() => {
     fetchData();
@@ -128,6 +133,7 @@ const useApiMutation = <T, U = any>(
   path: string,
   method: "POST" | "PUT" | "DELETE" = "POST"
 ) => {
+  const { showError, showSuccess } = useToast();
   const [state, setState] = useState<HooksApiResponse<T>>({
     data: null,
     error: null,
@@ -149,14 +155,18 @@ const useApiMutation = <T, U = any>(
         loading: false,
         refetch: async () => {},
       });
+      showSuccess("Operation completed successfully");
       return response;
     } catch (error) {
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       setState({
         data: null,
-        error: error instanceof Error ? error : new Error(String(error)),
+        error: errorObj,
         loading: false,
         refetch: async () => {},
       });
+      showError(errorObj);
       return null;
     }
   };

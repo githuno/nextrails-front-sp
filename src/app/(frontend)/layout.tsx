@@ -1,9 +1,5 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { StorageProvider } from "@/components/storage";
-
-const inter = Inter({ subsets: ["latin"] });
+import { Metadata } from "next";
+import ClientLayout from "./client-layout";
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -20,7 +16,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      {/* react-scan: https://github.com/aidenybai/react-scan */}
       {process.env.NODE_ENV === "development" && (
         <head>
           <script
@@ -29,9 +24,7 @@ export default function RootLayout({
           />
         </head>
       )}
-      <body className={inter.className}>
-        <StorageProvider>{children}</StorageProvider>
-      </body>
+      <ClientLayout>{children}</ClientLayout>
     </html>
   );
 }

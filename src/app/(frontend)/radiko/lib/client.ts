@@ -143,20 +143,31 @@ export class RadikoClient {
         cache: "no-store",
       });
 
-      // エラー処理
+      // エラー処理を強化
       if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch {
+          // JSONとして解析できない場合は元のメッセージを使用
+        }
+
         if (response.status === 401 && this.retryCount < this.maxRetries) {
           this.retryCount++;
           this.authToken = "";
           await this.authenticate();
           return this.proxyFetch(path, options);
         }
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(errorMessage);
       }
 
       this.retryCount = 0;
       return response;
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
         await new Promise((resolve) =>
@@ -164,7 +175,8 @@ export class RadikoClient {
         );
         return this.proxyFetch(path, options);
       }
-      throw error;
+
+      throw new Error(`Radiko API error: ${errorMessage}`);
     }
   }
 
