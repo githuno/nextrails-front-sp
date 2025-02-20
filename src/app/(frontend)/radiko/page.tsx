@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, ErrorInfo } from "react";
 import { useErrorBoundary } from "@/hooks/useErrorBoundary";
 import { ErrorBoundary } from "./errorBoundary";
 import { RadikoClient } from "./lib/client";
@@ -77,10 +77,17 @@ export default function RadikoPage() {
   const [selectedTab, setSelectedTab] = useState<number>(6);
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const { handleError } = useErrorBoundary();
-
+  
   // LocalStorageのキー
   const PLAYBACK_STATE_KEY = "radiko_playback_state";
+
+  const { handleError } = useErrorBoundary();
+  const handleBoundaryError = useCallback(
+    (error: Error, errorInfo: ErrorInfo) => {
+      handleError(error);
+    },
+    [handleError]
+  );
 
   // 日付タブの一覧を現在時刻から生成するように修正
   // dates配列を現在時刻から生成する部分を修正
@@ -431,7 +438,7 @@ export default function RadikoPage() {
   if (!isClient) return null;
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary onError={handleBoundaryError}>
       <div className="container mx-auto p-4 pb-32">
         <h1 className="text-2xl font-bold mb-4">Radiko Player</h1>
 

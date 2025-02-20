@@ -1,8 +1,8 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { useToast } from '@/hooks/toast';
 
 interface Props {
   children: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface State {
@@ -21,9 +21,8 @@ export class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('予期せぬエラーが発生しました:', error);
     console.error('エラー情報:', errorInfo);
-    // ここで既存のToastを使用することも可能
-    const { showError } = useToast();
-    showError(error);
+    // 親コンポーネントにエラーを通知
+    this.props.onError?.(error, errorInfo);
   }
 
   public render() {
