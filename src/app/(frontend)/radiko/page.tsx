@@ -4,6 +4,7 @@ import { useErrorBoundary } from "@/hooks/useErrorBoundary";
 import { ErrorBoundary } from "./errorBoundary";
 import { RadikoClient } from "./lib/client";
 import Hls from "hls.js";
+import { useToast } from "@/hooks/toast";
 
 const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
 
@@ -81,6 +82,7 @@ export default function RadikoPage() {
   // LocalStorageのキー
   const PLAYBACK_STATE_KEY = "radiko_playback_state";
 
+  const { ToastPortal } = useToast();
   const { handleError } = useErrorBoundary();
   const handleBoundaryError = useCallback(
     (error: Error, errorInfo: ErrorInfo) => {
@@ -604,6 +606,7 @@ export default function RadikoPage() {
           </div>
         </div>
       </div>
+      <ToastPortal />
     </ErrorBoundary>
   );
 }

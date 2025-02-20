@@ -90,7 +90,10 @@ export class RadikoClient {
     } catch (error) {
       this.authToken = "";
       this.areaId = "";
-      throw error;
+      const errorMessage = error instanceof Error 
+        ? `認証エラー: ${error.message}`
+        : "認証に失敗しました";
+      throw new Error(errorMessage);
     }
   }
 
@@ -180,8 +183,15 @@ export class RadikoClient {
   }
 
   async init(): Promise<void> {
-    if (!this.authToken) {
-      await this.authenticate();
+    try {
+      if (!this.authToken) {
+        await this.authenticate();
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error 
+        ? error.message
+        : "初期化に失敗しました";
+      throw new Error(errorMessage);
     }
   }
 
