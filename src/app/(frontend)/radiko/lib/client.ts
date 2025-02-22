@@ -1,4 +1,4 @@
-import { Result, Station } from "@/app/(frontend)/radiko/page"
+import { Result, Station } from "@/app/(frontend)/radiko/page";
 const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
 const AUTH_KEY = process.env.NEXT_PUBLIC_RADIKO_AUTH_KEY || "";
 
@@ -90,9 +90,10 @@ export class RadikoClient {
     } catch (error) {
       this.authToken = "";
       this.areaId = "";
-      const errorMessage = error instanceof Error 
-        ? `認証エラー: ${error.message}`
-        : "認証に失敗しました";
+      const errorMessage =
+        error instanceof Error
+          ? `認証エラー: ${error.message}`
+          : "認証に失敗しました";
       throw new Error(errorMessage);
     }
   }
@@ -101,7 +102,9 @@ export class RadikoClient {
     try {
       const response = await this.proxyFetch("v2/api/auth2");
       const areaId = response.headers.get("x-radiko-areaid");
-      this.areaId = areaId || "JP13";
+      console.log("⚡️areaId", areaId);
+      this.areaId = "JP13";
+      // this.areaId = areaId || "JP13";
     } catch (error) {
       console.error("Failed to fetch area ID:", error);
       this.areaId = "JP13";
@@ -145,53 +148,59 @@ export class RadikoClient {
         cache: "no-store",
       });
 
-      // エラー処理を強化
       if (!response.ok) {
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorMessage;
-        } catch {
-          // JSONとして解析できない場合は元のメッセージを使用
-        }
-
-        if (response.status === 401 && this.retryCount < this.maxRetries) {
-          this.retryCount++;
-          this.authToken = "";
-          await this.authenticate();
-          return this.proxyFetch(path, options);
-        }
-        throw new Error(errorMessage);
+        const errorData = await response.json();
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
       }
 
-      this.retryCount = 0;
       return response;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      if (this.retryCount < this.maxRetries) {
-        this.retryCount++;
-        await new Promise((resolve) =>
-          setTimeout(resolve, 1000 * this.retryCount)
-        );
-        return this.proxyFetch(path, options);
-      }
-
-      throw new Error(`Radiko API error: ${errorMessage}`);
+      console.error("Proxy fetch error:", error);
+      throw error;
     }
   }
+  //   try {
+  //     const response = await fetch(url.toString(), {
+  //       ...options,
+  //       headers: undefined,
+  //       credentials: "include",
+  //       cache: "no-store",
+  //     });
+
+  //     // エラー処理を強化
+  //     if (!response.ok) {
+  //       if (response.status === 401 && this.retryCount < this.maxRetries) {
+  //         this.retryCount++;
+  //         this.authToken = "";
+  //         await this.authenticate();
+  //         return this.proxyFetch(path, options);
+  //       }
+  //       throw new Error(`HTTP error! status: ${response.status}`);
+  //     }
+
+  //     this.retryCount = 0;
+  //     return response;
+  //   } catch (error) {
+  //     const errorMessage =
+  //       error instanceof Error ? error.message : String(error);
+
+  //     if (this.retryCount < this.maxRetries) {
+  //       this.retryCount++;
+  //       await new Promise((resolve) =>
+  //         setTimeout(resolve, 1000 * this.retryCount)
+  //       );
+  //       return this.proxyFetch(path, options);
+  //     }
+
+  //     throw new Error(`Radiko API error: ${errorMessage}`);
+  //   }
+  // }
 
   async init(): Promise<void> {
-    try {
-      if (!this.authToken) {
-        await this.authenticate();
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error 
-        ? error.message
-        : "初期化に失敗しました";
-      throw new Error(errorMessage);
+    if (!this.authToken) {
+      await this.authenticate();
     }
   }
 
@@ -202,6 +211,7 @@ export class RadikoClient {
   async getStations(): Promise<Result<Station[]>> {
     try {
       if (!this.areaId) await this.init();
+      // エリアIDが不正な場合は東京に設定
       if (this.areaId === "OUT" || !this.areaId) {
         this.areaId = "JP13";
       }
@@ -213,18 +223,21 @@ export class RadikoClient {
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, "text/xml");
 
-      const stations = Array.from(doc.querySelectorAll("station")).map((station) => ({
-        id: station.querySelector("id")?.textContent || "",
-        name: station.querySelector("name")?.textContent || "",
-        url: station.querySelector("href")?.textContent || "",
-      }));
+      const stations = Array.from(doc.querySelectorAll("station")).map(
+        (station) => ({
+          id: station.querySelector("id")?.textContent || "",
+          name: station.querySelector("name")?.textContent || "",
+          url: station.querySelector("href")?.textContent || "",
+        })
+      );
 
       return { data: stations };
     } catch (error) {
       console.error("Failed to get stations:", error);
-      return { 
-        data: [], 
-        error: error instanceof Error ? error : new Error("Failed to get stations") 
+      return {
+        data: [],
+        error:
+          error instanceof Error ? error : new Error("Failed to get stations"),
       };
     }
   }
@@ -233,6 +246,7 @@ export class RadikoClient {
     try {
       if (!this.authToken) await this.init();
 
+      // 日付文字列をJSTベースで生成
       const dateStr = formatJSTDate(date);
 
       const response = await this.proxyFetch(
@@ -247,6 +261,7 @@ export class RadikoClient {
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, "text/xml");
 
+      // XMLパースエラーのチェック
       const parseError = doc.querySelector("parsererror");
       if (parseError) {
         throw new Error("Failed to parse XML response");
@@ -263,8 +278,9 @@ export class RadikoClient {
       console.error("Failed to get programs:", error);
       return {
         data: [],
-        error: error instanceof Error ? error : new Error("Failed to get programs"),
-      }
+        error:
+          error instanceof Error ? error : new Error("Failed to get programs"),
+      };
     }
   }
 
@@ -273,12 +289,24 @@ export class RadikoClient {
     ft: string,
     to: string,
     clientIP: string,
-    startPosition?: number // 追加
+    startPosition?: number
   ): Promise<{ url: string; offset: number }> {
     try {
       if (!this.authToken) {
         await this.init();
       }
+
+      console.log("⚡️clientIP", clientIP);
+      // すべての必要なヘッダーを含める
+      const headers = {
+        ...this.getDefaultHeaders(),
+        "X-Client-IP": clientIP,
+        "X-Forwarded-For": clientIP,
+        "X-Real-IP": clientIP,
+        Accept: "*/*",
+        Origin: "https://radiko.jp",
+        Referer: "https://radiko.jp/",
+      };
 
       const queryParams = new URLSearchParams({
         station_id: stationId,
@@ -287,14 +315,18 @@ export class RadikoClient {
         l: "15",
       });
 
+      // const response = await this.proxyFetch(
+      //   `v2/api/ts/playlist.m3u8?${queryParams}`,
+      //   {
+      //     headers: {
+      //       ...this.getDefaultHeaders(),
+      //       "X-Client-IP": clientIP,
+      //     },
+      //   }
+      // );
       const response = await this.proxyFetch(
         `v2/api/ts/playlist.m3u8?${queryParams}`,
-        {
-          headers: {
-            ...this.getDefaultHeaders(),
-            "X-Client-IP": clientIP,
-          },
-        }
+        { headers }
       );
 
       const m3u8Text = await response.text();
@@ -309,13 +341,14 @@ export class RadikoClient {
       // チャンクリストURLもプロキシ経由でアクセス
       const proxyUrl = new URL(PROXY_URL);
       proxyUrl.searchParams.set("path", masterPlaylistUrl);
-      proxyUrl.searchParams.set(
-        "headers",
-        JSON.stringify({
-          ...this.getDefaultHeaders(),
-          "X-Client-IP": clientIP,
-        })
-      );
+      // proxyUrl.searchParams.set(
+      //   "headers",
+      //   JSON.stringify({
+      //     ...this.getDefaultHeaders(),
+      //     "X-Client-IP": clientIP,
+      //   })
+      // );
+      proxyUrl.searchParams.set("headers", JSON.stringify(headers));
 
       // 開始時刻からのオフセットを計算
       const offset = startPosition || 0;

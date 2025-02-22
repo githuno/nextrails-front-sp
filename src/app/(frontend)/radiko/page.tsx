@@ -1,12 +1,10 @@
 "use client";
-import { useEffect, useState, useRef, useCallback, ErrorInfo } from "react";
-import { useErrorBoundary } from "@/hooks/useErrorBoundary";
-import { ErrorBoundary } from "./errorBoundary";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { RadikoClient } from "./lib/client";
 import Hls from "hls.js";
-import { useToast } from "@/hooks/toast";
 
-const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
+// テスト用
+import { useToast } from "@/hooks/toast";
 
 export interface Result<T> {
   data: T;
@@ -78,18 +76,13 @@ export default function RadikoPage() {
   const [selectedTab, setSelectedTab] = useState<number>(6);
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  
+
   // LocalStorageのキー
   const PLAYBACK_STATE_KEY = "radiko_playback_state";
+  const PROXY_URL = `${process.env.NEXT_PUBLIC_API_BASE}/proxy/radiko`;
 
-  const { ToastPortal } = useToast();
-  const { handleError } = useErrorBoundary();
-  const handleBoundaryError = useCallback(
-    (error: Error, errorInfo: ErrorInfo) => {
-      handleError(error);
-    },
-    [handleError]
-  );
+  // テスト用
+  const { showSuccess } = useToast();
 
   // 日付タブの一覧を現在時刻から生成するように修正
   // dates配列を現在時刻から生成する部分を修正
@@ -115,6 +108,7 @@ export default function RadikoPage() {
     const now = new Date();
     const jstOffset = 9 * 60;
     const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+    // console.log("UTC:", new Date(utc + jstOffset * 60 * 1000));
     return new Date(utc + jstOffset * 60 * 1000);
   });
 
@@ -151,6 +145,8 @@ export default function RadikoPage() {
       });
 
       return new Promise<Hls>((resolve, reject) => {
+        console.log("audioRef.current:", audioRef.current);
+        console.log("streamInfo:", streamInfo);
         hls.attachMedia(audioRef.current!);
 
         const onError = (_: any, data: { fatal: boolean }) => {
@@ -275,12 +271,12 @@ export default function RadikoPage() {
         await client.init();
         const result = await client.getStations();
         if (result.error) {
-          handleError(result.error);
+          throw result.error;
         }
         setStations(result.data);
       } catch (error) {
         console.error("Station loading error:", error);
-        handleError(error);
+        setError("放送局の取得に失敗しました。");
       }
     };
     initializeStations();
@@ -314,7 +310,6 @@ export default function RadikoPage() {
             ? err.message
             : "番組情報の取得中にエラーが発生しました。";
         setError(errorMessage);
-        handleError(err); // エラーをトースト表示
       } finally {
         setIsLoading(false);
       }
@@ -440,102 +435,107 @@ export default function RadikoPage() {
   if (!isClient) return null;
 
   return (
-    <ErrorBoundary onError={handleBoundaryError}>
-      <div className="container mx-auto p-4 pb-32">
-        <h1 className="text-2xl font-bold mb-4">Radiko Player</h1>
+    <div className="container mx-auto p-4 pb-32">
+      <h1 className="text-2xl font-bold mb-4">Radiko Player</h1>
 
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+      {/* テスト用ボタンを追加 */}
+      <button
+        onClick={() => showSuccess("トーストテスト")}
+        className="mb-4 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+      >
+        テスト
+      </button>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h2 className="text-xl font-semibold mb-2">放送局</h2>
+          <div className="grid grid-cols-2 gap-2">
+            {stations.map((station) => (
+              <button
+                key={station.id}
+                onClick={() => handleStationSelect(station.id)}
+                className={`p-2 rounded ${
+                  selectedStation === station.id
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-200"
+                }`}
+              >
+                {station.name}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <h2 className="text-xl font-semibold mb-2">放送局</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {stations.map((station) => (
+        <div>
+          <h2 className="text-xl font-semibold mb-2">番組表</h2>
+
+          {/* 日付タブ */}
+          <div className="flex overflow-x-auto mb-4 border-b" ref={tabsRef}>
+            {dates.map((date, index) => {
+              const isToday = date.toDateString() === new Date().toDateString();
+              return (
                 <button
-                  key={station.id}
-                  onClick={() => handleStationSelect(station.id)}
-                  className={`p-2 rounded ${
-                    selectedStation === station.id
-                      ? "bg-blue-500 text-white"
-                      : "bg-gray-200"
-                  }`}
+                  key={date.toISOString()}
+                  onClick={() => handleTabChange(index)}
+                  className={`px-4 py-2 whitespace-nowrap ${
+                    selectedTab === index
+                      ? "border-b-2 border-blue-500 text-blue-500"
+                      : "text-gray-500"
+                  } ${isToday ? "bg-blue-50" : ""}`}
                 >
-                  {station.name}
+                  {date.toLocaleDateString("ja-JP", {
+                    month: "numeric",
+                    day: "numeric",
+                    weekday: "short",
+                    timeZone: "Asia/Tokyo",
+                  })}
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
 
-          <div>
-            <h2 className="text-xl font-semibold mb-2">番組表</h2>
-
-            {/* 日付タブ */}
-            <div className="flex overflow-x-auto mb-4 border-b" ref={tabsRef}>
-              {dates.map((date, index) => {
-                const isToday =
-                  date.toDateString() === new Date().toDateString();
-                return (
-                  <button
-                    key={date.toISOString()}
-                    onClick={() => handleTabChange(index)}
-                    className={`px-4 py-2 whitespace-nowrap ${
-                      selectedTab === index
-                        ? "border-b-2 border-blue-500 text-blue-500"
-                        : "text-gray-500"
-                    } ${isToday ? "bg-blue-50" : ""}`}
-                  >
-                    {date.toLocaleDateString("ja-JP", {
-                      month: "numeric",
-                      day: "numeric",
-                      weekday: "short",
-                      timeZone: "Asia/Tokyo",
-                    })}
-                  </button>
-                );
-              })}
+          {isLoading ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
+          ) : (
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {programs.length > 0 ? (
+                programs.map((program, index) => {
+                  const isCurrentlyPlaying = (() => {
+                    try {
+                      const savedState =
+                        localStorage.getItem(PLAYBACK_STATE_KEY);
+                      if (!savedState) return false;
 
-            {isLoading ? (
-              <div className="flex justify-center items-center h-32">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                {programs.length > 0 ? (
-                  programs.map((program, index) => {
-                    const isCurrentlyPlaying = (() => {
-                      try {
-                        const savedState =
-                          localStorage.getItem(PLAYBACK_STATE_KEY);
-                        if (!savedState) return false;
+                      const state = JSON.parse(savedState) as PlaybackState;
+                      return (
+                        audioUrl && program.startTime === state.programStartTime
+                      );
+                    } catch {
+                      return false;
+                    }
+                  })();
+                  const isPast =
+                    new Date(
+                      parseInt(program.endTime.substring(0, 4)),
+                      parseInt(program.endTime.substring(4, 6)) - 1,
+                      parseInt(program.endTime.substring(6, 8)),
+                      parseInt(program.endTime.substring(8, 10)),
+                      parseInt(program.endTime.substring(10, 12))
+                    ) < new Date();
 
-                        const state = JSON.parse(savedState) as PlaybackState;
-                        return (
-                          audioUrl &&
-                          program.startTime === state.programStartTime
-                        );
-                      } catch {
-                        return false;
-                      }
-                    })();
-                    const isPast =
-                      new Date(
-                        parseInt(program.endTime.substring(0, 4)),
-                        parseInt(program.endTime.substring(4, 6)) - 1,
-                        parseInt(program.endTime.substring(6, 8)),
-                        parseInt(program.endTime.substring(8, 10)),
-                        parseInt(program.endTime.substring(10, 12))
-                      ) < new Date();
-
-                    return (
-                      <button
-                        key={index}
-                        onClick={() => handleProgramSelect(program)}
-                        className={`
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleProgramSelect(program)}
+                      className={`
                         w-full p-2 text-left border rounded transition-all
                         ${
                           isCurrentlyPlaying
@@ -544,69 +544,67 @@ export default function RadikoPage() {
                         }
                         ${isPast ? "text-gray-900" : "text-gray-500"}
                       `}
+                    >
+                      <div
+                        className={`font-medium ${
+                          isCurrentlyPlaying ? "text-blue-700" : ""
+                        }`}
                       >
-                        <div
-                          className={`font-medium ${
-                            isCurrentlyPlaying ? "text-blue-700" : ""
-                          }`}
-                        >
-                          {program.title}
-                        </div>
-                        <div
-                          className={`text-sm ${
-                            isPast ? "text-gray-600" : "text-gray-400"
-                          }`}
-                        >
-                          {formatRadikoTime(program.startTime)} -
-                          {formatRadikoTime(program.endTime)}
-                        </div>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="text-center text-gray-500 py-4">
-                    {error || "番組情報がありません"}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                        {program.title}
+                      </div>
+                      <div
+                        className={`text-sm ${
+                          isPast ? "text-gray-600" : "text-gray-400"
+                        }`}
+                      >
+                        {formatRadikoTime(program.startTime)} -
+                        {formatRadikoTime(program.endTime)}
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="text-center text-gray-500 py-4">
+                  {error || "番組情報がありません"}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* クライアントサイドでのみaudioを表示 */}
-        <div
-          className={`fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 ${
-            audioUrl ? "block" : "hidden"
-          }`}
-        >
-          <div className="container mx-auto max-w-7xl">
-            <h2 className="text-xl font-semibold mb-2">再生</h2>
-            <div className="flex flex-col gap-2">
-              <audio
-                ref={audioRef}
-                controls
-                className="w-full"
-                onEnded={handleEnded}
+      {/* クライアントサイドでのみaudioを表示 */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 ${
+          audioUrl ? "block" : "hidden"
+        }`}
+      >
+        <div className="container mx-auto max-w-7xl">
+          <h2 className="text-xl font-semibold mb-2">再生</h2>
+          <div className="flex flex-col gap-2">
+            <audio
+              ref={audioRef}
+              controls
+              className="w-full"
+              onEnded={handleEnded}
+            />
+            <div className="flex items-center gap-2">
+              <span className="text-sm">
+                再生速度: {playbackRate.toFixed(1)}x
+              </span>
+              <input
+                type="range"
+                min="0.5"
+                max="3.0"
+                step="0.1"
+                value={playbackRate}
+                onChange={handlePlaybackRateChange}
+                className="flex-grow"
               />
-              <div className="flex items-center gap-2">
-                <span className="text-sm">
-                  再生速度: {playbackRate.toFixed(1)}x
-                </span>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="3.0"
-                  step="0.1"
-                  value={playbackRate}
-                  onChange={handlePlaybackRateChange}
-                  className="flex-grow"
-                />
-              </div>
             </div>
           </div>
         </div>
       </div>
-      <ToastPortal />
-    </ErrorBoundary>
+    </div>
   );
 }
