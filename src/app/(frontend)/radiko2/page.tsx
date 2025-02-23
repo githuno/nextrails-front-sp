@@ -27,6 +27,7 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedTab, setSelectedTab] = useState<number>(6);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  let clientIP = "";
 
   // refs
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -47,6 +48,14 @@ export default function Page() {
     date.setDate(date.getDate() - (6 - i));
     return date;
   });
+
+  const getClientIP = async () => {
+    const clientIp = await fetch("https://api.ipify.org?format=json")
+      .then((response) => response.json())
+      .then((data) => data.ip)
+      .catch(() => undefined);
+    return clientIp;
+  };
 
   // HLSストリームの初期化
   const initializeHLS = useCallback((url: string) => {
@@ -192,7 +201,9 @@ export default function Page() {
     if (stationId) {
       try {
         const res = await fetch(
-          `${RadikoApi}/programs?type=weekly&stationId=${stationId}`
+          `${RadikoApi}/programs?type=weekly&ip=${
+            ip ?? clientIP
+          }&stationId=${stationId}`
         );
         if (!res.ok) throw new Error("番組表の取得に失敗しました");
         const data = await res.json();
@@ -293,7 +304,9 @@ export default function Page() {
     setIsLoading(true);
     try {
       const res = await fetch(
-        `${RadikoApi}/programs?type=date&stationId=${stationId}&date=${date}`
+        `${RadikoApi}/programs?type=date&ip=${
+          ip ?? clientIP
+        }&stationId=${stationId}&date=${date}`
       );
       if (!res.ok) throw new Error("番組表の取得に失敗しました");
       const data = await res.json();
@@ -312,7 +325,9 @@ export default function Page() {
     setIsLoading(true);
     try {
       const res = await fetch(
-        `${RadikoApi}/programs?type=weekly&stationId=${stationId}`
+        `${RadikoApi}/programs?type=weekly&ip=${
+          ip ?? clientIP
+        }&stationId=${stationId}`
       );
       if (!res.ok) throw new Error("番組表の取得に失敗しました");
       const data = await res.json();
@@ -381,22 +396,14 @@ export default function Page() {
   // 認証処理
   const authWithIp = useCallback(
     async (ip?: string) => {
-      let clientIp = ip;
-      if (!ip) {
-        clientIp = await fetch("https://api.ipify.org?format=json")
-          .then((response) => response.json())
-          .then((data) => data.ip)
-          .catch(() => undefined);
-        console.log("clientIp:", clientIp);
-      }
-      const res = await fetch(`${RadikoApi}/auth?ip=${clientIp}`, {
+      const res = await fetch(`${RadikoApi}/auth?ip=${ip ?? clientIP}`, {
         method: "POST",
       });
       if (!res.ok) {
         throw new Error("初期データの取得に失敗しました");
       }
       const authData = await res.json();
-      setIp(ip || "");
+      if (ip) setIp(ip);
       setArea(authData.areaId);
       setAuthToken(authData.token);
       const stationsRes = await fetch(
@@ -467,7 +474,9 @@ export default function Page() {
       if (savedIp) {
         setIp(savedIp);
       }
-      // 2.認証
+      // 2.clientIpの取得
+      clientIP = await getClientIP();
+      // 3.認証
       await authWithIp(savedIp ? savedIp : undefined);
     };
 
