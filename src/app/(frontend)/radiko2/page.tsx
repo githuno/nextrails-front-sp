@@ -416,17 +416,7 @@ export default function Page() {
               // 再度再生速度を設定（念のため）
               audioRef.current.playbackRate = savedPlaybackRate;
               // 初期状態を保存
-              const initialState: PlaybackState = {
-                stationId: selectedStation,
-                programStartTime: program.startTime,
-                programEndTime: program.endTime,
-                currentTime: 0,
-                playbackRate: savedPlaybackRate,
-              };
-              localStorage.setItem(
-                PLAYBACK_STATE_KEY,
-                JSON.stringify(initialState)
-              );
+              savePlaybackState(program);
             }
             audioRef.current?.removeEventListener("canplay", handleCanPlay);
           };
