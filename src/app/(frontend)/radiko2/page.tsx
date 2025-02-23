@@ -413,7 +413,12 @@ export default function Page() {
   // 認証処理
   const authWithIp = useCallback(
     async (ip?: string) => {
-      const res = await fetch(`${RadikoApi}/auth?ip=${ip ? ip : clientIP}`, {
+      const detectedIp = await getClientIP();
+      if (detectedIp) {
+        setClientIP(detectedIp);
+        console.log("Client IP detected:", detectedIp);
+      }
+      const res = await fetch(`${RadikoApi}/auth?ip=${ip || detectedIp}`, {
         method: "POST",
       });
       if (!res.ok) {
@@ -491,13 +496,7 @@ export default function Page() {
       if (savedIp) {
         setIp(savedIp);
       }
-      // 2.clientIpの取得
-      const detectedIp = await getClientIP();
-      if (detectedIp) {
-        setClientIP(detectedIp);
-        console.log("Client IP detected:", detectedIp);
-      }
-      // 3.認証
+      // 2.認証
       await authWithIp(savedIp ? savedIp : undefined);
     };
 
