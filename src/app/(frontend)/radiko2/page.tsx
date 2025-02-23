@@ -154,6 +154,7 @@ export default function Page() {
         currentTime: audioRef.current.currentTime,
         playbackRate: playbackRate,
       };
+      console.log("Saving playback state:", state); // デバッグログ
       localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
     },
     [selectedStation, playbackRate]
@@ -161,7 +162,10 @@ export default function Page() {
   // 定期的な再生位置の保存を改善
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !area) return;
+    if (!audio || !isPlaying) {
+      console.log("Audio not ready or not playing, skipping state monitoring");
+      return;
+    }
 
     const handleStateUpdate = () => {
       const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
@@ -173,11 +177,20 @@ export default function Page() {
         currentTime: audio.currentTime,
         playbackRate: audio.playbackRate,
       };
+      console.log("Updating playback state:", updatedState); // デバッグログ
       localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(updatedState));
     };
 
     // イベントリスナーの設定
-    const events = ["pause", "seeking", "ratechange", "timeupdate"];
+    const events = [
+      "timeupdate",
+      "pause",
+      "seeking",
+      // "seeked",
+      "ratechange",
+      // "play",
+      // "playing",
+    ];
     events.forEach((event) => audio.addEventListener(event, handleStateUpdate));
 
     // 定期的な保存
@@ -191,7 +204,7 @@ export default function Page() {
       clearInterval(interval);
       handleStateUpdate();
     };
-  }, [audioRef.current]);
+  }, [isPlaying]);
   /* -------------------------------------------------------------------日選択 */
   // タブ切り替えの処理を修正
   const handleTabChange = (index: number) => {
@@ -209,7 +222,6 @@ export default function Page() {
     async (stationId: string, date: string) => {
       setIsLoading(true);
       try {
-        console.log("Current IPs:", { ip, clientIP }); // デバッグログ
         const effectiveIp = ip || clientIP;
 
         const res = await fetch(
@@ -236,7 +248,6 @@ export default function Page() {
     async (stationId: string) => {
       setIsLoading(true);
       try {
-        console.log("Current IPs:", { ip, clientIP }); // デバッグログ
         const effectiveIp = ip || clientIP;
 
         const res = await fetch(
@@ -274,7 +285,6 @@ export default function Page() {
         );
         if (!res.ok) throw new Error("番組表の取得に失敗しました");
         const data = await res.json();
-        console.log("Programs:", data);
         setPrograms(data.data || []);
       } catch (error) {
         console.error("Failed to fetch programs:", error);
@@ -296,8 +306,6 @@ export default function Page() {
         console.log("Waiting for IP...");
         return;
       }
-
-      console.log("Fetching programs with:", { ip, clientIP });
       await getPrograms(selectedStation);
 
       // 当日のタブまでスクロール
@@ -385,6 +393,11 @@ export default function Page() {
         setIsPlaying(true);
         setAudioUrl(streamUrl);
 
+        const handlePlay = () => {
+          savePlaybackState(program);
+          audioRef.current?.removeEventListener("play", handlePlay);
+        };
+
         // 再生状態を保存
         savePlaybackState(program);
 
@@ -427,7 +440,6 @@ export default function Page() {
       const detectedIp = await getClientIP();
       if (detectedIp) {
         setClientIP(detectedIp);
-        console.log("Client IP detected:", detectedIp);
       }
       const res = await fetch(`${RadikoApi}/auth?ip=${ip || detectedIp}`, {
         method: "POST",
@@ -528,14 +540,9 @@ export default function Page() {
     restore();
   }, [area]);
 
-  useEffect(() => {
-    console.log("ip:", ip);
-  }, [ip]);
-
   // IP変更ハンドラーを改善
   const handleIpChange = useCallback(
     async (newIp?: string) => {
-      console.log("Changing IP...", newIp);
       try {
         // 1.現在の再生を停止
         cleanupPlayer();
