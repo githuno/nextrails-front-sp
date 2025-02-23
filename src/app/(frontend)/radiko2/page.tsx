@@ -1,11 +1,6 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-} from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Hls from "hls.js";
 import {
   RadikoApi,
@@ -386,7 +381,15 @@ export default function Page() {
   // 認証処理
   const authWithIp = useCallback(
     async (ip?: string) => {
-      const res = await fetch(`${RadikoApi}/auth${ip ? `?ip=${ip}` : ""}`, {
+      let clientIp = ip;
+      if (!ip) {
+        clientIp = await fetch("https://api.ipify.org?format=json")
+          .then((response) => response.json())
+          .then((data) => data.ip)
+          .catch(() => undefined);
+        console.log("clientIp:", clientIp);
+      }
+      const res = await fetch(`${RadikoApi}/auth?ip=${clientIp}`, {
         method: "POST",
       });
       if (!res.ok) {
