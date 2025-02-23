@@ -84,21 +84,21 @@ export default function Page() {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               // ネットワークエラー時は再試行
-              console.log(
-                "Fatal network error encountered, trying to recover..."
+              console.warn(
+                "Fatal *network* error encountered, trying to recover..."
               );
               hls.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               // メディアエラー時は再試行
-              console.log(
-                "Fatal media error encountered, trying to recover..."
+              console.warn(
+                "Fatal *media* error encountered, trying to recover..."
               );
               hls.recoverMediaError();
               break;
             default:
               // 致命的なエラーの場合はインスタンスを破棄
-              console.log("Fatal error, cannot recover");
+              console.error("Fatal error, cannot recover");
               hls.destroy();
               setError("再生中に致命的なエラーが発生しました");
               break;
@@ -154,7 +154,6 @@ export default function Page() {
         currentTime: audioRef.current.currentTime,
         playbackRate: playbackRate,
       };
-      console.log("Saving playback state:", state); // デバッグログ
       localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
     },
     [selectedStation, playbackRate]
@@ -162,10 +161,7 @@ export default function Page() {
   // 定期的な再生位置の保存を改善
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !isPlaying) {
-      console.log("Audio not ready or not playing, skipping state monitoring");
-      return;
-    }
+    if (!audio || !isPlaying) return;
 
     const handleStateUpdate = () => {
       const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
@@ -177,7 +173,6 @@ export default function Page() {
         currentTime: audio.currentTime,
         playbackRate: audio.playbackRate,
       };
-      console.log("Updating playback state:", updatedState); // デバッグログ
       localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(updatedState));
     };
 
