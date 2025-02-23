@@ -27,7 +27,7 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedTab, setSelectedTab] = useState<number>(6);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  let clientIP = "";
+  const [clientIP, setClientIP] = useState<string>("");
 
   // refs
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -475,7 +475,11 @@ export default function Page() {
         setIp(savedIp);
       }
       // 2.clientIpの取得
-      clientIP = await getClientIP();
+      const detectedIp = await getClientIP();
+      if (detectedIp) {
+        setClientIP(detectedIp);
+        console.log("Client IP detected:", detectedIp);
+      }
       // 3.認証
       await authWithIp(savedIp ? savedIp : undefined);
     };
