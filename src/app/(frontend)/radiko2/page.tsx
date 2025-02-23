@@ -21,6 +21,7 @@ export default function Page() {
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<string>("");
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [error, setError] = useState<string>("");
@@ -118,6 +119,7 @@ export default function Page() {
     localStorage.removeItem(PLAYBACK_STATE_KEY);
     setAudioUrl(null);
     setIsPlaying(false);
+    setCurrentProgram(null);
   };
 
   // 再生速度の変更処理
@@ -336,6 +338,7 @@ export default function Page() {
           hlsRef.current.destroy();
           hlsRef.current = null;
         }
+        setCurrentProgram(null);
         setIsPlaying(false);
         setAudioUrl(null);
         return;
@@ -399,6 +402,7 @@ export default function Page() {
         const streamUrl = `${RadikoApi}/stream/${selectedStation}/timeshift?ft=${
           program.ft
         }&to=${program.to}&ip=${ip || clientIP}`;
+        setCurrentProgram(program);
         initializeHLS(streamUrl);
         setIsPlaying(true);
         setAudioUrl(streamUrl);
@@ -434,6 +438,7 @@ export default function Page() {
           } catch (error) {
             console.error("Playback error:", error);
             setError("再生の開始に失敗しました");
+            setCurrentProgram(null);
           }
         }
       } catch (error) {
@@ -734,20 +739,6 @@ export default function Page() {
             <div className="space-y-2 max-h-[600px] overflow-y-auto">
               {programs.length > 0 ? (
                 programs.map((program, index) => {
-                  const isCurrentlyPlaying = (() => {
-                    try {
-                      const savedState =
-                        localStorage.getItem(PLAYBACK_STATE_KEY);
-                      if (!savedState) return false;
-
-                      const state = JSON.parse(savedState) as PlaybackState;
-                      return (
-                        audioUrl && program.startTime === state.programStartTime
-                      );
-                    } catch {
-                      return false;
-                    }
-                  })();
                   const isPast =
                     new Date(
                       parseInt(program.endTime.substring(0, 4)),
@@ -764,7 +755,7 @@ export default function Page() {
                       className={`
                         w-full p-2 text-left border rounded transition-all
                         ${
-                          isCurrentlyPlaying
+                          currentProgram === program
                             ? "bg-blue-100 border-blue-500 shadow-md"
                             : "hover:bg-gray-100 border-gray-200"
                         }
@@ -773,7 +764,7 @@ export default function Page() {
                     >
                       <div
                         className={`font-medium ${
-                          isCurrentlyPlaying ? "text-blue-700" : ""
+                          currentProgram === program ? "text-blue-700" : ""
                         }`}
                       >
                         {program.title}
@@ -806,7 +797,15 @@ export default function Page() {
         }`}
       >
         <div className="container mx-auto max-w-7xl">
-          <h2 className="text-xl font-semibold mb-2">再生</h2>
+          {currentProgram && (
+            <div className="text-sm text-gray-600">
+              <span className="mr-2">
+                {formatRadikoTime(currentProgram.startTime)} -{" "}
+                {formatRadikoTime(currentProgram.endTime)}
+              </span>
+              <span className="font-medium">{currentProgram.title}</span>
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <audio
               ref={audioRef}
