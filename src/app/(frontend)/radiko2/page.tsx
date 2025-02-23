@@ -8,6 +8,7 @@ import {
   IP_STORAGE_KEY,
   AREA_PREFECTURE_MAP,
   formatRadikoTime,
+  formatDisplayDate,
   type Station,
   type Program,
   type PlaybackState,
@@ -155,6 +156,7 @@ export default function Page() {
         programEndTime: program.endTime,
         currentTime: audioRef.current.currentTime,
         playbackRate: playbackRate,
+        program: program,
       };
       localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
     },
@@ -501,6 +503,7 @@ export default function Page() {
       // 選局と再生速度を設定
       setSelectedStation(state.stationId);
       setPlaybackRate(state.playbackRate);
+      setCurrentProgram(state.program);
 
       if (inputRef.current) {
         inputRef.current.value = ip;
@@ -790,10 +793,14 @@ export default function Page() {
           {currentProgram && (
             <div className="text-sm text-gray-600">
               <span className="mr-2">
+                {formatDisplayDate(currentProgram.startTime)}
+                {"/"}
                 {formatRadikoTime(currentProgram.startTime)} -{" "}
                 {formatRadikoTime(currentProgram.endTime)}
               </span>
-              <span className="font-medium">{currentProgram.title}</span>
+              <span className="text-lg font-semibold">
+                {currentProgram.title}
+              </span>
             </div>
           )}
           <div className="flex flex-col gap-2">

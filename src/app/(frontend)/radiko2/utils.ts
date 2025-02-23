@@ -82,6 +82,7 @@ interface PlaybackState {
   programEndTime: string;
   currentTime: number;
   playbackRate: number;
+  program: Program;
 }
 
 // 日時フォーマット用のヘルパー関数
@@ -103,12 +104,27 @@ const formatRadikoTime = (timeStr: string): string => {
   }).format(jstDate);
 };
 
+// 日付フォーマット用のヘルパー関数を追加
+const formatDisplayDate = (dateStr: string) => {
+  const year = parseInt(dateStr.substring(0, 4));
+  const month = parseInt(dateStr.substring(4, 6));
+  const day = parseInt(dateStr.substring(6, 8));
+  const date = new Date(year, month - 1, day);
+  
+  return date.toLocaleDateString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  });
+};
+
 export {
   RadikoApi,
   PLAYBACK_STATE_KEY,
   IP_STORAGE_KEY,
   AREA_PREFECTURE_MAP,
   formatRadikoTime,
+  formatDisplayDate,
   type Station,
   type Program,
   type PlaybackState,
