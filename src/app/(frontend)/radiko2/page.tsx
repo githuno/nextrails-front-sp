@@ -244,7 +244,14 @@ export default function Page() {
             effectiveIp ? `&ip=${effectiveIp}` : ""
           }&stationId=${stationId}`
         );
-        // ...existing code...
+        if (!res.ok) throw new Error("番組表の取得に失敗しました");
+        const data = await res.json();
+        setPrograms(data.data || []);
+      } catch (error) {
+        console.error("Failed to fetch programs:", error);
+        setError(
+          error instanceof Error ? error.message : "番組表の取得に失敗しました"
+        );
       } finally {
         setIsLoading(false);
       }
@@ -336,8 +343,8 @@ export default function Page() {
 
       // HLSストリームを初期化（認証トークンをヘッダーに追加）
       const response = await fetch(streamUrl, {
-        method: 'GET',
-        credentials: 'include',
+        method: "GET",
+        credentials: "include",
       });
       if (!response.ok) throw new Error("ストリームの取得に失敗しました");
 
