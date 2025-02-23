@@ -323,6 +323,11 @@ export default function Page() {
 
     try {
       if (isPlaying) {
+        if (
+          !confirm("再生を停止しますか？現在聴いている番組もアンセットされます")
+        )
+          return;
+
         // 再生中の場合は停止
         if (audioRef.current) {
           audioRef.current.pause();
@@ -380,6 +385,16 @@ export default function Page() {
       if (!selectedStation) return;
 
       try {
+        // 保存されている再生速度を確認
+        const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
+        let savedPlaybackRate = playbackRate;
+        if (savedState) {
+          const state = JSON.parse(savedState) as PlaybackState;
+          savedPlaybackRate = state.playbackRate;
+          // 再生速度を更新
+          setPlaybackRate(savedPlaybackRate);
+        }
+
         // ft と to をそのまま使用（YYYYMMDDHHmmss形式）、エリアIDを追加
         const streamUrl = `${RadikoApi}/stream/${selectedStation}/timeshift?ft=${
           program.ft
@@ -388,30 +403,45 @@ export default function Page() {
         setIsPlaying(true);
         setAudioUrl(streamUrl);
 
-        const handlePlay = () => {
-          savePlaybackState(program);
-          audioRef.current?.removeEventListener("play", handlePlay);
-        };
-
-        // 再生状態を保存
-        savePlaybackState(program);
-
         if (audioRef.current) {
-          audioRef.current.play();
+          // 再生速度を設定
+          audioRef.current.playbackRate = savedPlaybackRate;
+
+          const handleCanPlay = () => {
+            if (audioRef.current) {
+              // 再度再生速度を設定（念のため）
+              audioRef.current.playbackRate = savedPlaybackRate;
+              // 初期状態を保存
+              const initialState: PlaybackState = {
+                stationId: selectedStation,
+                programStartTime: program.startTime,
+                programEndTime: program.endTime,
+                currentTime: 0,
+                playbackRate: savedPlaybackRate,
+              };
+              localStorage.setItem(
+                PLAYBACK_STATE_KEY,
+                JSON.stringify(initialState)
+              );
+            }
+            audioRef.current?.removeEventListener("canplay", handleCanPlay);
+          };
+
+          audioRef.current.addEventListener("canplay", handleCanPlay);
+
+          try {
+            await audioRef.current.play();
+          } catch (error) {
+            console.error("Playback error:", error);
+            setError("再生の開始に失敗しました");
+          }
         }
       } catch (error) {
         console.error("Playback error:", error);
         setError("再生の開始に失敗しました");
       }
     },
-    [
-      selectedStation,
-      playbackRate,
-      initializeHLS,
-      savePlaybackState,
-      ip,
-      clientIP,
-    ]
+    [selectedStation, playbackRate, initializeHLS, ip, clientIP]
   );
 
   /* --------------------------------------------------初期化（エリア、放送局） */
