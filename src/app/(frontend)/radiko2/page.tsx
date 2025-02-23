@@ -202,7 +202,7 @@ export default function Page() {
       try {
         const res = await fetch(
           `${RadikoApi}/programs?type=weekly&ip=${
-            ip || clientIP
+            ip ? ip : clientIP
           }&stationId=${stationId}`
         );
         if (!res.ok) throw new Error("番組表の取得に失敗しました");
@@ -305,7 +305,7 @@ export default function Page() {
     try {
       const res = await fetch(
         `${RadikoApi}/programs?type=date&ip=${
-          ip || clientIP
+          ip ? ip : clientIP
         }&stationId=${stationId}&date=${date}`
       );
       if (!res.ok) throw new Error("番組表の取得に失敗しました");
@@ -326,7 +326,7 @@ export default function Page() {
     try {
       const res = await fetch(
         `${RadikoApi}/programs?type=weekly&ip=${
-          ip || clientIP
+          ip ? ip : clientIP
         }&stationId=${stationId}`
       );
       if (!res.ok) throw new Error("番組表の取得に失敗しました");
@@ -396,7 +396,7 @@ export default function Page() {
   // 認証処理
   const authWithIp = useCallback(
     async (ip?: string) => {
-      const res = await fetch(`${RadikoApi}/auth?ip=${ip || clientIP}`, {
+      const res = await fetch(`${RadikoApi}/auth?ip=${ip ? ip : clientIP}`, {
         method: "POST",
       });
       if (!res.ok) {
