@@ -27,7 +27,8 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [selectedTab, setSelectedTab] = useState<number>(6);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [clientIP, setClientIP] = useState<string>("");
+  const [clientIP, setClientIP] = useState<string>(""); // 自動取得のip
+  const [ip, setIp] = useState<string>(""); // ユーザー指定のip
 
   // refs
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -300,47 +301,52 @@ export default function Page() {
     }
   };
   // 日付指定での番組表取得
-  const getProgramsByDate = async (stationId: string, date: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(
-        `${RadikoApi}/programs?type=date&ip=${
-          ip ? ip : clientIP
-        }&stationId=${stationId}&date=${date}`
-      );
-      if (!res.ok) throw new Error("番組表の取得に失敗しました");
-      const data = await res.json();
-      setPrograms(data.data || []);
-    } catch (error) {
-      console.error("Failed to fetch programs:", error);
-      setError(
-        error instanceof Error ? error.message : "番組表の取得に失敗しました"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const getProgramsByDate = useCallback(
+    async (stationId: string, date: string) => {
+      setIsLoading(true);
+      try {
+        console.log("Current IPs:", { ip, clientIP }); // デバッグログ
+        const effectiveIp = ip || clientIP;
+
+        const res = await fetch(
+          `${RadikoApi}/programs?type=date${
+            effectiveIp ? `&ip=${effectiveIp}` : ""
+          }&stationId=${stationId}&date=${date}`
+        );
+        if (!res.ok) throw new Error("番組表の取得に失敗しました");
+        const data = await res.json();
+        setPrograms(data.data || []);
+      } catch (error) {
+        console.error("Failed to fetch programs:", error);
+        setError(
+          error instanceof Error ? error.message : "番組表の取得に失敗しました"
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [ip, clientIP]
+  );
   // 番組表の再取得
-  const getPrograms = async (stationId: string) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(
-        `${RadikoApi}/programs?type=weekly&ip=${
-          ip ? ip : clientIP
-        }&stationId=${stationId}`
-      );
-      if (!res.ok) throw new Error("番組表の取得に失敗しました");
-      const data = await res.json();
-      setPrograms(data.data || []);
-    } catch (error) {
-      console.error("Failed to fetch programs:", error);
-      setError(
-        error instanceof Error ? error.message : "番組表の取得に失敗しました"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const getPrograms = useCallback(
+    async (stationId: string) => {
+      setIsLoading(true);
+      try {
+        console.log("Current IPs:", { ip, clientIP }); // デバッグログ
+        const effectiveIp = ip || clientIP;
+
+        const res = await fetch(
+          `${RadikoApi}/programs?type=weekly${
+            effectiveIp ? `&ip=${effectiveIp}` : ""
+          }&stationId=${stationId}`
+        );
+        // ...existing code...
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [ip, clientIP]
+  );
 
   /* -----------------------------------------------------------------番組選択 */
   // 番組選択の処理を修正
@@ -377,8 +383,6 @@ export default function Page() {
   );
 
   /* --------------------------------------------------初期化（エリア、放送局） */
-  const [ip, setIp] = useState<string>("");
-
   // プレイヤーのクリーンアップ関数
   const cleanupPlayer = useCallback(() => {
     setPrograms([]);
