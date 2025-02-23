@@ -327,18 +327,20 @@ export default function Page() {
       }
 
       // リアルタイム再生用のストリームURL（エリアIDを追加）
-      const streamUrl = `${RadikoApi}/stream/${selectedStation}/live?area=${area}`;
+      const streamUrl = `${RadikoApi}/stream/${selectedStation}/live?ip=${
+        ip || clientIP
+      }`;
 
       // エラー状態をリセット
       setError("");
 
       // HLSストリームを初期化（認証トークンをヘッダーに追加）
       const response = await fetch(streamUrl, {
-        headers: authToken ? { "X-Radiko-AuthToken": authToken } : undefined,
+        method: 'GET',
+        credentials: 'include',
       });
       if (!response.ok) throw new Error("ストリームの取得に失敗しました");
 
-      const streamData = await response.text();
       initializeHLS(streamUrl);
       setIsPlaying(true);
       setAudioUrl(streamUrl);
@@ -359,7 +361,7 @@ export default function Page() {
       setIsPlaying(false);
       setAudioUrl(null);
     }
-  }, [selectedStation, isPlaying, initializeHLS, area, authToken]);
+  }, [selectedStation, isPlaying, initializeHLS, ip, clientIP, authToken]);
 
   /* -----------------------------------------------------------------番組選択 */
   // 番組選択の処理を修正
@@ -369,7 +371,9 @@ export default function Page() {
 
       try {
         // ft と to をそのまま使用（YYYYMMDDHHmmss形式）、エリアIDを追加
-        const streamUrl = `${RadikoApi}/stream/${selectedStation}/timeshift?ft=${program.ft}&to=${program.to}&area=${area}`;
+        const streamUrl = `${RadikoApi}/stream/${selectedStation}/timeshift?ft=${
+          program.ft
+        }&to=${program.to}&ip=${ip || clientIP}`;
         initializeHLS(streamUrl);
         setIsPlaying(true);
         setAudioUrl(streamUrl);
@@ -390,8 +394,8 @@ export default function Page() {
       playbackRate,
       initializeHLS,
       savePlaybackState,
-      area,
-      authToken,
+      ip,
+      clientIP,
     ]
   );
 
@@ -426,10 +430,10 @@ export default function Page() {
       }
       const authData = await res.json();
       if (ip) setIp(ip);
-      setArea(authData.areaId);
-      setAuthToken(authData.token);
+      setArea(authData.areaId); //いらないかも
+      setAuthToken(authData.token); //いらなそう
       const stationsRes = await fetch(
-        `${RadikoApi}/stations/${authData.areaId}`
+        `${RadikoApi}/stations/${ip || detectedIp}`
       );
       if (!stationsRes.ok) {
         throw new Error("放送局の取得に失敗しました");
@@ -464,7 +468,9 @@ export default function Page() {
       }
 
       // タイムシフトストリームのURLを構築
-      const streamUrl = `${RadikoApi}/stream/${state.stationId}/timeshift?ft=${state.programStartTime}&to=${state.programEndTime}&area=${area}&token=${authToken}`;
+      const streamUrl = `${RadikoApi}/stream/${state.stationId}/timeshift?ft=${
+        state.programStartTime
+      }&to=${state.programEndTime}&ip=${ip || clientIP}&token=${authToken}`;
 
       // HLSストリームを初期化
       initializeHLS(streamUrl);
