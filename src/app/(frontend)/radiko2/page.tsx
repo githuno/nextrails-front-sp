@@ -17,6 +17,7 @@ import {
   type Program,
   type PlaybackState,
 } from "./utils";
+// import { useToast } from "@/hooks/toast";
 
 // 状態管理
 export default function Page() {
@@ -529,23 +530,6 @@ export default function Page() {
       handleIpChange(newIp);
     }
   }, [ip, handleIpChange]);
-
-  // // 初期データ取得の処理を修正
-  // const fetchInitialData = async (ip: string) => {
-  //   console.log("Fetching initial data...", ip);
-  //   setIsLoading(true);
-  //   try {
-  //     // まずエリアと認証を取得
-
-  //     // エリア設定後に再生状態を復元
-  //     await restorePlaybackState();
-  //   } catch (error) {
-  //     console.error("Failed to fetch initial data:", error);
-  //     setError("初期データの取得に失敗しました");
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
 
   /* -------------------------------------------------------------レンダリング */
   // クライアントサイドでのみ状態を更新するために useEffect を使用
