@@ -415,7 +415,7 @@ export default function Page() {
       const stationsData = await stationsRes.json();
       setStations(stationsData.data || []);
     },
-    [ip]
+    [ip, clientIP]
   );
 
   // 再生状態の復元処理
