@@ -117,7 +117,7 @@ const StorageContextWrapper: React.FC<{
 
       {/* IDBの選択ボタン TODO:オフライン認証ボタンに変更*/}
       <div className="fixed top-0 w-svw h-svh pointer-events-none z-50">
-        <div className="absolute top-[10%] right-[5%] pointer-events-auto">
+        <div className="absolute top-[2%] right-[30%] pointer-events-auto">
           <label>IndexedDB:</label>
           <select
             value={idb.dbName}

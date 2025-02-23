@@ -1,88 +1,258 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
+
+const POSITION = "bottom-right";
+const DURATION = 5000;
+
+// 位置の型を追加
+export type ToastPosition =
+  | "top-right"
+  | "top-left"
+  | "bottom-right"
+  | "bottom-left"
+  | "top-center"
+  | "bottom-center";
 
 // トースト通知の種類
 export type ToastType = "info" | "success" | "error";
 
 // トースト通知の状態
 export interface ToastState {
+  id: string;
   message: string;
   isVisible: boolean;
   type: ToastType;
+  position?: ToastPosition;
+  duration?: number;
 }
 
-// トースト通知のコンポーネント
-const Toast: React.FC<{ message: string; type: ToastType }> = ({
-  message,
-  type,
+interface ToastProps {
+  toast: ToastState;
+  onRemove: (id: string) => void;
+}
+
+// トーストの位置によってグループ化するヘルパー関数を追加
+const groupToastsByPosition = (toasts: ToastState[]) => {
+  return toasts.reduce((acc, toast) => {
+    const position = toast.position || POSITION;
+    if (!acc[position]) {
+      acc[position] = [];
+    }
+    acc[position].push(toast);
+    return acc;
+  }, {} as Record<ToastPosition, ToastState[]>);
+};
+
+// トーストポータルコンポーネントを修正
+const ToastPortal: React.FC<{ position: ToastPosition; toasts: ToastState[]; onRemove: (id: string) => void }> = ({
+  position,
+  toasts,
+  onRemove
 }) => {
+  // 位置に応じたスタイルを定義
+  const containerStyles = {
+    'top-right': 'top-0 right-0',
+    'top-left': 'top-0 left-0',
+    'bottom-right': 'bottom-0 right-0',
+    'bottom-left': 'bottom-0 left-0',
+    'top-center': 'top-0 left-1/2 -translate-x-1/2',
+    'bottom-center': 'bottom-0 left-1/2 -translate-x-1/2'
+  }[position];
+
+  return (
+    <div className={`fixed ${containerStyles} flex flex-col gap-2 p-4 pointer-events-none`}>
+      {toasts.map((toast, index) => (
+        <Toast
+          key={toast.id}
+          toast={toast}
+          onRemove={onRemove}
+          index={index}
+        />
+      ))}
+    </div>
+  );
+};
+
+// Toast コンポーネント
+const Toast: React.FC<ToastProps & { index: number }> = ({ 
+  toast, 
+  onRemove, 
+  index 
+}) => {
+  const { message, type, position = POSITION } = toast;
+
   const backgroundColor = {
     info: "bg-blue-500",
     success: "bg-green-500",
     error: "bg-red-500",
   }[type];
 
+  // インデックスに基づく垂直方向のオフセット
+  const offset = `${index * 4}rem`;
+
+  // 位置に応じたスタイルを定義
+  const positionStyles = {
+    'top-right': 'top-4 right-4',
+    'top-left': 'top-4 left-4',
+    'bottom-right': 'bottom-4 right-4',
+    'bottom-left': 'bottom-4 left-4',
+    'top-center': 'top-4 left-1/2 -translate-x-1/2',
+    'bottom-center': 'bottom-4 left-1/2 -translate-x-1/2'
+  }[position];
+
+  // 位置に応じたアニメーションクラスを定義
+  const animationClass = {
+    'top-right': 'animate-slide-in-right',
+    'top-left': 'animate-slide-in-left',
+    'bottom-right': 'animate-slide-in-right',
+    'bottom-left': 'animate-slide-in-left',
+    'top-center': 'animate-slide-in-down',
+    'bottom-center': 'animate-slide-in-up'
+  }[position];
+
   return (
     <div
-      className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-md text-white ${backgroundColor} transition-opacity duration-300 shadow-lg z-50`}
+      style={{
+        marginTop: position.startsWith('top') ? offset : undefined,
+        marginBottom: position.startsWith('bottom') ? offset : undefined
+      }}
+      className={`
+        fixed ${positionStyles}
+        pointer-events-auto
+        px-4 py-2 rounded-md text-white ${backgroundColor}
+        shadow-lg
+        transition-all duration-300
+        ${animationClass}
+      `}
+      onClick={() => onRemove(toast.id)}
     >
       {message}
     </div>
   );
 };
 
-// トースト通知のカスタムフック
-export const useToast = () => {
-  const [toast, setToast] = useState<ToastState>({
-    message: "",
-    isVisible: false,
-    type: "info",
-  });
+// トーストコンテキストの型定義
+interface ToastContextType {
+  showToast: (
+    message: string,
+    options?: Partial<Omit<ToastState, "id" | "isVisible">>
+  ) => void;
+  showError: (
+    error: Error | string,
+    options?: Partial<Omit<ToastState, "id" | "isVisible" | "type">>
+  ) => void;
+  showSuccess: (
+    message: string,
+    options?: Partial<Omit<ToastState, "id" | "isVisible" | "type">>
+  ) => void;
+  showInfo: (
+    message: string,
+    options?: Partial<Omit<ToastState, "id" | "isVisible" | "type">>
+  ) => void;
+}
 
-  const showToast = useCallback((message: string, type: ToastType = "info") => {
-    setToast({ message, isVisible: true, type });
-    setTimeout(() => {
-      setToast((prev) => ({ ...prev, isVisible: false }));
-    }, 3000);
+// トーストコンテキストの作成
+const ToastContext = createContext<ToastContextType | null>(null);
+
+// トーストプロバイダーコンポーネント
+const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [toasts, setToasts] = useState<ToastState[]>([]);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
+  const showToast = useCallback(
+    (
+      message: string,
+      options: Partial<Omit<ToastState, "id" | "isVisible">> = {}
+    ) => {
+      const id = Math.random().toString(36).substring(2, 9);
+      const newToast: ToastState = {
+        id,
+        message,
+        isVisible: true,
+        type: options.type || "info",
+        position: options.position || POSITION,
+        duration: options.duration || DURATION,
+      };
+
+      setToasts((prev) => [...prev, newToast]);
+
+      setTimeout(() => {
+        removeToast(id);
+      }, newToast.duration);
+    },
+    [removeToast]
+  );
+
   const showError = useCallback(
-    (error: Error | string) => {
+    (
+      error: Error | string,
+      options?: Partial<Omit<ToastState, "id" | "isVisible" | "type">>
+    ) => {
       const message = error instanceof Error ? error.message : error;
-      showToast(message, "error");
+      showToast(message, { ...options, type: "error" });
     },
     [showToast]
   );
 
   const showSuccess = useCallback(
-    (message: string) => {
-      showToast(message, "success");
+    (
+      message: string,
+      options?: Partial<Omit<ToastState, "id" | "isVisible" | "type">>
+    ) => {
+      showToast(message, { ...options, type: "success" });
     },
     [showToast]
   );
 
   const showInfo = useCallback(
-    (message: string) => {
-      showToast(message, "info");
+    (
+      message: string,
+      options?: Partial<Omit<ToastState, "id" | "isVisible" | "type">>
+    ) => {
+      showToast(message, { ...options, type: "info" });
     },
     [showToast]
   );
 
-  // トースト通知のレンダリング
-  const ToastPortal = useCallback(() => {
-    if (!toast.isVisible) return null;
+  const toastPortal =
+    typeof document !== "undefined"
+      ? createPortal(
+          <>
+            {Object.entries(groupToastsByPosition(toasts)).map(([position, positionToasts]) => (
+              <ToastPortal
+                key={position}
+                position={position as ToastPosition}
+                toasts={positionToasts}
+                onRemove={removeToast}
+              />
+            ))}
+          </>,
+          document.body
+        )
+      : null;
 
-    return createPortal(
-      <Toast message={toast.message} type={toast.type} />,
-      document.body
-    );
-  }, [toast.isVisible, toast.message, toast.type]);
-
-  return {
-    showToast,
-    showError,
-    showSuccess,
-    showInfo,
-    ToastPortal,
-  };
+  return (
+    <ToastContext.Provider
+      value={{ showToast, showError, showSuccess, showInfo }}
+    >
+      {children}
+      {toastPortal}
+    </ToastContext.Provider>
+  );
 };
+
+// カスタムフック
+const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error("useToast must be used within a ToastProvider");
+  }
+  return context;
+};
+
+export { ToastProvider, useToast };
