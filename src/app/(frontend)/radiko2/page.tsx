@@ -192,102 +192,6 @@ export default function Page() {
       handleStateUpdate();
     };
   }, [audioRef.current]);
-
-  /* ---------------------------------------------------------------------選局 */
-  // 放送局の選択処理
-  const handleStationSelect = async (stationId: string) => {
-    setSelectedStation(stationId);
-    setSelectedTab(6);
-    setError("");
-    if (stationId) {
-      try {
-        const res = await fetch(
-          `${RadikoApi}/programs?type=weekly&ip=${
-            ip ? ip : clientIP
-          }&stationId=${stationId}`
-        );
-        if (!res.ok) throw new Error("番組表の取得に失敗しました");
-        const data = await res.json();
-        console.log("Programs:", data);
-        setPrograms(data.data || []);
-      } catch (error) {
-        console.error("Failed to fetch programs:", error);
-        setError(
-          error instanceof Error ? error.message : "番組表の取得に失敗しました"
-        );
-      }
-    } else {
-      setPrograms([]); // 局が未選択の場合は番組表をクリア
-    }
-  };
-  // 選局時に番組表を更新して当日までスクロール
-  useEffect(() => {
-    if (!selectedStation || !area) return;
-    getPrograms(selectedStation);
-    // 当日のタブまでスクロール
-    if (tabsRef.current) {
-      const scrollWidth = tabsRef.current.scrollWidth;
-      const clientWidth = tabsRef.current.clientWidth;
-      tabsRef.current.scrollTo({
-        left: scrollWidth - clientWidth,
-        behavior: "smooth",
-      });
-    }
-  }, [selectedStation]);
-  // リアルタイム再生の処理
-  const handleLivePlay = useCallback(async () => {
-    if (!selectedStation) return;
-
-    try {
-      if (isPlaying) {
-        // 再生中の場合は停止
-        if (audioRef.current) {
-          audioRef.current.pause();
-        }
-        if (hlsRef.current) {
-          hlsRef.current.destroy();
-          hlsRef.current = null;
-        }
-        setIsPlaying(false);
-        setAudioUrl(null);
-        return;
-      }
-
-      // リアルタイム再生用のストリームURL（エリアIDを追加）
-      const streamUrl = `${RadikoApi}/stream/${selectedStation}/live?area=${area}`;
-
-      // エラー状態をリセット
-      setError("");
-
-      // HLSストリームを初期化（認証トークンをヘッダーに追加）
-      const response = await fetch(streamUrl, {
-        headers: authToken ? { "X-Radiko-AuthToken": authToken } : undefined,
-      });
-      if (!response.ok) throw new Error("ストリームの取得に失敗しました");
-
-      const streamData = await response.text();
-      initializeHLS(streamUrl);
-      setIsPlaying(true);
-      setAudioUrl(streamUrl);
-
-      if (audioRef.current) {
-        try {
-          await audioRef.current.play();
-        } catch (error) {
-          console.error("Playback error:", error);
-          setError(
-            "再生の開始に失敗しました。ブラウザの自動再生設定を確認してください。"
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Live playback error:", error);
-      setError("再生の開始に失敗しました");
-      setIsPlaying(false);
-      setAudioUrl(null);
-    }
-  }, [selectedStation, isPlaying, initializeHLS, area, authToken]); // areaを依存配列に追加
-
   /* -------------------------------------------------------------------日選択 */
   // タブ切り替えの処理を修正
   const handleTabChange = (index: number) => {
@@ -347,6 +251,115 @@ export default function Page() {
     },
     [ip, clientIP]
   );
+
+  /* ---------------------------------------------------------------------選局 */
+  // 放送局の選択処理
+  const handleStationSelect = async (stationId: string) => {
+    setSelectedStation(stationId);
+    setSelectedTab(6);
+    setError("");
+    if (stationId) {
+      try {
+        const res = await fetch(
+          `${RadikoApi}/programs?type=weekly&ip=${
+            ip ? ip : clientIP
+          }&stationId=${stationId}`
+        );
+        if (!res.ok) throw new Error("番組表の取得に失敗しました");
+        const data = await res.json();
+        console.log("Programs:", data);
+        setPrograms(data.data || []);
+      } catch (error) {
+        console.error("Failed to fetch programs:", error);
+        setError(
+          error instanceof Error ? error.message : "番組表の取得に失敗しました"
+        );
+      }
+    } else {
+      setPrograms([]); // 局が未選択の場合は番組表をクリア
+    }
+  };
+  // 選局時に番組表を更新して当日までスクロール
+  useEffect(() => {
+    const updatePrograms = async () => {
+      if (!selectedStation || !area) return;
+
+      // clientIPの取得を待つ
+      if (!clientIP && !ip) {
+        console.log("Waiting for IP...");
+        return;
+      }
+
+      console.log("Fetching programs with:", { ip, clientIP });
+      await getPrograms(selectedStation);
+
+      // 当日のタブまでスクロール
+      if (tabsRef.current) {
+        const scrollWidth = tabsRef.current.scrollWidth;
+        const clientWidth = tabsRef.current.clientWidth;
+        tabsRef.current.scrollTo({
+          left: scrollWidth - clientWidth,
+          behavior: "smooth",
+        });
+      }
+    };
+
+    updatePrograms();
+  }, [selectedStation, area, clientIP, ip, getPrograms]); // 依存配列に clientIP と ip を追加
+
+  // リアルタイム再生の処理
+  const handleLivePlay = useCallback(async () => {
+    if (!selectedStation) return;
+
+    try {
+      if (isPlaying) {
+        // 再生中の場合は停止
+        if (audioRef.current) {
+          audioRef.current.pause();
+        }
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
+        setIsPlaying(false);
+        setAudioUrl(null);
+        return;
+      }
+
+      // リアルタイム再生用のストリームURL（エリアIDを追加）
+      const streamUrl = `${RadikoApi}/stream/${selectedStation}/live?area=${area}`;
+
+      // エラー状態をリセット
+      setError("");
+
+      // HLSストリームを初期化（認証トークンをヘッダーに追加）
+      const response = await fetch(streamUrl, {
+        headers: authToken ? { "X-Radiko-AuthToken": authToken } : undefined,
+      });
+      if (!response.ok) throw new Error("ストリームの取得に失敗しました");
+
+      const streamData = await response.text();
+      initializeHLS(streamUrl);
+      setIsPlaying(true);
+      setAudioUrl(streamUrl);
+
+      if (audioRef.current) {
+        try {
+          await audioRef.current.play();
+        } catch (error) {
+          console.error("Playback error:", error);
+          setError(
+            "再生の開始に失敗しました。ブラウザの自動再生設定を確認してください。"
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Live playback error:", error);
+      setError("再生の開始に失敗しました");
+      setIsPlaying(false);
+      setAudioUrl(null);
+    }
+  }, [selectedStation, isPlaying, initializeHLS, area, authToken]);
 
   /* -----------------------------------------------------------------番組選択 */
   // 番組選択の処理を修正
