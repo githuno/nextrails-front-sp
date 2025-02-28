@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import Hls from "hls.js";
 import {
   RadikoApi,
@@ -11,6 +17,7 @@ import {
   formatDisplayDate,
   type Station,
   type Program,
+  type ProgramsByDate,
   type PlaybackState,
 } from "./utils";
 // import { useToast } from "@/hooks/toast";
@@ -22,6 +29,7 @@ export default function Page() {
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<string>("");
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [programsByDate, setProgramsByDate] = useState<ProgramsByDate>({});
   const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
@@ -31,6 +39,8 @@ export default function Page() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [clientIP, setClientIP] = useState<string>(""); // 自動取得のip
   const [ip, setIp] = useState<string>(""); // ユーザー指定のip
+  const [mediaUpdateInterval, setMediaUpdateInterval] =
+    useState<NodeJS.Timeout | null>(null);
 
   // refs
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -41,16 +51,64 @@ export default function Page() {
   // Hooks
   // const { showSuccess } = useToast();
 
-  // 日付タブの一覧を生成
-  const dates = Array.from({ length: 7 }, (_, i) => {
+  // 日付タブの一覧を生成（単純に日本時間で7日分）
+  const dates = useMemo(() => {
     const now = new Date();
-    const jstOffset = 9 * 60;
-    const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
-    const jstNow = new Date(utc + jstOffset * 60 * 1000);
-    const date = new Date(jstNow);
-    date.setDate(date.getDate() - (6 - i));
-    return date;
-  });
+    const hour = now.getHours();
+
+    // 現在時刻が5時より前の場合、表示上の「今日」を前日とする
+    const baseDate =
+      hour < 5
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+        : now;
+
+    return Array.from({ length: 7 }, (_, i) => {
+      return new Date(
+        baseDate.getFullYear(),
+        baseDate.getMonth(),
+        baseDate.getDate() - (6 - i)
+      );
+    });
+  }, []);
+
+  // 番組データを日付ごとに分類する関数（5時までは前日として扱う）
+  const organizeProgramsByDate = useCallback((programs: Program[]) => {
+    return programs.reduce((acc: ProgramsByDate, program) => {
+      // 番組開始時刻を解析
+      const year = parseInt(program.startTime.substring(0, 4));
+      const month = parseInt(program.startTime.substring(4, 6)) - 1;
+      const day = parseInt(program.startTime.substring(6, 8));
+      const hour = parseInt(program.startTime.substring(8, 10));
+
+      // 日付を取得（5時より前は前日として扱う）
+      let date = new Date(year, month, day);
+      if (hour < 5) {
+        // 5時前の場合は前日の日付にする
+        date.setDate(date.getDate() - 1);
+      }
+
+      // YYYYMMDD形式の文字列を生成
+      const dateKey = date
+        .toLocaleDateString("ja-JP", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+        .replace(/\D/g, "");
+
+      if (!acc[dateKey]) {
+        acc[dateKey] = [];
+      }
+
+      // プログラムを時間でソート
+      acc[dateKey].push(program);
+      acc[dateKey].sort((a, b) => {
+        return parseInt(a.startTime) - parseInt(b.startTime);
+      });
+
+      return acc;
+    }, {});
+  }, []);
 
   const getClientIP = async () => {
     const clientIp = await fetch("https://api.ipify.org?format=json")
@@ -72,44 +130,147 @@ export default function Page() {
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        maxLoadingDelay: 3, // ロードの最大遅延時間を設定
-        manifestLoadingRetryDelay: 1000, // マニフェストのロードリトライ間隔を設定
-        levelLoadingRetryDelay: 1000, // レベルのロードリトライ間隔を設定
+        maxBufferLength: 30,
+        maxMaxBufferLength: 600,
+        maxBufferSize: 60 * 1000 * 1000,
+        maxBufferHole: 0.5,
+        highBufferWatchdogPeriod: 2,
+        nudgeOffset: 0.1,
+        nudgeMaxRetry: 5,
+        maxFragLookUpTolerance: 0.5,
+
+        // ライブストリーミングの設定を最適化
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 10,
+        liveDurationInfinity: true,
+        liveBackBufferLength: 90,
+
+        // メディアソース設定
+        enableWorker: true,
+        stretchShortVideoTrack: false,
+        maxAudioFramesDrift: 1,
+
+        // ローディング設定
+        manifestLoadingTimeOut: 20000,
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 500,
+        manifestLoadingMaxRetryTimeout: 64000,
+
+        // フラグメントローディング設定
+        fragLoadingTimeOut: 20000,
+        fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 500,
+        fragLoadingMaxRetryTimeout: 64000,
+
+        // ストリーミング設定
+        startLevel: -1,
+        levelLoadingTimeOut: 10000,
+        levelLoadingMaxRetry: 4,
+        levelLoadingRetryDelay: 500,
+        levelLoadingMaxRetryTimeout: 64000,
+
+        // デバッグ設定
+        debug: true,
       });
 
       hlsRef.current = hls;
 
-      // エラーハンドリングを強化
+      // エラーハンドリングを改善
       hls.on(Hls.Events.ERROR, (event, data) => {
-        console.error("HLS error:", data);
+        // console.error("HLS error:", data);
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              // ネットワークエラー時は再試行
               console.warn(
-                "Fatal *network* error encountered, trying to recover..."
+                "Fatal network error encountered, trying to recover..."
               );
               hls.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              // メディアエラー時は再試行
               console.warn(
-                "Fatal *media* error encountered, trying to recover..."
+                "Fatal media error encountered, trying to recover..."
               );
               hls.recoverMediaError();
               break;
             default:
-              // 致命的なエラーの場合はインスタンスを破棄
-              console.error("Fatal error, cannot recover");
-              hls.destroy();
-              setError("再生中に致命的なエラーが発生しました");
+              console.error("Fatal error, cannot recover:", data);
+              if (
+                data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+                data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT
+              ) {
+                // マニフェストのロードに失敗した場合、再試行
+                console.log("Manifest load failed, retrying...");
+                setTimeout(() => {
+                  hls.loadSource(url);
+                }, 1000);
+              } else {
+                hls.destroy();
+                setError("再生中に致命的なエラーが発生しました");
+              }
               break;
           }
         }
       });
 
+      // デバッグイベントの設定を改善
+      const debugEvents = [
+        Hls.Events.MANIFEST_LOADING,
+        Hls.Events.MANIFEST_LOADED,
+        Hls.Events.MANIFEST_PARSED,
+        Hls.Events.LEVEL_LOADING,
+        Hls.Events.LEVEL_LOADED,
+        Hls.Events.LEVEL_SWITCHED,
+        Hls.Events.LEVEL_UPDATED,
+        Hls.Events.FRAG_LOADING,
+        Hls.Events.FRAG_LOADED,
+        Hls.Events.FRAG_PARSED,
+        Hls.Events.BUFFER_APPENDING,
+        Hls.Events.BUFFER_APPENDED,
+      ];
+
+      debugEvents.forEach((event) => {
+        hls.on(event, (...args: any) => {
+          console.log(`HLS ${event}:`, ...args);
+        });
+      });
+
+      // メディア初期化イベントの追加
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        console.log("Media attached, starting playback");
+        audioRef.current?.play().catch((error) => {
+          // console.error("Playback error:", error);
+          if (error.name === "NotAllowedError") {
+            setError(
+              "自動再生が許可されていません。再生ボタンをクリックしてください。"
+            );
+          } else {
+            setError("再生の開始に失敗しました");
+          }
+        });
+      });
+
+      // ストリーム開始時のイベントハンドラ
+      // hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      //   console.log("Manifest parsed, stream ready");
+      //   if (audioRef.current?.paused) {
+      //     audioRef.current.play().catch(console.error);
+      //   }
+      // });
+
+      // レベル切り替え時のイベント
+      hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+        console.log("Stream quality level switched:", data);
+      });
+
+      // フラグメントの更新イベント
+      hls.on(Hls.Events.FRAG_CHANGED, (event, data) => {
+        console.log("Fragment changed:", data);
+      });
+
       hls.loadSource(url);
-      hls.attachMedia(audioRef.current);
+      if (audioRef.current) {
+        hls.attachMedia(audioRef.current);
+      }
     } else if (audioRef.current.canPlayType("application/vnd.apple.mpegurl")) {
       audioRef.current.src = url;
     }
@@ -205,32 +366,33 @@ export default function Page() {
     };
   }, [isPlaying]);
   /* -------------------------------------------------------------------日選択 */
-  // タブ切り替えの処理を修正
-  const handleTabChange = (index: number) => {
-    setSelectedTab(index);
-    const newDate = dates[index];
 
-    // 選択された日付の番組表を取得
-    if (selectedStation) {
-      const dateStr = newDate.toISOString().slice(0, 10).replace(/-/g, "");
-      getProgramsByDate(selectedStation, dateStr);
-    }
-  };
   // 日付指定での番組表取得
   const getProgramsByDate = useCallback(
     async (stationId: string, date: string) => {
       setIsLoading(true);
       try {
         const effectiveIp = ip || clientIP;
-
         const res = await fetch(
           `${RadikoApi}/programs?type=date${
             effectiveIp ? `&ip=${effectiveIp}` : ""
           }&stationId=${stationId}&date=${date}`
         );
+
         if (!res.ok) throw new Error("番組表の取得に失敗しました");
         const data = await res.json();
-        setPrograms(data.data || []);
+
+        // 日付ごとに分類して保存
+        const organized = organizeProgramsByDate(data.data || []);
+        setProgramsByDate((prev) => ({
+          ...prev,
+          ...organized,
+        }));
+
+        // 現在のタブの日付のプログラムを表示
+        if (organized[date]) {
+          setPrograms(organized[date]);
+        }
       } catch (error) {
         console.error("Failed to fetch programs:", error);
         setError(
@@ -240,7 +402,32 @@ export default function Page() {
         setIsLoading(false);
       }
     },
-    [ip, clientIP]
+    [ip, clientIP, organizeProgramsByDate]
+  );
+  // タブ切り替え時の処理
+  const handleTabChange = useCallback(
+    (index: number) => {
+      setSelectedTab(index);
+      const newDate = dates[index];
+      // YYYYMMDD形式の文字列を生成
+      const dateStr = newDate
+        .toLocaleDateString("ja-JP", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+        .replace(/\D/g, "");
+
+      // 既にデータがあるか確認
+      if (programsByDate[dateStr]?.length > 0) {
+        // タブの日付に該当する番組を表示
+        setPrograms(programsByDate[dateStr]);
+      } else if (selectedStation) {
+        // データがない場合は取得
+        getProgramsByDate(selectedStation, dateStr);
+      }
+    },
+    [dates, selectedStation, programsByDate, getProgramsByDate]
   );
   // 番組表の再取得
   const getPrograms = useCallback(
@@ -307,13 +494,21 @@ export default function Page() {
       }
       await getPrograms(selectedStation);
 
-      // 当日のタブまでスクロール
+      // 当日のタブまで横スクロール
       if (tabsRef.current) {
         const scrollWidth = tabsRef.current.scrollWidth;
         const clientWidth = tabsRef.current.clientWidth;
+        // 横スクロール
         tabsRef.current.scrollTo({
           left: scrollWidth - clientWidth,
           behavior: "smooth",
+        });
+
+        // 縦スクロール
+        tabsRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "start", // 要素を画面の上端に合わせる
+          inline: "nearest", // 横方向は最も近い位置に
         });
       }
     };
@@ -321,7 +516,7 @@ export default function Page() {
     updatePrograms();
   }, [selectedStation, area, clientIP, ip, getPrograms]); // 依存配列に clientIP と ip を追加
 
-  // リアルタイム再生の処理
+  // リアルタイム再生の処理を修正
   const handleLivePlay = useCallback(async () => {
     if (!selectedStation) return;
 
@@ -332,7 +527,11 @@ export default function Page() {
         )
           return;
 
-        // 再生中の場合は停止
+        // 再生中の場合は停止処理を実行
+        if (mediaUpdateInterval) {
+          clearInterval(mediaUpdateInterval);
+          setMediaUpdateInterval(null);
+        }
         if (audioRef.current) {
           audioRef.current.pause();
         }
@@ -346,42 +545,25 @@ export default function Page() {
         return;
       }
 
-      // リアルタイム再生用のストリームURL（エリアIDを追加）
-      const streamUrl = `${RadikoApi}/stream/${selectedStation}/live?ip=${
-        ip || clientIP
-      }`;
-
-      // エラー状態をリセット
+      // 再生開始処理
+      setIsLoading(true);
       setError("");
 
-      // HLSストリームを初期化（認証トークンをヘッダーに追加）
-      const response = await fetch(streamUrl, {
-        method: "GET",
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error("ストリームの取得に失敗しました");
+      const playlistUrl = `${RadikoApi}/stream/${selectedStation}/l?ip=${
+        ip || clientIP
+      }`;
+      initializeHLS(playlistUrl);
 
-      initializeHLS(streamUrl);
       setIsPlaying(true);
-      setAudioUrl(streamUrl);
-
-      if (audioRef.current) {
-        try {
-          await audioRef.current.play();
-        } catch (error) {
-          console.error("Playback error:", error);
-          setError(
-            "再生の開始に失敗しました。ブラウザの自動再生設定を確認してください。"
-          );
-        }
-      }
+      // setAudioUrl(playlistUrl);
+      setIsLoading(false);
     } catch (error) {
       console.error("Live playback error:", error);
       setError("再生の開始に失敗しました");
       setIsPlaying(false);
       setAudioUrl(null);
     }
-  }, [selectedStation, isPlaying, initializeHLS, ip, clientIP, authToken]);
+  }, [selectedStation, isPlaying, initializeHLS, ip, clientIP]);
 
   /* -----------------------------------------------------------------番組選択 */
   // 番組選択の処理を修正
@@ -401,7 +583,7 @@ export default function Page() {
         }
 
         // ft と to をそのまま使用（YYYYMMDDHHmmss形式）、エリアIDを追加
-        const streamUrl = `${RadikoApi}/stream/${selectedStation}/timeshift?ft=${
+        const streamUrl = `${RadikoApi}/stream/${selectedStation}/t?ft=${
           program.ft
         }&to=${program.to}&ip=${ip || clientIP}`;
         setCurrentProgram(program);
@@ -510,7 +692,7 @@ export default function Page() {
       }
 
       // タイムシフトストリームのURLを構築
-      const streamUrl = `${RadikoApi}/stream/${state.stationId}/timeshift?ft=${
+      const streamUrl = `${RadikoApi}/stream/${state.stationId}/t?ft=${
         state.programStartTime
       }&to=${state.programEndTime}&ip=${ip || clientIP}&token=${authToken}`;
 
@@ -605,6 +787,18 @@ export default function Page() {
       handleIpChange(newIp);
     }
   }, [ip, handleIpChange]);
+
+  // クリーンアップ処理を改善
+  useEffect(() => {
+    return () => {
+      if (mediaUpdateInterval) {
+        clearInterval(mediaUpdateInterval);
+      }
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+      }
+    };
+  }, [mediaUpdateInterval]);
 
   /* -------------------------------------------------------------レンダリング */
   // クライアントサイドでのみ状態を更新するために useEffect を使用
@@ -717,7 +911,6 @@ export default function Page() {
                     month: "numeric",
                     day: "numeric",
                     weekday: "short",
-                    timeZone: "Asia/Tokyo",
                   })}
                 </button>
               );

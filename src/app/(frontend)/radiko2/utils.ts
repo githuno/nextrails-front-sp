@@ -76,6 +76,10 @@ interface Program {
   url: string;
 }
 
+interface ProgramsByDate {
+  [date: string]: Program[];
+};
+
 interface PlaybackState {
   stationId: string;
   programStartTime: string;
@@ -88,20 +92,9 @@ interface PlaybackState {
 // 日時フォーマット用のヘルパー関数
 const formatRadikoTime = (timeStr: string): string => {
   if (!timeStr) return "";
-  const jstDate = new Date(
-    parseInt(timeStr.substring(0, 4)),
-    parseInt(timeStr.substring(4, 6)) - 1,
-    parseInt(timeStr.substring(6, 8)),
-    parseInt(timeStr.substring(8, 10)),
-    parseInt(timeStr.substring(10, 12))
-  );
-
-  return new Intl.DateTimeFormat("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Tokyo",
-  }).format(jstDate);
+  const hour = timeStr.substring(8, 10);
+  const minute = timeStr.substring(10, 12);
+  return `${hour}:${minute}`;
 };
 
 // 日付フォーマット用のヘルパー関数を追加
@@ -127,5 +120,6 @@ export {
   formatDisplayDate,
   type Station,
   type Program,
+  type ProgramsByDate,
   type PlaybackState,
 }
