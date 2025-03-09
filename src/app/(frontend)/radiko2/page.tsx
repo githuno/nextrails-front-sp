@@ -465,6 +465,7 @@ export default function Page() {
   // 放送局の選択
   const handleStationSelect = async (stationId: string) => {
     if (!auth) return;
+    setPrograms([]);
     setSelectedStation(stationId);
     setSelectedTab(7); // 最新の日付をデフォルトで選択
     setError("");
@@ -674,11 +675,16 @@ export default function Page() {
   // エリアが変更されたら放送局を取得
   useEffect(() => {
     const initialize = async () => {
-      setError("");
       if (!auth || currentAreaName === "未判定") return;
+      setIsLoading(true);
+      setError("");
+      setPrograms([]);
+      setSelectedStation("");
+      setNowOnAir(null);
       const stations = await radikoClient.getStations(auth.areaId);
       setStations(stations);
       restorePlaybackState(stations);
+      setIsLoading(false);
     };
     initialize();
     return () => {
