@@ -8,50 +8,97 @@ import React, {
   useMemo,
 } from "react";
 import Hls from "hls.js";
+import RadikoClient from "./radikoClient";
+import { AreaSelect } from "./AreaSelect";
 import {
-  RadikoApi,
-  PLAYBACK_STATE_KEY,
-  IP_STORAGE_KEY,
-  AREA_PREFECTURE_MAP,
+  url,
+  Auth,
+  Station,
+  Program,
   formatRadikoTime,
   formatDisplayDate,
-  type Station,
-  type Program,
-  type ProgramsByDate,
-  type PlaybackState,
-} from "./utils";
+  AreaId,
+} from "./constants";
+import useTrackedEffect from "@/hooks/useTrackedEffect";
 // import { useToast } from "@/hooks/toast";
+
+interface PlaybackState {
+  stationId: string;
+  currentTime: number;
+  speed: number;
+  program: Program;
+}
+interface ProgramsByDate {
+  [date: string]: Program[];
+}
 
 // 状態管理
 export default function Page() {
-  const [area, setArea] = useState<string>("");
-  const [authToken, setAuthToken] = useState<string>("");
-  const [stations, setStations] = useState<Station[]>([]);
-  const [selectedStation, setSelectedStation] = useState<string>("");
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [programsByDate, setProgramsByDate] = useState<ProgramsByDate>({});
-  const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState<number>(1.0);
+  // 表示用の状態
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [selectedTab, setSelectedTab] = useState<number>(6);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [clientIP, setClientIP] = useState<string>(""); // 自動取得のip
-  const [ip, setIp] = useState<string>(""); // ユーザー指定のip
-  const [mediaUpdateInterval, setMediaUpdateInterval] =
-    useState<NodeJS.Timeout | null>(null);
+
+  const [auth, setAuth] = useState<Auth | null>(null);
+  const [stations, setStations] = useState<Station[]>([]);
+  const [selectedStation, setSelectedStation] = useState<string>("");
+  const [nowOnAir, setNowOnAir] = useState<Program | null>(null);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [programsByDate, setProgramsByDate] = useState<ProgramsByDate>({});
+
+  // 再生関連
+  const [selectedTab, setSelectedTab] = useState<number>(7);
+  const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
+  const [playingType, setPlayingType] = useState<"live" | "timefree" | null>(
+    null
+  );
+  const [speed, setSpeed] = useState<number>(1.0);
 
   // refs
   const audioRef = useRef<HTMLAudioElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Hooks
   // const { showSuccess } = useToast();
 
+  // clientインスタンスの生成
+  const radikoClient = new RadikoClient();
+
+  const [currentAreaName, setCurrentAreaName] = useState<string>("未判定");
+  const onAreaChange = async () => {
+    const auth = await radikoClient.getAuthInfo();
+    const name = await radikoClient.getAuthName();
+    setAuth(auth);
+    setCurrentAreaName(name);
+  };
+
+  useTrackedEffect(
+    (changes) => {
+      console.log("🚀: 0.playingType", "1.currentAreaName", changes);
+    },
+    [playingType, currentAreaName]
+  );
+
   // 日付タブの一覧を生成（単純に日本時間で7日分）
+  // const dates = useMemo(() => {
+  //   const now = new Date();
+  //   const hour = now.getHours();
+
+  //   // 現在時刻が5時より前の場合、表示上の「今日」を前日とする
+  //   const baseDate =
+  //     hour < 5
+  //       ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+  //       : now;
+
+  //   return Array.from({ length: 7 }, (_, i) => {
+  //     return new Date(
+  //       baseDate.getFullYear(),
+  //       baseDate.getMonth(),
+  //       baseDate.getDate() - (6 - i)
+  //     );
+  //   });
+  // }, []);
+  // 日付タブの一覧を生成（前後7日間に変更）
   const dates = useMemo(() => {
     const now = new Date();
     const hour = now.getHours();
@@ -62,11 +109,19 @@ export default function Page() {
         ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
         : now;
 
-    return Array.from({ length: 7 }, (_, i) => {
+    // 今日の日付（インデックスを取得するため）
+    const today = new Date(
+      baseDate.getFullYear(),
+      baseDate.getMonth(),
+      baseDate.getDate()
+    );
+
+    // 前後7日間の日付を生成（計14日分）
+    return Array.from({ length: 14 }, (_, i) => {
       return new Date(
-        baseDate.getFullYear(),
-        baseDate.getMonth(),
-        baseDate.getDate() - (6 - i)
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate() - 7 + i
       );
     });
   }, []);
@@ -109,14 +164,6 @@ export default function Page() {
       return acc;
     }, {});
   }, []);
-
-  const getClientIP = async () => {
-    const clientIp = await fetch("https://api.ipify.org?format=json")
-      .then((response) => response.json())
-      .then((data) => data.ip)
-      .catch(() => undefined);
-    return clientIp;
-  };
 
   // HLSストリームの初期化
   const initializeHLS = useCallback((url: string) => {
@@ -170,7 +217,7 @@ export default function Page() {
         levelLoadingMaxRetryTimeout: 64000,
 
         // デバッグ設定
-        debug: true,
+        // debug: true,
       });
 
       hlsRef.current = hls;
@@ -228,26 +275,27 @@ export default function Page() {
         Hls.Events.BUFFER_APPENDED,
       ];
 
-      debugEvents.forEach((event) => {
-        hls.on(event, (...args: any) => {
-          console.log(`HLS ${event}:`, ...args);
-        });
-      });
+      // debugEvents.forEach((event) => {
+      //   hls.on(event, (...args: any) => {
+      //     console.log(`HLS ${event}:`, ...args);
+      //   });
+      // });
 
       // メディア初期化イベントの追加
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        console.log("Media attached, starting playback");
-        audioRef.current?.play().catch((error) => {
-          // console.error("Playback error:", error);
-          if (error.name === "NotAllowedError") {
-            setError(
-              "自動再生が許可されていません。再生ボタンをクリックしてください。"
-            );
-          } else {
-            setError("再生の開始に失敗しました");
-          }
-        });
-      });
+      // hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+      //   if (playingType === "timefree") {
+      //     audioRef.current?.play().catch((error) => {
+      //       // console.error("Playback error:", error);
+      //       if (error.name === "NotAllowedError") {
+      //         setError(
+      //           "自動再生が許可されていません。再生ボタンをクリックしてください。"
+      //         );
+      //       } else {
+      //         setError("再生の開始に失敗しました");
+      //       }
+      //     });
+      //   }
+      // });
 
       // ストリーム開始時のイベントハンドラ
       // hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -258,14 +306,14 @@ export default function Page() {
       // });
 
       // レベル切り替え時のイベント
-      hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-        console.log("Stream quality level switched:", data);
-      });
+      // hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+      //   console.log("Stream quality level switched:", data);
+      // });
 
       // フラグメントの更新イベント
-      hls.on(Hls.Events.FRAG_CHANGED, (event, data) => {
-        console.log("Fragment changed:", data);
-      });
+      // hls.on(Hls.Events.FRAG_CHANGED, (event, data) => {
+      //   console.log("Fragment changed:", data);
+      // });
 
       hls.loadSource(url);
       if (audioRef.current) {
@@ -276,36 +324,29 @@ export default function Page() {
     }
   }, []);
 
+  /* -----------------------------------------------------------再生状態の管理 */
+  const PLAYBACK_STATE_KEY = "radiko_playback_state";
   // 再生終了時の処理
   const handleEnded = () => {
     localStorage.removeItem(PLAYBACK_STATE_KEY);
-    setAudioUrl(null);
-    setIsPlaying(false);
+    setPlayingType(null);
     setCurrentProgram(null);
   };
-
   // 再生速度の変更処理
-  const handlePlaybackRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newRate = parseFloat(e.target.value);
-    setPlaybackRate(newRate);
+  const handleSpeedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newSpeed = parseFloat(e.target.value);
+    setSpeed(newSpeed);
     if (audioRef.current) {
-      audioRef.current.playbackRate = newRate;
+      audioRef.current.playbackRate = newSpeed;
     }
-
     // 現在の再生状態を取得して更新
     const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
     if (savedState) {
       const state = JSON.parse(savedState) as PlaybackState;
-      state.playbackRate = newRate;
+      state.speed = newSpeed;
       localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
     }
   };
-
-  /* ------------------------------------------------------再生状態の保存・復元 */
-  // 再生状態をクリア
-  const clearPlaybackState = useCallback(() => {
-    localStorage.removeItem(PLAYBACK_STATE_KEY);
-  }, []);
   // 再生状態の保存処理
   const savePlaybackState = useCallback(
     (program: Program) => {
@@ -313,20 +354,18 @@ export default function Page() {
 
       const state: PlaybackState = {
         stationId: selectedStation,
-        programStartTime: program.startTime,
-        programEndTime: program.endTime,
         currentTime: audioRef.current.currentTime,
-        playbackRate: playbackRate,
+        speed: speed,
         program: program,
       };
       localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(state));
     },
-    [selectedStation, playbackRate]
+    [selectedStation, speed]
   );
   // 定期的な再生位置の保存を改善
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !isPlaying) return;
+    if (!audio || playingType !== "timefree") return;
 
     const handleStateUpdate = () => {
       const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
@@ -336,7 +375,7 @@ export default function Page() {
       const updatedState = {
         ...state,
         currentTime: audio.currentTime,
-        playbackRate: audio.playbackRate,
+        speed: audio.playbackRate,
       };
       localStorage.setItem(PLAYBACK_STATE_KEY, JSON.stringify(updatedState));
     };
@@ -364,26 +403,19 @@ export default function Page() {
       clearInterval(interval);
       handleStateUpdate();
     };
-  }, [isPlaying]);
-  /* -------------------------------------------------------------------日選択 */
+  }, [playingType]);
 
-  // 日付指定での番組表取得
   const getProgramsByDate = useCallback(
     async (stationId: string, date: string) => {
+      if (!auth) return;
       setIsLoading(true);
       try {
-        const effectiveIp = ip || clientIP;
-        const res = await fetch(
-          `${RadikoApi}/programs?type=date${
-            effectiveIp ? `&ip=${effectiveIp}` : ""
-          }&stationId=${stationId}&date=${date}`
-        );
-
-        if (!res.ok) throw new Error("番組表の取得に失敗しました");
-        const data = await res.json();
-
-        // 日付ごとに分類して保存
-        const organized = organizeProgramsByDate(data.data || []);
+        const programs = await radikoClient.getPrograms({
+          token: auth.token,
+          stationId,
+          date,
+        });
+        const organized = organizeProgramsByDate(programs || []);
         setProgramsByDate((prev) => ({
           ...prev,
           ...organized,
@@ -402,7 +434,7 @@ export default function Page() {
         setIsLoading(false);
       }
     },
-    [ip, clientIP, organizeProgramsByDate]
+    [organizeProgramsByDate]
   );
   // タブ切り替え時の処理
   const handleTabChange = useCallback(
@@ -429,376 +461,230 @@ export default function Page() {
     },
     [dates, selectedStation, programsByDate, getProgramsByDate]
   );
-  // 番組表の再取得
-  const getPrograms = useCallback(
-    async (stationId: string) => {
-      setIsLoading(true);
-      try {
-        const effectiveIp = ip || clientIP;
 
-        const res = await fetch(
-          `${RadikoApi}/programs?type=weekly${
-            effectiveIp ? `&ip=${effectiveIp}` : ""
-          }&stationId=${stationId}`
-        );
-        if (!res.ok) throw new Error("番組表の取得に失敗しました");
-        const data = await res.json();
-        setPrograms(data.data || []);
-      } catch (error) {
-        console.error("Failed to fetch programs:", error);
-        setError(
-          error instanceof Error ? error.message : "番組表の取得に失敗しました"
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [ip, clientIP]
-  );
-
-  /* ---------------------------------------------------------------------選局 */
-  // 放送局の選択処理
+  // 放送局の選択
   const handleStationSelect = async (stationId: string) => {
+    if (!auth) return;
     setSelectedStation(stationId);
-    setSelectedTab(6);
+    setSelectedTab(7); // 最新の日付をデフォルトで選択
     setError("");
-    if (stationId) {
-      try {
-        const res = await fetch(
-          `${RadikoApi}/programs?type=weekly&ip=${
-            ip ? ip : clientIP
-          }&stationId=${stationId}`
-        );
-        if (!res.ok) throw new Error("番組表の取得に失敗しました");
-        const data = await res.json();
-        setPrograms(data.data || []);
-      } catch (error) {
-        console.error("Failed to fetch programs:", error);
-        setError(
-          error instanceof Error ? error.message : "番組表の取得に失敗しました"
-        );
-      }
-    } else {
-      setPrograms([]); // 局が未選択の場合は番組表をクリア
-    }
-  };
-  // 選局時に番組表を更新して当日までスクロール
-  useEffect(() => {
-    const updatePrograms = async () => {
-      if (!selectedStation || !area) return;
 
-      // clientIPの取得を待つ
-      if (!clientIP && !ip) {
-        console.log("Waiting for IP...");
-        return;
-      }
-      await getPrograms(selectedStation);
+    try {
+      // 1.現在放送中の番組を取得
+      const nowOnAir = await radikoClient.getProgramNow({
+        token: auth.token,
+        area: auth.areaId as AreaId,
+        stationId,
+      });
+      setNowOnAir(nowOnAir);
 
-      // 当日のタブまで横スクロール
+      // 2.選択された局の番組表を取得
+      const weeklyPrograms = await radikoClient.getPrograms({
+        token: auth.token,
+        stationId,
+        type: "weekly",
+      });
+
+      // 3.取得した番組を日付ごとに整理
+      const organized = organizeProgramsByDate(weeklyPrograms || []);
+      setProgramsByDate(organized);
+
+      // 4.現在選択されているタブの日付のデータを表示
+      const currentDate = dates[selectedTab];
+      const dateStr = currentDate
+        .toLocaleDateString("ja-JP", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+        .replace(/\D/g, "");
+
+      // 該当する日付の番組があれば表示
+      if (organized[dateStr] && organized[dateStr].length > 0) {
+        setPrograms(organized[dateStr]);
+      } else {
+        setPrograms([]);
+      }
+
+      // 5.当日のタブまで横スクロール
       if (tabsRef.current) {
-        const scrollWidth = tabsRef.current.scrollWidth;
-        const clientWidth = tabsRef.current.clientWidth;
-        // 横スクロール
-        tabsRef.current.scrollTo({
-          left: scrollWidth - clientWidth,
-          behavior: "smooth",
-        });
-
+        const tabsWidth = tabsRef.current.scrollWidth;
         // 縦スクロール
         tabsRef.current.scrollIntoView({
           behavior: "smooth",
-          block: "start", // 要素を画面の上端に合わせる
-          inline: "nearest", // 横方向は最も近い位置に
+          block: "center",
+          inline: "nearest",
+        });
+        // 横スクロール
+        tabsRef.current.scrollTo({
+          left: tabsWidth * 0.3,
+          behavior: "smooth",
         });
       }
-    };
+    } catch (error) {
+      console.error("Failed to fetch station data:", error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "番組データの取得に失敗しました"
+      );
+    }
+  };
 
-    updatePrograms();
-  }, [selectedStation, area, clientIP, ip, getPrograms]); // 依存配列に clientIP と ip を追加
+  // プレイヤーの停止関数
+  const stopPlayer = useCallback(() => {
+    console.log("cleanupPlayer");
+    // setPrograms([]);
+    setCurrentProgram(null);
+    setPlayingType(null);
+    // setAudioUrl(null);
+    setSelectedTab(7);
+    // if (hlsRef.current) {
+    // hlsRef.current.destroy();
+    // hlsRef.current = null;
+    // }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      // audioRef.current.src = "";
+    }
+  }, []);
 
-  // リアルタイム再生の処理を修正
+  // ライブ再生
   const handleLivePlay = useCallback(async () => {
-    if (!selectedStation) return;
+    if (!selectedStation || !auth) return;
 
+    // 再生中の場合は停止処理を実行して終了
+    if (playingType !== null) {
+      stopPlayer();
+      return;
+    }
+
+    // 停止中の場合は再生処理を実行
     try {
-      if (isPlaying) {
-        if (
-          !confirm("再生を停止しますか？現在聴いている番組もアンセットされます")
-        )
-          return;
-
-        // 再生中の場合は停止処理を実行
-        if (mediaUpdateInterval) {
-          clearInterval(mediaUpdateInterval);
-          setMediaUpdateInterval(null);
-        }
-        if (audioRef.current) {
-          audioRef.current.pause();
-        }
-        if (hlsRef.current) {
-          hlsRef.current.destroy();
-          hlsRef.current = null;
-        }
-        setCurrentProgram(null);
-        setIsPlaying(false);
-        setAudioUrl(null);
-        return;
-      }
-
       // 再生開始処理
+      setPlayingType("live");
       setIsLoading(true);
       setError("");
 
-      const playlistUrl = `${RadikoApi}/stream/${selectedStation}/l?ip=${
-        ip || clientIP
-      }`;
+      const playlistUrl = url.liveStreaming
+        .replace("{stationId}", selectedStation)
+        .replace("{token}", auth.token);
       initializeHLS(playlistUrl);
+      audioRef.current?.play().catch((error) => {
+        console.error("Playback error:", error);
+        setError("再生の開始に失敗しました");
+      });
 
-      setIsPlaying(true);
-      // setAudioUrl(playlistUrl);
       setIsLoading(false);
     } catch (error) {
       console.error("Live playback error:", error);
       setError("再生の開始に失敗しました");
-      setIsPlaying(false);
-      setAudioUrl(null);
+      setPlayingType(null);
     }
-  }, [selectedStation, isPlaying, initializeHLS, ip, clientIP]);
+  }, [selectedStation, playingType, initializeHLS, stopPlayer, auth]);
 
-  /* -----------------------------------------------------------------番組選択 */
-  // 番組選択の処理を修正
-  const handleProgramSelect = useCallback(
-    async (program: Program) => {
-      if (!selectedStation) return;
+  const handleTimeFreePlay = useCallback(
+    async (
+      stationId: string,
+      program: Program,
+      stateSpeed?: number,
+      stateCurrentTime?: number
+    ) => {
+      if (!auth) return;
+      setPlayingType("timefree");
 
       try {
-        // 保存されている再生速度を確認
-        const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
-        let savedPlaybackRate = playbackRate;
-        if (savedState) {
-          const state = JSON.parse(savedState) as PlaybackState;
-          savedPlaybackRate = state.playbackRate;
-          // 再生速度を更新
-          setPlaybackRate(savedPlaybackRate);
-        }
+        // ストリーミングURLを構築
+        const streamUrl = url.timeFreeStreaming
+          .replace("{stationId}", stationId)
+          .replace("{ft}", program.startTime)
+          .replace("{to}", program.endTime)
+          .replace("{token}", auth.token);
 
-        // ft と to をそのまま使用（YYYYMMDDHHmmss形式）、エリアIDを追加
-        const streamUrl = `${RadikoApi}/stream/${selectedStation}/t?ft=${
-          program.ft
-        }&to=${program.to}&ip=${ip || clientIP}`;
         setCurrentProgram(program);
         initializeHLS(streamUrl);
-        setIsPlaying(true);
-        setAudioUrl(streamUrl);
 
+        // 再生およびイベントリスナーの設定
         if (audioRef.current) {
-          // 再生速度を設定
-          audioRef.current.playbackRate = savedPlaybackRate;
+          // 再生速度の設定
+          audioRef.current.playbackRate = speed;
+          setSpeed(stateSpeed || speed);
 
           const handleCanPlay = () => {
             if (audioRef.current) {
-              // 再度再生速度を設定（念のため）
-              audioRef.current.playbackRate = savedPlaybackRate;
-              // 初期状態を保存
+              // 再生位置を設定
+              audioRef.current.currentTime = stateCurrentTime || 0;
+              // 再生速度を設定
+              audioRef.current.playbackRate = stateSpeed || speed;
+              setSpeed(stateSpeed || speed);
+              // 初期状態を保存(必要？)
               savePlaybackState(program);
             }
             audioRef.current?.removeEventListener("canplay", handleCanPlay);
           };
-
           audioRef.current.addEventListener("canplay", handleCanPlay);
 
-          try {
-            await audioRef.current.play();
-          } catch (error) {
-            console.error("Playback error:", error);
-            setError("再生の開始に失敗しました");
-            setCurrentProgram(null);
+          // 自動再生
+          if (hlsRef.current) {
+            try {
+              await audioRef.current.play();
+            } catch (error) {
+              console.debug("Playback error:", error);
+              setError("自動再生に失敗しました");
+            }
           }
         }
       } catch (error) {
+        setPlayingType(null);
         console.error("Playback error:", error);
         setError("再生の開始に失敗しました");
       }
     },
-    [selectedStation, playbackRate, initializeHLS, ip, clientIP]
-  );
-
-  /* --------------------------------------------------初期化（エリア、放送局） */
-  // プレイヤーのクリーンアップ関数
-  const cleanupPlayer = useCallback(() => {
-    setPrograms([]);
-    setSelectedTab(6);
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = "";
-    }
-  }, []);
-
-  // 認証処理
-  const authWithIp = useCallback(
-    async (ip?: string) => {
-      const detectedIp = await getClientIP();
-      if (detectedIp) {
-        setClientIP(detectedIp);
-      }
-      const res = await fetch(`${RadikoApi}/auth?ip=${ip || detectedIp}`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        throw new Error("初期データの取得に失敗しました");
-      }
-      const authData = await res.json();
-      if (ip) setIp(ip);
-      setArea(authData.areaId); //いらないかも
-      setAuthToken(authData.token); //いらなそう
-      const stationsRes = await fetch(
-        `${RadikoApi}/stations/${ip || detectedIp}`
-      );
-      if (!stationsRes.ok) {
-        throw new Error("放送局の取得に失敗しました");
-      }
-      const stationsData = await stationsRes.json();
-      setStations(stationsData.data || []);
-    },
-    [ip, clientIP]
+    [selectedStation, initializeHLS, auth]
   );
 
   // 再生状態の復元処理
-  const restorePlaybackState = useCallback(async () => {
-    try {
-      const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
-      if (!savedState) return;
-
-      const state = JSON.parse(savedState) as PlaybackState;
-      if (
-        !state.stationId ||
-        !state.programStartTime ||
-        !state.programEndTime
-      ) {
-        return;
-      }
-
-      // 選局と再生速度を設定
-      setSelectedStation(state.stationId);
-      setPlaybackRate(state.playbackRate);
-      setCurrentProgram(state.program);
-
-      if (inputRef.current) {
-        inputRef.current.value = ip;
-      }
-
-      // タイムシフトストリームのURLを構築
-      const streamUrl = `${RadikoApi}/stream/${state.stationId}/t?ft=${
-        state.programStartTime
-      }&to=${state.programEndTime}&ip=${ip || clientIP}&token=${authToken}`;
-
-      // HLSストリームを初期化
-      initializeHLS(streamUrl);
-      setAudioUrl(streamUrl);
-      setIsPlaying(true);
-
-      // 再生位置を設定
-      if (audioRef.current) {
-        const handleCanPlay = () => {
-          if (audioRef.current) {
-            audioRef.current.currentTime = state.currentTime;
-            audioRef.current.playbackRate = state.playbackRate;
-          }
-          audioRef.current?.removeEventListener("canplay", handleCanPlay);
-        };
-        audioRef.current.addEventListener("canplay", handleCanPlay);
-      }
-    } catch (error) {
-      console.error("Playback restore error:", error);
-      clearPlaybackState();
-    }
-  }, [area, authToken, initializeHLS, clearPlaybackState]);
-
-  // 1.マウント時の初期化処理
-  useEffect(() => {
-    const initializeWithIp = async () => {
-      // 1.IPアドレスの復元
-      const savedIp = localStorage.getItem(IP_STORAGE_KEY);
-      if (savedIp) {
-        setIp(savedIp);
-      }
-      // 2.認証
-      await authWithIp(savedIp ? savedIp : undefined);
-    };
-
-    initializeWithIp();
-    // クリーンアップ
-    return () => cleanupPlayer();
-  }, []); // マウント時のみ実行
-
-  // 2.areaが変更されたら再生状態を復元
-  useEffect(() => {
-    const restore = async () => {
-      if (area) {
-        await restorePlaybackState();
-      }
-    };
-    restore();
-  }, [area]);
-
-  // IP変更ハンドラーを改善
-  const handleIpChange = useCallback(
-    async (newIp?: string) => {
+  const restorePlaybackState = useCallback(
+    async (stations: Station[]) => {
+      console.log("restorePlaybackState");
       try {
-        // 1.現在の再生を停止
-        cleanupPlayer();
-        setIsPlaying(false);
-        setAudioUrl(null);
+        const savedState = localStorage.getItem(PLAYBACK_STATE_KEY);
+        if (!savedState) return;
+        const state = JSON.parse(savedState) as PlaybackState;
 
-        // 2.input要素とローカルストレージを更新
-        if (inputRef.current && newIp) {
-          inputRef.current.value = newIp;
-        } else if (inputRef.current) {
-          inputRef.current.value = "";
+        if (stations.some((item) => item.id.includes(state.stationId))) {
+          // 選局
+          handleStationSelect(state.stationId);
+          // 番組選択と再生
+          handleTimeFreePlay(
+            state.stationId,
+            state.program,
+            state.speed,
+            state.currentTime
+          );
         }
-        if (newIp) {
-          localStorage.setItem(IP_STORAGE_KEY, newIp);
-        } else {
-          localStorage.removeItem(IP_STORAGE_KEY);
-        }
-
-        // 3.認証
-        await authWithIp(newIp ? newIp : undefined);
       } catch (error) {
-        console.error("IP change error:", error);
-        setError("エリアの変更中にエラーが発生しました");
+        console.error("Playback restore error:", error);
+        localStorage.removeItem(PLAYBACK_STATE_KEY);
       }
     },
-    [cleanupPlayer]
+    [auth]
   );
-  // IPの確定/クリアボタンのクリックハンドラーを修正
-  const handleIpButtonClick = useCallback(() => {
-    if (ip) {
-      // クリアの場合
-      console.log("Clearing IP...");
-      handleIpChange();
-    } else {
-      // 確定の場合
-      const newIp = inputRef.current?.value || "";
-      handleIpChange(newIp);
-    }
-  }, [ip, handleIpChange]);
 
-  // クリーンアップ処理を改善
+  // エリアが変更されたら放送局を取得
   useEffect(() => {
-    return () => {
-      if (mediaUpdateInterval) {
-        clearInterval(mediaUpdateInterval);
-      }
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-      }
+    const initialize = async () => {
+      setError("");
+      if (!auth || currentAreaName === "未判定") return;
+      const stations = await radikoClient.getStations(auth.areaId);
+      setStations(stations);
+      restorePlaybackState(stations);
     };
-  }, [mediaUpdateInterval]);
+    initialize();
+    return () => {
+      stopPlayer();
+    };
+  }, [currentAreaName]);
 
   /* -------------------------------------------------------------レンダリング */
   // クライアントサイドでのみ状態を更新するために useEffect を使用
@@ -820,46 +706,24 @@ export default function Page() {
         テスト
       </button> */}
 
-      {error && (
+      {error && !playingType && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-16">
+        <div id="info">
           {/* エリア選択 */}
-          <h2 className="text-xl font-semibold mb-2">エリア</h2>
-          <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-4 gap-2">
-              <div className="col-span-3">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  placeholder="IPアドレスを入力 (例: 203.141.131.1)"
-                  className="w-full p-2 border rounded"
-                />
-              </div>
-              <button
-                onClick={handleIpButtonClick}
-                className={`p-2 rounded ${
-                  ip
-                    ? "bg-red-500 hover:bg-red-600"
-                    : "bg-blue-500 hover:bg-blue-600"
-                } text-white`}
-              >
-                {ip ? "クリア" : "確定"}
-              </button>
-            </div>
-            <div className="bg-gray-100 p-2 rounded">
-              現在のエリア:{" "}
-              {AREA_PREFECTURE_MAP[area as keyof typeof AREA_PREFECTURE_MAP]}
-            </div>
-          </div>
+          <AreaSelect
+            radikoClient={radikoClient}
+            currentAreaName={currentAreaName}
+            onAreaChange={onAreaChange}
+          />
 
           {/* 放送局 */}
           <h2 className="text-xl font-semibold mb-2">放送局</h2>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2 text-sm">
             {stations.map((station) => (
               <button
                 key={station.id}
@@ -875,22 +739,43 @@ export default function Page() {
             ))}
           </div>
 
-          {/* リアルタイム再生ボタンを追加 */}
-          {selectedStation && (
-            <button
-              onClick={handleLivePlay}
-              className={`mt-4 w-full p-3 rounded transition-all ${
-                isPlaying
-                  ? "bg-red-500 hover:bg-red-600"
-                  : "bg-green-500 hover:bg-green-600"
-              } text-white font-bold`}
-            >
-              {isPlaying ? "停止" : "リアルタイム再生"}
-            </button>
+          {/* 現在放送中の番組情報 */}
+          {nowOnAir && (
+            <div className="grid row-span-2 mt-4 bg-gray-100 p-2 rounded relative">
+              {/* 番組詳細 */}
+              <div className="md:row-start-2 max-h-[800px] overflow-y-auto">
+                <div className="text-sm text-gray-600">
+                  {formatRadikoTime(nowOnAir.startTime)} -{" "}
+                  {formatRadikoTime(nowOnAir.endTime)}
+                </div>
+                <div className="text-lg font-semibold">{nowOnAir.title}</div>
+                <div className="text-sm text-gray-600">{nowOnAir.pfm}</div>
+                {/* infoはHTML形式のため、dangerouslySetInnerHTMLを使用 */}
+                {nowOnAir.info && (
+                  <div
+                    className="text-sm text-gray-600 mt-2"
+                    dangerouslySetInnerHTML={{ __html: nowOnAir.info }}
+                  />
+                )}
+              </div>
+              {/* リアルタイム再生ボタンを追加（番組情報内の右下に配置） */}
+              {selectedStation && (
+                <button
+                  onClick={handleLivePlay}
+                  className={`md:row-start-1 px-4 py-2 rounded shadow-md transition-all ${
+                    !playingType
+                      ? "bg-green-500 hover:bg-green-600"
+                      : "bg-red-500 hover:bg-red-600"
+                  } text-white font-semibold`}
+                >
+                  {!playingType ? "リアルタイム再生" : "停止"}
+                </button>
+              )}
+            </div>
           )}
         </div>
 
-        <div>
+        <div id="list">
           <h2 className="text-xl font-semibold mb-2">番組表</h2>
 
           {/* 日付タブ */}
@@ -917,12 +802,13 @@ export default function Page() {
             })}
           </div>
 
+          {/* 番組表 */}
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
           ) : (
-            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+            <div className="space-y-2 max-h-[700px] overflow-y-auto">
               {programs.length > 0 ? (
                 programs.map((program, index) => {
                   const isPast =
@@ -937,7 +823,9 @@ export default function Page() {
                   return (
                     <button
                       key={index}
-                      onClick={() => handleProgramSelect(program)}
+                      onClick={() =>
+                        handleTimeFreePlay(selectedStation, program)
+                      }
                       className={`
                         w-full p-2 text-left border rounded transition-all
                         ${
@@ -976,10 +864,10 @@ export default function Page() {
         </div>
       </div>
 
-      {/* audioを表示 */}
+      {/* audio */}
       <div
         className={`fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 ${
-          audioUrl ? "block" : "hidden"
+          playingType === "timefree" ? "block" : "hidden"
         }`}
       >
         <div className="container mx-auto max-w-7xl">
@@ -1004,16 +892,14 @@ export default function Page() {
               onEnded={handleEnded}
             />
             <div className="flex items-center gap-2">
-              <span className="text-sm">
-                再生速度: {playbackRate.toFixed(1)}x
-              </span>
+              <span className="text-sm">再生速度: {speed.toFixed(1)}x</span>
               <input
                 type="range"
                 min="0.5"
                 max="3.0"
                 step="0.1"
-                value={playbackRate}
-                onChange={handlePlaybackRateChange}
+                value={speed}
+                onChange={handleSpeedChange}
                 className="flex-grow"
               />
             </div>
