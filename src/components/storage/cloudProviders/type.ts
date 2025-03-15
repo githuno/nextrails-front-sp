@@ -8,6 +8,7 @@ export interface Session {
   storage: StorageSession | null;
 }
 
+// GITHUB | ONEDRIVE | GDRIVE | DROPBOX | BOX | NATIVE(R2)
 export type ProviderType = "NATIVE" | "GDRIVE";
 
 export interface CloudState {
