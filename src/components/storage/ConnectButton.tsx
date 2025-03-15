@@ -19,10 +19,6 @@ const ConnectButton: React.FC<Props> = ({dbName}) => {
   const [showMenu, setShowMenu] = useState(false);
   const { storage, selectProvider, removeProvider } = useCloud();
 
-  useEffect(() => {
-    console.log("storage", storage?.type);
-  }, [storage?.type]);
-
   const handleGoogleAuth = async () => {
     try {
       await selectProvider(GDRIVESESSION); // TODO: typeだけ渡したい
@@ -47,6 +43,14 @@ const ConnectButton: React.FC<Props> = ({dbName}) => {
     }
   };
 
+  const [isClient, setIsClient] = useState(false);
+  useEffect(() => {
+    // クライアントサイドでのみ実行
+    setIsClient(true);
+    console.log("storage", storage?.type);
+  }, [storage?.type]);
+  if (!isClient) return null;
+  
   return (
     <div className="fixed top-0 w-svw h-svh pointer-events-none z-50">
       <div className="absolute top-[2%] right-[5%] pointer-events-auto">

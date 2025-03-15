@@ -10,8 +10,8 @@ import { useEffect, useRef, DependencyList } from "react"
 // 変更された依存関係の情報を表す型
 type ChangedDeps = {
   [key: number]: {
-    from: any;
-    to: any;
+    trackedFrom: any;
+    trackedTo: any;
   }
 }
 
@@ -29,8 +29,8 @@ const useTrackedEffect = (effect: EffectCallback, dependencies: DependencyList) 
         // 現在の依存関係と前の依存関係を比較
         if (dep !== previousDependencies.current![index]) {
           acc[index] = {
-            from: previousDependencies.current![index],
-            to: dep,
+            trackedFrom: previousDependencies.current![index],
+            trackedTo: dep,
           }
         }
         return acc
