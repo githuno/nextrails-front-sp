@@ -911,7 +911,6 @@ export default function Page() {
           const currentTime = parseInt(current.startTime);
           return currentTime < oldestTime ? current : oldest;
         }, availablePrograms[0]);
-        console.log("⚡️⚡️ Oldest program:", oldestProgram);
 
         // 選択した番組の局を選択
         handleStationSelect(oldestProgram.station_id);
@@ -927,7 +926,8 @@ export default function Page() {
             date.getMonth() === oldestDate.getMonth() &&
             date.getDate() === oldestDate.getDate()
         );
-        setSelectedTab(oldestIndex);
+        // 該当日を選択
+        handleTabChange(oldestIndex);
         // 番組を再生
         handleTimeFreePlay(
           oldestProgram,
