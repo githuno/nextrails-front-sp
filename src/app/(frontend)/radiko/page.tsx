@@ -1184,7 +1184,7 @@ export default function Page() {
                       {/* お気に入りボタンをdivの外に配置 */}
                       <span
                         onClick={(e) => toggleFavorite(e, program)}
-                        className={`absolute top-2 right-2 text-xl focus:outline-none cursor-pointer ${
+                        className={`absolute top-2 right-2 text-xl focus:outline-none z-10 cursor-pointer ${
                           isFav
                             ? "text-yellow-500"
                             : "text-gray-300 hover:text-gray-400"
@@ -1251,7 +1251,7 @@ export default function Page() {
 
       {/* audio */}
       <div
-        className={`fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4 ${
+        className={`fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-20 p-4 ${
           playingType === "timefree" ? "block" : "hidden"
         }`}
       >
