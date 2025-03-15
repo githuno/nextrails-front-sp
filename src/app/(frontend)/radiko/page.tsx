@@ -681,19 +681,20 @@ export default function Page() {
         .replace(/\D/g, "");
 
       // 既にデータがあるか確認
-      if (programsByDate[dateStr]?.length > 0) {
-        console.log("📅 Programs already loaded:", programsByDate[dateStr]);
-        // タブの日付に該当する番組を表示
-        setPrograms(programsByDate[dateStr]);
-      } else if (program) {
-        console.log("📅 Programs not loaded, fetching:", dateStr);
-        // データがない場合は取得して表示
+
+      if (program) {
+        // programが渡された場合は番組取得して表示
         const pdata = await getProgramsByDate(program.station_id, dateStr);
         setProgramsByDate((prev) => ({
           ...prev,
           ...pdata,
         }));
         setPrograms(pdata ? pdata[dateStr] || [] : []);
+      } else if (programsByDate[dateStr]?.length > 0) {
+        // タブの日付に該当する番組を表示
+        setPrograms(programsByDate[dateStr]);
+      } else {
+        setPrograms([]);
       }
     },
     [dates, selectedStation, programsByDate, getProgramsByDate]
