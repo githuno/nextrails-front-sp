@@ -1287,9 +1287,9 @@ export default function Page() {
           playingType === "timefree" ? "block" : "hidden"
         }`}
       >
-        <div className="container mx-auto max-w-7xl">
+        <div className="container mx-auto max-w-7xl pb-1">
           {currentProgram && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="md:grid grid-cols-3 md:gap-2">
               <div className="col-span-2 text-sm text-gray-600">
                 <span className="mr-2">
                   {formatDisplayDate(currentProgram.startTime)}
@@ -1297,7 +1297,7 @@ export default function Page() {
                   {formatRadikoTime(currentProgram.startTime)} -{" "}
                   {formatRadikoTime(currentProgram.endTime)}
                 </span>
-                <span className="text-lg font-semibold">
+                <span className="md:text-lg font-semibold">
                   {currentProgram.url ? (
                     <a
                       href={currentProgram.url}
@@ -1314,7 +1314,7 @@ export default function Page() {
               </div>
 
               {/* カスタムコントロールボタン */}
-              <div className="flex justify-center items-center gap-4 py-1">
+              <div className="flex justify-center items-center gap-2 md:py-1">
                 <button
                   onClick={handleSkipBackward}
                   className="px-4 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md flex items-center"
