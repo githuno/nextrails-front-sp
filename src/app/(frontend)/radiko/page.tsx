@@ -1025,6 +1025,28 @@ export default function Page() {
     };
   }, [currentAreaName]);
 
+  /* -----------------------------------------------------カスタムコントロール */
+  // 1分間戻る処理
+  const handleSkipBackward = useCallback(() => {
+    if (!audioRef.current) return;
+
+    // 現在の再生位置から60秒戻る（0秒未満にならないように制限）
+    const newTime = Math.max(0, audioRef.current.currentTime - 60);
+    audioRef.current.currentTime = newTime;
+  }, []);
+
+  // 1分間スキップ処理
+  const handleSkipForward = useCallback(() => {
+    if (!audioRef.current) return;
+
+    // 現在の再生位置から60秒進む（曲の長さを超えないように制限）
+    const newTime = Math.min(
+      audioRef.current.duration || Infinity,
+      audioRef.current.currentTime + 60
+    );
+    audioRef.current.currentTime = newTime;
+  }, []);
+
   /* -------------------------------------------------------------レンダリング */
   // SSRではnullを返す
   const [isClient, setIsClient] = useState(false);
@@ -1267,27 +1289,57 @@ export default function Page() {
       >
         <div className="container mx-auto max-w-7xl">
           {currentProgram && (
-            <div className="text-sm text-gray-600">
-              <span className="mr-2">
-                {formatDisplayDate(currentProgram.startTime)}
-                {"/"}
-                {formatRadikoTime(currentProgram.startTime)} -{" "}
-                {formatRadikoTime(currentProgram.endTime)}
-              </span>
-              <span className="text-lg font-semibold">
-                {currentProgram.url ? (
-                  <a
-                    href={currentProgram.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 hover:underline"
-                  >
-                    {currentProgram.title}
-                  </a>
-                ) : (
-                  currentProgram.title
-                )}
-              </span>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2 text-sm text-gray-600">
+                <span className="mr-2">
+                  {formatDisplayDate(currentProgram.startTime)}
+                  {"/"}
+                  {formatRadikoTime(currentProgram.startTime)} -{" "}
+                  {formatRadikoTime(currentProgram.endTime)}
+                </span>
+                <span className="text-lg font-semibold">
+                  {currentProgram.url ? (
+                    <a
+                      href={currentProgram.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      {currentProgram.title}
+                    </a>
+                  ) : (
+                    currentProgram.title
+                  )}
+                </span>
+              </div>
+
+              {/* カスタムコントロールボタン */}
+              <div className="flex justify-center items-center gap-4 py-1">
+                <button
+                  onClick={handleSkipBackward}
+                  className="px-4 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md flex items-center"
+                  title="1分戻る"
+                >
+                  <span className="ml-1">-1分 &lt;&lt;</span>
+                </button>
+
+                <button
+                  onClick={handleSkipForward}
+                  className="px-4 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md flex items-center"
+                  title="1分進む"
+                >
+                  <span className="ml-1">&gt;&gt; +1分</span>
+                </button>
+
+                <button
+                  onClick={onEnded}
+                  className={"px-4 py-1 rounded-md flex items-center bg-blue-500 hover:bg-blue-600 text-white"}
+                  title="次の番組"
+                >
+                  <span>次へ</span>
+                  <span className="text-lg ml-1">▶</span>
+                </button>
+              </div>
             </div>
           )}
           <div className="flex flex-col gap-2">
