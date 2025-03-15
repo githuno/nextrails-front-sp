@@ -148,12 +148,11 @@ export interface Program {
   title: string;
   startTime: string;
   endTime: string;
-  ft: string;
-  to: string;
   url: string;
   station_id: string;
   info: string;
   pfm: string;
+  currentTime?: number;
 }
 
 // ブラウザからIPアドレスを取得
