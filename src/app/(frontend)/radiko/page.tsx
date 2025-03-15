@@ -1283,7 +1283,7 @@ export default function Page() {
 
       {/* audio */}
       <div
-        className={`fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-20 p-4 ${
+        className={`fixed bottom-0 left-0 right-0 border-t shadow-lg z-20 p-4 bg-slate-50/90 ${
           playingType === "timefree" ? "block" : "hidden"
         }`}
       >
