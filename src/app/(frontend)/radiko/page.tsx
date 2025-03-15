@@ -1314,7 +1314,7 @@ export default function Page() {
               </div>
 
               {/* カスタムコントロールボタン */}
-              <div className="flex justify-center items-center gap-2 md:py-1">
+              <div className="flex justify-center items-center gap-2 py-1">
                 <button
                   onClick={handleSkipBackward}
                   className="px-4 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md flex items-center"
