@@ -652,11 +652,13 @@ export default function Page() {
         if (organized[date]) {
           setPrograms(organized[date]);
         }
+        return organized;
       } catch (error) {
         console.error("Failed to fetch programs:", error);
         setError(
           error instanceof Error ? error.message : "番組表の取得に失敗しました"
         );
+        return {};
       } finally {
         setIsLoading(false);
       }
@@ -666,7 +668,7 @@ export default function Page() {
 
   // タブ切り替え時の処理
   const handleTabChange = useCallback(
-    (index: number) => {
+    async (index: number, program?: Program) => {
       setSelectedTab(index);
       const newDate = dates[index];
       // YYYYMMDD形式の文字列を生成
@@ -680,11 +682,18 @@ export default function Page() {
 
       // 既にデータがあるか確認
       if (programsByDate[dateStr]?.length > 0) {
+        console.log("📅 Programs already loaded:", programsByDate[dateStr]);
         // タブの日付に該当する番組を表示
         setPrograms(programsByDate[dateStr]);
-      } else if (selectedStation) {
-        // データがない場合は取得
-        getProgramsByDate(selectedStation, dateStr);
+      } else if (program) {
+        console.log("📅 Programs not loaded, fetching:", dateStr);
+        // データがない場合は取得して表示
+        const pdata = await getProgramsByDate(program.station_id, dateStr);
+        setProgramsByDate((prev) => ({
+          ...prev,
+          ...pdata,
+        }));
+        setPrograms(pdata ? pdata[dateStr] || [] : []);
       }
     },
     [dates, selectedStation, programsByDate, getProgramsByDate]
@@ -913,7 +922,7 @@ export default function Page() {
         }, availablePrograms[0]);
 
         // 選択した番組の局を選択
-        handleStationSelect(oldestProgram.station_id);
+        await handleStationSelect(oldestProgram.station_id);
         // 選択した番組の日付タブを選択
         const oldestDate = new Date(
           parseInt(oldestProgram.startTime.substring(0, 4)),
@@ -927,7 +936,7 @@ export default function Page() {
             date.getDate() === oldestDate.getDate()
         );
         // 該当日を選択
-        handleTabChange(oldestIndex);
+        handleTabChange(oldestIndex, oldestProgram);
         // 番組を再生
         handleTimeFreePlay(
           oldestProgram,
