@@ -1198,13 +1198,13 @@ export default function Page() {
     const hour = parseInt(startTime.substring(8, 10));
 
     if (hour >= 5 && hour < 12) {
-      return "bg-green-50"; // 朝（5:00-12:00）
+      return "bg-green-50/50"; // 朝（5:00-12:00）
     } else if (hour >= 12 && hour < 18) {
-      return "bg-yellow-50"; // 昼（12:00-18:00）
+      return "bg-yellow-50/50"; // 昼（12:00-18:00）
     } else if (hour >= 18 && hour < 24) {
-      return "bg-orange-50"; // 夕方/夜（18:00-24:00）
+      return "bg-orange-50/50"; // 夕方/夜（18:00-24:00）
     } else {
-      return "bg-purple-50"; // 深夜（24:00-5:00）
+      return "bg-purple-50/50"; // 深夜（24:00-5:00）
     }
   };
 
@@ -1350,7 +1350,7 @@ export default function Page() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
           ) : (
-            <div className="space-y-2 max-h-[700px] overflow-y-auto">
+            <div className="space-y-1 max-h-[700px] overflow-y-auto">
               {programs.length > 0 ? (
                 programs.map((program, index) => {
                   // 視聴可能かどうかをチェック
@@ -1404,22 +1404,22 @@ export default function Page() {
                           canPlay ? handleTimeFreePlay(program) : null
                         }
                         className={`
-                relative w-full p-2 text-left border rounded transition-all
-                ${
-                  isPlaying
-                    ? "bg-blue-100 border-blue-500 shadow-md"
-                    : isPlayed
-                    ? "bg-gray-100 border-gray-300 opacity-70"
-                    : canPlay
-                    ? `hover:bg-gray-100 border-gray-200 ${timeSlotClass}`
-                    : `border-gray-200 ${timeSlotClass}`
-                }
-                ${canPlay ? "text-gray-900" : "text-gray-500"}
-              `}
+                          relative w-full p-2 text-left border rounded transition-all
+                          ${
+                            isPlaying
+                              ? "bg-blue-100 border-blue-500 shadow-md"
+                              : isPlayed
+                              ? "bg-gray-100 border-gray-300 opacity-70"
+                              : canPlay
+                              ? `hover:bg-gray-100 border-gray-200 ${timeSlotClass}`
+                              : `border-gray-200`
+                          }
+                          ${canPlay ? "text-gray-900" : "text-gray-500"}
+                        `}
                         disabled={!canPlay}
                       >
                         <div
-                          className={`font-medium ${
+                          className={`text-sm ${
                             isPlaying ? "text-blue-700" : ""
                           } pr-8`}
                         >
