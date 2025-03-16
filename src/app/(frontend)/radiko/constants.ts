@@ -138,6 +138,7 @@ export interface Station {
   id: string;
   name: string;
   url?: string;
+  banner?: string;
 }
 
 export interface StationResponse {

@@ -774,6 +774,12 @@ export default function Page() {
   // 放送局の選択
   const handleStationSelect = async (stationId: string) => {
     if (!auth) return;
+    if (stationId === selectedStation) {
+      setSelectedStation("");
+      setSelectedTab(7);
+      setPrograms([]);
+      return;
+    }
     setPrograms([]);
     setSelectedStation(stationId);
     setSelectedTab(7); // 最新の日付をデフォルトで選択
@@ -1246,57 +1252,138 @@ export default function Page() {
 
           {/* 放送局 */}
           <h2 className="text-xl font-semibold mb-2">放送局</h2>
-          <div className="grid grid-cols-3 gap-2 text-sm">
+          <div className="grid grid-cols-5 gap-2 text-sm">
             {stations.map((station) => (
               <button
                 key={station.id}
                 onClick={() => handleStationSelect(station.id)}
-                className={`p-2 rounded ${
+                className={`p-1 rounded ${
+                  // 選択中以外は画像を色なし
                   selectedStation === station.id
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-200"
+                    ? "bg-blue-500 text-white shadow-md"
+                    : "border"
                 }`}
               >
-                {station.name}
+                <img
+                  src={station.banner}
+                  alt={station.name}
+                  className={`${
+                    selectedStation &&
+                    selectedStation !== station.id &&
+                    "grayscale-[80%]"
+                  }`}
+                />
+                <div className="text-[0.5rem] truncate">{station.name}</div>
               </button>
             ))}
           </div>
 
           {/* 現在放送中の番組情報 */}
           {nowOnAir && (
-            <div className="grid row-span-2 mt-4 bg-gray-100 p-2 rounded relative">
-              {/* 番組詳細 */}
-              <div className="md:row-start-2 max-h-[800px] overflow-y-auto">
-                <div className="text-sm text-gray-600">
-                  {formatRadikoTime(nowOnAir.startTime)} -{" "}
-                  {formatRadikoTime(nowOnAir.endTime)}
-                </div>
-                <div className="text-lg font-semibold">
-                  {nowOnAir.url ? (
-                    <a
-                      href={nowOnAir.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 hover:underline"
-                    >
-                      {nowOnAir.title}
-                    </a>
-                  ) : (
-                    nowOnAir.title
+            <div className="grid row-span-2 mt-2 bg-gray-100 p-2 rounded relative shadow-lg">
+              {/* 番組詳細 - アコーディオン形式 */}
+              <div className="md:row-start-2 md:pt-2">
+                <div className="flex items-center">
+                  {/* 番組イメージがある場合に表示するエリア */}
+                  {nowOnAir.info && nowOnAir.info.includes("<img") && (
+                    <div className="flex-shrink-0 mr-2 w-16 h-16 overflow-hidden">
+                      <div
+                        className="w-full h-full bg-contain bg-no-repeat bg-center"
+                        style={{
+                          backgroundImage: `url(${
+                            nowOnAir.info.match(/src="([^"]+)"/)?.[1] || ""
+                          })`,
+                        }}
+                      />
+                    </div>
                   )}
+
+                  <div className="flex-grow">
+                    <div className="text-sm text-gray-600">
+                      {formatRadikoTime(nowOnAir.startTime)} -{" "}
+                      {formatRadikoTime(nowOnAir.endTime)}
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {nowOnAir.url ? (
+                        <a
+                          href={nowOnAir.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {nowOnAir.title}
+                        </a>
+                      ) : (
+                        nowOnAir.title
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-600">{nowOnAir.pfm}</div>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600">{nowOnAir.pfm}</div>
-                {/* infoはHTML形式のため、dangerouslySetInnerHTMLを使用 */}
+
+                {/* アコーディオン実装（CSS only） */}
                 {nowOnAir.info && (
-                  <div
-                    className="text-sm text-gray-600 mt-2"
-                    dangerouslySetInnerHTML={{
-                      __html: sanitizeHtml(nowOnAir.info),
-                    }}
-                  />
+                  <div className="mt-2">
+                    <input
+                      type="checkbox"
+                      id="accordion"
+                      className="peer absolute invisible"
+                    />
+
+                    {/* プラスアイコン */}
+                    <label
+                      htmlFor="accordion"
+                      className="flex justify-end items-center pb-1 md:py-1 cursor-pointer hover:text-slate-500 transition-all peer-checked:hidden"
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        viewBox="0 0 24 24"
+                        strokeWidth="2"
+                        stroke="currentColor"
+                        fill="none"
+                      >
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M12 5l0 14" />
+                        <path d="M5 12l14 0" />
+                      </svg>
+
+                      <span className="ml-1 text-xs">詳細情報</span>
+                    </label>
+
+                    {/* マイナスアイコン */}
+                    <label
+                      htmlFor="accordion"
+                      className="justify-between items-center py-1 cursor-pointer bg-white border-b text-red-400 hover:text-red-300 transition-all hidden peer-checked:flex"
+                    >
+                      <span className="text-xs pl-4"> 詳細情報 </span>
+                      <div className="flex items-center pr-4">
+                        <svg
+                          className="w-4 h-4"
+                          viewBox="0 0 24 24"
+                          strokeWidth="2"
+                          stroke="currentColor"
+                          fill="none"
+                        >
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                          <path d="M5 12l14 0" />
+                        </svg>
+                      </div>
+                    </label>
+
+                    {/* コンテンツ部分 */}
+                    <div className="overflow-hidden max-h-0 px-2 bg-white peer-checked:max-h-[400px] transition-all duration-300 peer-checked:overflow-y-auto">
+                      <div
+                        className="text-sm break-words text-gray-600 mt-2"
+                        dangerouslySetInnerHTML={{
+                          __html: sanitizeHtml(nowOnAir.info),
+                        }}
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
-              {/* リアルタイム再生ボタンを追加（番組情報内の右下に配置） */}
+
+              {/* リアルタイム再生ボタン */}
               {selectedStation && (
                 <button
                   onClick={handleLivePlay}
