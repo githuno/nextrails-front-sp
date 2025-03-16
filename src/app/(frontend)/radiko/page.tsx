@@ -19,6 +19,8 @@ import {
   formatDisplayDate,
   AreaId,
 } from "./constants";
+import DOMPurify from "isomorphic-dompurify";
+// Custom hook to track changes in dependencies and log them
 import useTrackedEffect from "@/hooks/useTrackedEffect";
 
 // import { useToast } from "@/hooks/toast";
@@ -30,8 +32,53 @@ interface Favorite {
   stationId: string;
   title: string;
 }
+/** TODO: コード構造について責任分離と関心の分離を通じたリファクタリングが必要
+ * 
+ * // 再生コントロールを別コンポーネントに分離
+ * const PlaybackControls...
+ * 
+ * // 再生状態管理のカスタムフック
+ * function usePlaybackState...
+ * 
+ * // useLocalStorageカスタムフックの追加
+ * function useLocalStorage...
+ * 
+ * // コンポーネントを分割
+ * const ProgramList = ({ programs, onProgramSelect }) => {
+ *   // ...
+ * }
+ * 
+ * const NowPlayingInfo = ({ program, onSkipBackward, onSkipForward, onNext }) => {
+ *   // ...
+ * }
+ * 
+ * // カスタムフックで状態管理をカプセル化
+ * function usePlaybackState() {
+ *   const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
+ *   const [playingType, setPlayingType] = useState<"live" | "timefree" | null>(null);
+ *  
+ *   // その他の関連状態...
+ *   
+ *   return {
+ *     currentProgram,
+ *     playingType,
+ *     setCurrentProgram,
+ *     setPlayingType,
+ *     // その他のメソッド...
+ *   };
+ * }
+ * 
+ * // データアクセスレイヤーの分離
+ * const programRepository = {
+ *   saveProgram(program: Program): void {
+ *     // ストレージへの保存ロジック
+ *   },
+ *   
+ *   getPlayablePrograms(): Program[] {
+ *     // 再生可能番組の取得ロジック
+ *   }
+ * }; */
 
-// 状態管理
 export default function Page() {
   // 表示用の状態
   const [error, setError] = useState<string>("");
@@ -62,6 +109,7 @@ export default function Page() {
 
   // clientインスタンスの生成
   const radikoClient = new RadikoClient();
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // エリア情報の取得と認証
   const [currentAreaName, setCurrentAreaName] = useState<string>("未判定");
@@ -504,14 +552,6 @@ export default function Page() {
     }
   }, []);
 
-  // お気に入り状態をチェック
-  const isFavorite = useCallback(
-    (title: string) => {
-      return favorites.some((favorite) => favorite.title === title);
-    },
-    [favorites]
-  );
-
   // お気に入りの追加・削除
   const toggleFavorite = useCallback(
     (event: React.MouseEvent, program: Program) => {
@@ -631,22 +671,45 @@ export default function Page() {
   );
 
   /* --------------------------------------------------------------------操作 */
+  const updateProgramsByDate = useCallback((newData: ProgramsByDate) => {
+    setProgramsByDate((prev) => {
+      const result = { ...prev, ...newData };
+
+      // 最大エントリ数を制限
+      const MAX_DATES = 14;
+      const keys = Object.keys(result).sort().reverse();
+      if (keys.length > MAX_DATES) {
+        const keysToRemove = keys.slice(MAX_DATES);
+        keysToRemove.forEach((key) => {
+          delete result[key];
+        });
+      }
+
+      return result;
+    });
+  }, []);
+
   // プログラムの取得
   const getProgramsByDate = useCallback(
     async (stationId: string, date: string) => {
       if (!auth) return;
       setIsLoading(true);
+
+      // 既存のリクエストをキャンセル
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      // 新しい AbortController を作成
+      abortControllerRef.current = new AbortController();
       try {
         const programs = await radikoClient.getPrograms({
           token: auth.token,
           stationId,
           date,
+          signal: abortControllerRef.current.signal,
         });
         const organized = organizeProgramsByDate(programs || []);
-        setProgramsByDate((prev) => ({
-          ...prev,
-          ...organized,
-        }));
+        updateProgramsByDate(organized);
 
         // 現在のタブの日付のプログラムを表示
         if (organized[date]) {
@@ -654,6 +717,12 @@ export default function Page() {
         }
         return organized;
       } catch (error) {
+        // AbortError は正常なキャンセル処理なのでエラー表示しない
+        if (error instanceof DOMException && error.name === "AbortError") {
+          console.log("Request aborted");
+          return;
+        }
+        // その他のエラー処理
         console.error("Failed to fetch programs:", error);
         setError(
           error instanceof Error ? error.message : "番組表の取得に失敗しました"
@@ -685,10 +754,7 @@ export default function Page() {
       if (program) {
         // programが渡された場合は番組取得して表示
         const pdata = await getProgramsByDate(program.station_id, dateStr);
-        setProgramsByDate((prev) => ({
-          ...prev,
-          ...pdata,
-        }));
+        if (pdata) updateProgramsByDate(pdata);
         setPrograms(pdata ? pdata[dateStr] || [] : []);
       } else if (programsByDate[dateStr]?.length > 0) {
         // タブの日付に該当する番組を表示
@@ -773,18 +839,17 @@ export default function Page() {
   // プレイヤーの停止関数
   const stopPlayer = useCallback(() => {
     console.log("cleanupPlayer");
-    // setPrograms([]);
     setCurrentProgram(null);
     setPlayingType(null);
-    // setAudioUrl(null);
     setSelectedTab(7);
-    // if (hlsRef.current) {
-    // hlsRef.current.destroy();
-    // hlsRef.current = null;
-    // }
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
     if (audioRef.current) {
       audioRef.current.pause();
-      // audioRef.current.src = "";
+      audioRef.current.src = "";
+      audioRef.current.load();
     }
   }, []);
 
@@ -951,6 +1016,23 @@ export default function Page() {
     [auth, cleanupOldPrograms, handleStationSelect, handleTimeFreePlay]
   );
 
+  // より適切なイベントリスナー管理
+  const clearAudioEventListeners = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // イベントリスナーのリストを明示的に削除
+    ["pause", "seeking", "ratechange", "timeupdate", "ended"].forEach(
+      (type) => {
+        if (currentProgram) {
+          audio.removeEventListener(type, () =>
+            savePlaybackProgram(currentProgram)
+          );
+        }
+      }
+    );
+  }, []);
+
   // 再生終了時の処理
   const onEnded = useCallback(() => {
     // 現在の再生中番組を取得してから停止処理
@@ -960,21 +1042,8 @@ export default function Page() {
     // オーディオ要素を取得
     const audio = audioRef.current;
     if (audio) {
-      // まず、イベントリスナーをAbortControllerで削除
-      if (window.AbortController) {
-        // 新しいAbortControllerを作成して即座に中止
-        const controller = new AbortController();
-
-        // 念のため、空のリスナーをsignalと共に追加してから中止する
-        ["pause", "seeking", "ratechange"].forEach((event) => {
-          audio.addEventListener(event, () => {}, {
-            signal: controller.signal,
-          });
-        });
-
-        // すべてのリスナーを中止
-        controller.abort();
-      }
+      // まず、イベントリスナーを削除
+      clearAudioEventListeners();
 
       // 一時停止してからソースをクリア
       audio.pause();
@@ -1025,6 +1094,29 @@ export default function Page() {
     };
   }, [currentAreaName]);
 
+  // コンポーネントのアンマウント時にすべてのリクエストをキャンセル
+  useEffect(() => {
+    return () => {
+      // HLSインスタンスの確実な破棄
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+
+      // オーディオリソースの完全な解放
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current.load();
+      }
+
+      // 進行中のリクエストのキャンセル
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   /* -----------------------------------------------------カスタムコントロール */
   // 1分間戻る処理
   const handleSkipBackward = useCallback(() => {
@@ -1046,6 +1138,54 @@ export default function Page() {
     );
     audioRef.current.currentTime = newTime;
   }, []);
+
+  // 許可するHTMLタグとその属性を制限
+  const config = {
+    ALLOWED_TAGS: ["p", "br", "a", "span", "img", "div"],
+    ALLOWED_ATTR: [
+      "href",
+      "target",
+      "rel",
+      "src",
+      "alt",
+      "width",
+      "height",
+      "style", //style属性は特に危険で、XSS攻撃の経路になり得ます
+      "class",
+    ],
+  };
+  // HTMLコンテンツをサニタイズする関数
+  const sanitizeHtml = (html: string): string => {
+    return DOMPurify.sanitize(html, config);
+  };
+
+  // 再生済み番組のセットを取得
+  const playedPrograms = useMemo(() => {
+    const savedPrograms = getSavedPlaybackPrograms();
+    return new Set(
+      savedPrograms
+        .filter((p) => p.currentTime === -1)
+        .map((p) => `${p.station_id}-${p.startTime}`)
+    );
+  }, [getSavedPlaybackPrograms]);
+  // プログラム一覧のメモ化
+  const memoizedPrograms = useMemo(() => {
+    return programs.map((program) => {
+      // 視聴済み番組かどうかをチェック
+      const isPlayed = playedPrograms.has(
+        `${program.station_id}-${program.startTime}`
+      );
+
+      // お気に入りかどうかをチェック
+      const isFavorite = favorites.some((fav) => fav.title === program.title);
+
+      return {
+        ...program,
+        isPlayed,
+        isFavorite,
+      };
+    });
+  }, [programs, playedPrograms, favorites]);
 
   /* -------------------------------------------------------------レンダリング */
   // SSRではnullを返す
@@ -1129,7 +1269,9 @@ export default function Page() {
                 {nowOnAir.info && (
                   <div
                     className="text-sm text-gray-600 mt-2"
-                    dangerouslySetInnerHTML={{ __html: nowOnAir.info }}
+                    dangerouslySetInnerHTML={{
+                      __html: sanitizeHtml(nowOnAir.info),
+                    }}
                   />
                 )}
               </div>
@@ -1186,6 +1328,7 @@ export default function Page() {
             <div className="space-y-2 max-h-[700px] overflow-y-auto">
               {programs.length > 0 ? (
                 programs.map((program, index) => {
+                  // 視聴可能かどうかをチェック
                   const canPlay =
                     new Date(
                       parseInt(program.endTime.substring(0, 4)),
@@ -1196,20 +1339,18 @@ export default function Page() {
                     ) < new Date();
 
                   // 視聴済み番組かどうかをチェック
-                  const isPlayed = getSavedPlaybackPrograms().some(
-                    (p) =>
-                      p.station_id === program.station_id &&
-                      p.startTime === program.startTime &&
-                      p.currentTime === -1
+                  const isPlayed = playedPrograms.has(
+                    `${program.station_id}-${program.startTime}`
                   );
 
+                  // 現在再生中の番組かどうかをチェック
                   const isPlaying =
                     playingType === "timefree" &&
                     currentProgram?.startTime === program.startTime &&
                     currentProgram?.station_id === program.station_id;
 
                   // お気に入りかどうかをチェック
-                  const isFav = isFavorite(program.title);
+                  const isFav = memoizedPrograms[index].isFavorite;
 
                   return (
                     <div key={index} className="relative">
@@ -1333,7 +1474,9 @@ export default function Page() {
 
                 <button
                   onClick={onEnded}
-                  className={"px-4 py-1 rounded-md flex items-center bg-blue-500 hover:bg-blue-600 text-white"}
+                  className={
+                    "px-4 py-1 rounded-md flex items-center bg-blue-500 hover:bg-blue-600 text-white"
+                  }
                   title="次の番組"
                 >
                   <span>次へ</span>

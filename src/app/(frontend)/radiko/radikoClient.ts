@@ -52,7 +52,7 @@ export const RETRY_CONFIG: RetryConfig = {
   maxDelay: 5000,
 };
 
-/** ユーティリティ関数 ----------------------------------------------------------*/
+/** ユーティリティ関数 ---------------------------------------------*/
 
 // APIエラー作成関数
 const createRadikoAPIError = (
@@ -69,7 +69,15 @@ const createRadikoAPIError = (
 });
 
 // APIレスポンス処理関数
-const handleApiResponse = async <T>(response: Response): Promise<T> => {
+const handleApiResponse = async <T>(
+  response: Response,
+  signal?: AbortSignal
+): Promise<T> => {
+  // シグナルがアボートされていたら中断
+  if (signal?.aborted) {
+    throw new DOMException("Request aborted", "AbortError");
+  }
+
   if (!response.ok) {
     const error = (await response.json().catch(() => ({
       error: "予期せぬエラーが発生しました",
@@ -252,9 +260,14 @@ const customAuthenticate = async (areaId: AreaId): Promise<Auth> => {
   }
 };
 
-const getStations = async (areaId: AreaId): Promise<Station[]> => {
+const getStations = async (
+  areaId: AreaId,
+  signal?: AbortSignal
+): Promise<Station[]> => {
   try {
-    const stationsRes = await fetch(url.stations.replace("{area}", areaId));
+    const stationsRes = await fetch(url.stations.replace("{area}", areaId), {
+      signal,
+    });
     if (!stationsRes.ok) {
       throw createRadikoAPIError(
         "放送局情報の取得に失敗しました",
@@ -265,6 +278,9 @@ const getStations = async (areaId: AreaId): Promise<Station[]> => {
     // data プロパティから配列を抽出して返す
     return result.data || [];
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
     console.error("Failed to fetch stations:", error);
     if (
       error &&
@@ -281,11 +297,13 @@ const getStations = async (areaId: AreaId): Promise<Station[]> => {
 const getProgramNow = async (
   token: string,
   area: AreaId,
-  stationId: string
+  stationId: string,
+  signal?: AbortSignal
 ): Promise<Program> => {
   try {
     const programsRes = await fetch(
-      url.programNow.replace("{area}", area).replace("{token}", token)
+      url.programNow.replace("{area}", area).replace("{token}", token),
+      { signal }
     );
     if (!programsRes.ok) {
       throw createRadikoAPIError(
@@ -296,12 +314,17 @@ const getProgramNow = async (
     const result = await programsRes.json();
     console.log("Program now:", result);
     // resultからstationIdの番組情報を抽出
-    const program = result.data.find((p: Program) => p.station_id === stationId);
+    const program = result.data.find(
+      (p: Program) => p.station_id === stationId
+    );
     if (!program) {
       throw createRadikoAPIError("番組情報が見つかりませんでした", 404);
     }
     return program;
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
     console.error("Failed to fetch programs:", error);
     if (
       error &&
@@ -319,7 +342,8 @@ const getPrograms = async (
   token: string,
   stationId: string,
   type?: "today" | "weekly" | "date",
-  date?: string
+  date?: string,
+  signal?: AbortSignal
 ): Promise<Program[]> => {
   try {
     const targetUrl = (() => {
@@ -338,7 +362,8 @@ const getPrograms = async (
       targetUrl
         .replace("{stationId}", stationId)
         .replace("{token}", token)
-        .replace("{date}", date || "")
+        .replace("{date}", date || ""),
+      { signal }
     );
     if (!programsRes.ok) {
       throw createRadikoAPIError(
@@ -349,6 +374,9 @@ const getPrograms = async (
     const result = await programsRes.json();
     return result.data || [];
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
     console.error("Failed to fetch programs:", error);
     if (
       error &&
@@ -390,8 +418,8 @@ export default class RadikoClient {
   }
 
   // 放送局情報の取得
-  async getStations(areaId: string): Promise<Station[]> {
-    return getStations(areaId as AreaId);
+  async getStations(areaId: string, signal?: AbortSignal): Promise<Station[]> {
+    return getStations(areaId as AreaId, signal);
   }
 
   // 現在の番組情報の取得
@@ -399,12 +427,14 @@ export default class RadikoClient {
     token,
     area,
     stationId,
+    signal,
   }: {
     token: string;
     area: AreaId;
     stationId: string;
+    signal?: AbortSignal;
   }): Promise<Program> {
-    return getProgramNow(token, area, stationId);
+    return getProgramNow(token, area, stationId, signal);
   }
 
   // 番組情報の取得
@@ -413,12 +443,14 @@ export default class RadikoClient {
     stationId,
     type,
     date,
+    signal,
   }: {
     token: string;
     stationId: string;
     type?: "today" | "weekly" | "date";
     date?: string;
+    signal?: AbortSignal;
   }): Promise<Program[]> {
-    return getPrograms(token, stationId, type, date);
+    return getPrograms(token, stationId, type, date, signal);
   }
 }
