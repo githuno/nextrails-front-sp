@@ -1252,8 +1252,8 @@ export default function Page() {
 
           {/* 放送局 */}
           <h2 className="text-xl font-semibold mb-2">放送局</h2>
-          <div className="grid grid-cols-5 gap-2 text-sm">
-            {stations.map((station) => (
+          <div className="grid grid-cols-4 md:grid-cols-5 gap-1 text-sm">
+            {stations && stations.map((station) => (
               <button
                 key={station.id}
                 onClick={() => handleStationSelect(station.id)}
