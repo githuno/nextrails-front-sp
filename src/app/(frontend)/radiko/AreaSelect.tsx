@@ -333,8 +333,8 @@ export const AreaSelect: React.FC<AreaSelectProps> = ({
             <div className="text-blue-600 text-center">認証中...</div>
           ) : (
             <div className="text-gray-600 text-center">
-              <span>現在のエリア: </span>
-              <span className="text-lg font-bold">{currentAreaName}</span>
+              <span className="text-xs">現在のエリア: </span>
+              <span className="font-bold">{currentAreaName}</span>
             </div>
           )}
         </div>

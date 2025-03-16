@@ -33,32 +33,32 @@ interface Favorite {
   title: string;
 }
 /** TODO: コード構造について責任分離と関心の分離を通じたリファクタリングが必要
- * 
+ *
  * // 再生コントロールを別コンポーネントに分離
  * const PlaybackControls...
- * 
+ *
  * // 再生状態管理のカスタムフック
  * function usePlaybackState...
- * 
+ *
  * // useLocalStorageカスタムフックの追加
  * function useLocalStorage...
- * 
+ *
  * // コンポーネントを分割
  * const ProgramList = ({ programs, onProgramSelect }) => {
  *   // ...
  * }
- * 
+ *
  * const NowPlayingInfo = ({ program, onSkipBackward, onSkipForward, onNext }) => {
  *   // ...
  * }
- * 
+ *
  * // カスタムフックで状態管理をカプセル化
  * function usePlaybackState() {
  *   const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
  *   const [playingType, setPlayingType] = useState<"live" | "timefree" | null>(null);
- *  
+ *
  *   // その他の関連状態...
- *   
+ *
  *   return {
  *     currentProgram,
  *     playingType,
@@ -67,13 +67,13 @@ interface Favorite {
  *     // その他のメソッド...
  *   };
  * }
- * 
+ *
  * // データアクセスレイヤーの分離
  * const programRepository = {
  *   saveProgram(program: Program): void {
  *     // ストレージへの保存ロジック
  *   },
- *   
+ *
  *   getPlayablePrograms(): Program[] {
  *     // 再生可能番組の取得ロジック
  *   }
@@ -376,10 +376,10 @@ export default function Page() {
   // ストレージから番組取得
   const getSavedPlaybackPrograms = useCallback((): Program[] => {
     // クライアントサイドでのみ実行
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return [];
     }
-    
+
     try {
       const saved = localStorage.getItem(PLAYBACK_PROGRAMS_KEY);
       if (!saved) return [];
@@ -1173,6 +1173,7 @@ export default function Page() {
         .map((p) => `${p.station_id}-${p.startTime}`)
     );
   }, [getSavedPlaybackPrograms]);
+
   // プログラム一覧のメモ化
   const memoizedPrograms = useMemo(() => {
     return programs.map((program) => {
@@ -1191,6 +1192,21 @@ export default function Page() {
       };
     });
   }, [programs, playedPrograms, favorites]);
+
+  // 時間帯に基づいて背景色クラスを決定する関数
+  const getTimeSlotBackgroundClass = (startTime: string): string => {
+    const hour = parseInt(startTime.substring(8, 10));
+
+    if (hour >= 5 && hour < 12) {
+      return "bg-green-50"; // 朝（5:00-12:00）
+    } else if (hour >= 12 && hour < 18) {
+      return "bg-yellow-50"; // 昼（12:00-18:00）
+    } else if (hour >= 18 && hour < 24) {
+      return "bg-orange-50"; // 夕方/夜（18:00-24:00）
+    } else {
+      return "bg-purple-50"; // 深夜（24:00-5:00）
+    }
+  };
 
   /* -------------------------------------------------------------レンダリング */
   // SSRではnullを返す
@@ -1298,7 +1314,11 @@ export default function Page() {
         </div>
 
         <div id="list">
-          <h2 className="text-xl font-semibold mb-2">番組表</h2>
+          <h2 className="text-xl font-semibold mb-2">
+            番組表：
+            {stations.find((station) => station.id === selectedStation)?.name} -
+            {selectedStation}
+          </h2>
 
           {/* 日付タブ */}
           <div className="flex overflow-x-auto mb-4 border-b" ref={tabsRef}>
@@ -1308,11 +1328,11 @@ export default function Page() {
                 <button
                   key={date.toISOString()}
                   onClick={() => handleTabChange(index)}
-                  className={`px-4 py-2 whitespace-nowrap ${
+                  className={`px-2 py-2 whitespace-nowrap text-xs border ${
                     selectedTab === index
                       ? "border-b-2 border-blue-500 text-blue-500"
                       : "text-gray-500"
-                  } ${isToday ? "bg-blue-50" : ""}`}
+                  } ${isToday ? "bg-slate-50 font-bold" : ""}`}
                 >
                   {date.toLocaleDateString("ja-JP", {
                     month: "numeric",
@@ -1357,6 +1377,11 @@ export default function Page() {
                   // お気に入りかどうかをチェック
                   const isFav = memoizedPrograms[index].isFavorite;
 
+                  // 時間帯に応じた背景色クラスを取得
+                  const timeSlotClass = getTimeSlotBackgroundClass(
+                    program.startTime
+                  );
+
                   return (
                     <div key={index} className="relative">
                       {/* お気に入りボタンをdivの外に配置 */}
@@ -1379,18 +1404,18 @@ export default function Page() {
                           canPlay ? handleTimeFreePlay(program) : null
                         }
                         className={`
-                          relative w-full p-2 text-left border rounded transition-all
-                          ${
-                            isPlaying
-                              ? "bg-blue-100 border-blue-500 shadow-md"
-                              : isPlayed
-                              ? "bg-gray-100 border-gray-300 opacity-70"
-                              : canPlay
-                              ? "hover:bg-gray-100 border-gray-200"
-                              : "border-gray-200"
-                          }
-                          ${canPlay ? "text-gray-900" : "text-gray-500"}
-                        `}
+                relative w-full p-2 text-left border rounded transition-all
+                ${
+                  isPlaying
+                    ? "bg-blue-100 border-blue-500 shadow-md"
+                    : isPlayed
+                    ? "bg-gray-100 border-gray-300 opacity-70"
+                    : canPlay
+                    ? `hover:bg-gray-100 border-gray-200 ${timeSlotClass}`
+                    : `border-gray-200 ${timeSlotClass}`
+                }
+                ${canPlay ? "text-gray-900" : "text-gray-500"}
+              `}
                         disabled={!canPlay}
                       >
                         <div
