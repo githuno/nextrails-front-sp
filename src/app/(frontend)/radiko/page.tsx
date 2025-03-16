@@ -375,6 +375,11 @@ export default function Page() {
 
   // ストレージから番組取得
   const getSavedPlaybackPrograms = useCallback((): Program[] => {
+    // クライアントサイドでのみ実行
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    
     try {
       const saved = localStorage.getItem(PLAYBACK_PROGRAMS_KEY);
       if (!saved) return [];
