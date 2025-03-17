@@ -132,7 +132,7 @@ export default function Page() {
     [playingType, currentAreaName, currentProgram],
     {
       monitorMemory: true, // メモリ監視を有効化
-      monitorInterval: 30000, // 30秒ごとに監視
+      monitorInterval: 3000, // 30秒ごとに監視
       memoryTag: "RadikoPlayer", // ログの識別用タグ
     }
   );
@@ -205,6 +205,84 @@ export default function Page() {
   }, []);
 
   // HLSストリームの初期化
+  // const initializeHLS = useCallback((url: string) => {
+  //   if (!audioRef.current) return;
+
+  //   // 既存のHLSインスタンスを完全に破棄
+  //   if (hlsRef.current) {
+  //     try {
+  //       console.log("Destroying previous HLS instance");
+  //       // まずストリームの読み込みを停止
+  //       hlsRef.current.stopLoad();
+  //       // イベントリスナーを明示的にすべて削除
+  //       hlsRef.current.removeAllListeners();
+  //       // メディア要素との接続を解除
+  //       hlsRef.current.detachMedia();
+  //       // インスタンスを破棄
+  //       hlsRef.current.destroy();
+  //       hlsRef.current = null;
+  //     } catch (error) {
+  //       console.error("HLS cleanup error:", error);
+  //     }
+  //   }
+
+  //   if (Hls.isSupported()) {
+  //     const hls = new Hls({
+  //       // 基本設定
+  //       maxBufferLength: 30,
+  //       maxMaxBufferLength: 600,
+  //       maxBufferSize: 60 * 1000 * 1000,
+  //       maxBufferHole: 0.5,
+  //     });
+
+  //     hlsRef.current = hls;
+
+  //     // エラーハンドリング
+  //     hls.on(Hls.Events.ERROR, (event, data) => {
+  //       // console.error("HLS error:", data);
+  //       if (data.fatal) {
+  //         switch (data.type) {
+  //           case Hls.ErrorTypes.NETWORK_ERROR:
+  //             console.warn(
+  //               "Fatal network error encountered, trying to recover..."
+  //             );
+  //             hls.startLoad();
+  //             break;
+  //           case Hls.ErrorTypes.MEDIA_ERROR:
+  //             console.warn(
+  //               "Fatal media error encountered, trying to recover..."
+  //             );
+  //             hls.recoverMediaError();
+  //             break;
+  //           default:
+  //             console.error("Fatal error, cannot recover:", data);
+  //             if (
+  //               data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+  //               data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT
+  //             ) {
+  //               // マニフェストのロードに失敗した場合、再試行
+  //               console.log("Manifest load failed, retrying...");
+  //               setTimeout(() => {
+  //                 hls.loadSource(url);
+  //               }, 1000);
+  //             } else {
+  //               hls.destroy();
+  //               setError("再生中に致命的なエラーが発生しました");
+  //             }
+  //             break;
+  //         }
+  //       }
+  //     });
+
+  //     hls.loadSource(url);
+  //     if (audioRef.current) {
+  //       hls.attachMedia(audioRef.current);
+  //     }
+  //   } else if (audioRef.current.canPlayType("application/vnd.apple.mpegurl")) {
+  //     audioRef.current.src = url;
+  //   }
+  // }, []);
+  // HLSストリームの初期化関数を修正
   const initializeHLS = useCallback((url: string) => {
     if (!audioRef.current) return;
 
@@ -212,12 +290,25 @@ export default function Page() {
     if (hlsRef.current) {
       try {
         console.log("Destroying previous HLS instance");
-        // まずストリームの読み込みを停止
-        hlsRef.current.stopLoad();
-        // イベントリスナーを明示的にすべて削除
-        hlsRef.current.removeAllListeners();
-        // メディア要素との接続を解除
+
+        // まずメディアを切り離す
         hlsRef.current.detachMedia();
+
+        // ストリームの読み込みを停止
+        hlsRef.current.stopLoad();
+
+        // 特定のイベントリスナーだけを削除（removeAllListenersは使わない）
+        const events = [
+          Hls.Events.ERROR,
+          Hls.Events.MANIFEST_PARSED,
+          Hls.Events.LEVEL_LOADED,
+          Hls.Events.MEDIA_ATTACHED,
+        ];
+
+        events.forEach((event) => {
+          hlsRef.current?.off(event);
+        });
+
         // インスタンスを破棄
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -239,7 +330,6 @@ export default function Page() {
 
       // エラーハンドリング
       hls.on(Hls.Events.ERROR, (event, data) => {
-        // console.error("HLS error:", data);
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
@@ -280,6 +370,21 @@ export default function Page() {
       }
     } else if (audioRef.current.canPlayType("application/vnd.apple.mpegurl")) {
       audioRef.current.src = url;
+    }
+  }, []);
+
+  // オーディオ要素のイベントリスナーをクリア
+  const clearAudioEventListeners = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // 保存されたイベントハンドラーを使って削除
+    if (eventHandlersRef.current) {
+      Object.entries(eventHandlersRef.current).forEach(([event, handler]) => {
+        audio.removeEventListener(event, handler);
+      });
+      // リファレンスをクリア
+      eventHandlersRef.current = {};
     }
   }, []);
 
@@ -423,45 +528,46 @@ export default function Page() {
     [selectedStation, getSavedPlaybackPrograms]
   );
 
+  // イベントハンドラーの参照を保存するためのrefを使用
+  const eventHandlersRef = useRef<{ [key: string]: EventListener }>({});
+
   // 定期的な再生位置の保存
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || playingType !== "timefree") return;
+    if (!audio || playingType !== "timefree" || !currentProgram) return;
 
-    // AbortControllerを作成
-    const controller = new AbortController();
-    const { signal } = controller;
+    // 名前付き関数を保存
+    const handleEvent = () => savePlaybackProgram(currentProgram);
 
-    // イベントリスナーの設定
-    const events = [
-      // "timeupdate",
-      "pause",
-      "seeking",
-      "ratechange",
-    ];
-    // signal付きイベントリスナーの追加
-    events.forEach((event) => {
-      if (currentProgram) {
-        audio.addEventListener(
-          event,
-          () => savePlaybackProgram(currentProgram),
-          { signal }
-        );
-      }
+    // イベントハンドラを名前付きで保存
+    eventHandlersRef.current = {
+      pause: handleEvent,
+      seeking: handleEvent,
+      ratechange: handleEvent,
+      // timeupdate: handleEvent,
+    };
+
+    // イベントリスナーを追加
+    Object.entries(eventHandlersRef.current).forEach(([event, handler]) => {
+      audio.addEventListener(event, handler);
     });
 
-    // 定期的な保存
-    const interval = setInterval(() => {
-      if (currentProgram) {
-        savePlaybackProgram(currentProgram);
-      }
+    // 5秒ごとに再生位置を自動保存する機能
+    const saveInterval = setInterval(() => {
+      if (audio.paused) return; // 一時停止中は保存しない
+      savePlaybackProgram(currentProgram);
     }, 5000);
 
     // クリーンアップ
     return () => {
-      // すべてのイベントリスナーを一度に中止
-      controller.abort();
-      clearInterval(interval);
+      clearInterval(saveInterval);
+      if (audio) {
+        Object.entries(eventHandlersRef.current).forEach(([event, handler]) => {
+          audio.removeEventListener(event, handler);
+        });
+      }
+      // 参照をクリア
+      eventHandlersRef.current = {};
     };
   }, [playingType, currentProgram, savePlaybackProgram]);
 
@@ -796,20 +902,57 @@ export default function Page() {
 
   // プレイヤーの停止関数
   const stopPlayer = useCallback(() => {
-    console.log("cleanupPlayer");
+    console.log("Stopping player");
+
+    // まず状態をリセット
     setCurrentProgram(null);
     setPlayingType(null);
     setSelectedTab(7);
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
+
+    // オーディオ要素の処理
     if (audioRef.current) {
+      // イベントリスナーをクリア
+      clearAudioEventListeners();
+
+      // 一時停止
       audioRef.current.pause();
+
+      // ソースをクリア
       audioRef.current.src = "";
       audioRef.current.load();
     }
-  }, []);
+
+    // HLSインスタンスの破棄は少し遅延させる
+    setTimeout(() => {
+      if (hlsRef.current) {
+        try {
+          // メディアを切り離す
+          hlsRef.current.detachMedia();
+
+          // ストリームの読み込みを停止
+          hlsRef.current.stopLoad();
+
+          // 特定のイベントリスナーだけを削除
+          const events = [
+            Hls.Events.ERROR,
+            Hls.Events.MANIFEST_PARSED,
+            Hls.Events.LEVEL_LOADED,
+            Hls.Events.MEDIA_ATTACHED,
+          ];
+
+          events.forEach((event) => {
+            hlsRef.current?.off(event);
+          });
+
+          // インスタンスを破棄
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        } catch (error) {
+          console.error("HLS cleanup error:", error);
+        }
+      }
+    }, 100);
+  }, [clearAudioEventListeners]);
 
   // ライブ再生
   const handleLivePlay = useCallback(async () => {
@@ -976,23 +1119,6 @@ export default function Page() {
     [auth, cleanupOldPrograms, handleStationSelect, handleTimeFreePlay]
   );
 
-  // より適切なイベントリスナー管理
-  const clearAudioEventListeners = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-      // イベントリスナーのリストを明示的に削除
-      ["pause", "seeking", "ratechange", "timeupdate", "ended"].forEach(
-        (type) => {
-          if (currentProgram) {
-            audio.removeEventListener(type, () =>
-              savePlaybackProgram(currentProgram)
-            );
-          }
-        }
-      );
-    }, []);
-
   // 再生終了時の処理
   const onEnded = useCallback(() => {
     // 現在の再生中番組を取得してから停止処理
@@ -1054,28 +1180,90 @@ export default function Page() {
     };
   }, [currentAreaName]);
 
-  // コンポーネントのアンマウント時にすべてのリクエストをキャンセル
+  useEffect(() => {
+    if (!playingType) return;
+
+    // メモリ解放のための処理（間隔を延長）
+    const cleanupInterval = setInterval(() => {
+      // 未使用のバッファをクリア
+      if (hlsRef.current) {
+        try {
+          // バッファをフラッシュ
+          hlsRef.current.trigger(Hls.Events.BUFFER_FLUSHING, {
+            startOffset: 0,
+            endOffset: Number.POSITIVE_INFINITY,
+            type: null,
+          });
+
+          // 明示的なGCのトリガー
+          if (typeof window !== "undefined" && window.gc) {
+            window.gc();
+          }
+        } catch (error) {
+          console.error("Error during buffer flush:", error);
+        }
+      }
+    }, 60000); // 1分間隔に変更
+
+    return () => {
+      clearInterval(cleanupInterval);
+    };
+  }, [playingType]);
+
+  // コンポーネントのアンマウント時にすべてのリソースを解放
   useEffect(() => {
     return () => {
-      // HLSインスタンスの確実な破棄
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+      // AbortControllerの中断
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
 
-      // オーディオリソースの完全な解放
+      // オーディオ要素のリソース解放
       if (audioRef.current) {
+        // まずイベントリスナーをクリア
+        clearAudioEventListeners();
+
+        // メディアを停止してリソース解放
         audioRef.current.pause();
         audioRef.current.src = "";
         audioRef.current.load();
       }
 
-      // 進行中のリクエストのキャンセル
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      // HLSインスタンスの確実な破棄
+      if (hlsRef.current) {
+        try {
+          // メディアを切り離す
+          hlsRef.current.detachMedia();
+
+          // ストリームの読み込みを停止
+          hlsRef.current.stopLoad();
+
+          // イベントリスナーを削除
+          const events = [
+            Hls.Events.ERROR,
+            Hls.Events.MANIFEST_PARSED,
+            Hls.Events.LEVEL_LOADED,
+            Hls.Events.MEDIA_ATTACHED,
+          ];
+
+          events.forEach((event) => {
+            hlsRef.current?.off(event);
+          });
+
+          // インスタンスを破棄
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        } catch (error) {
+          console.error("HLS cleanup error:", error);
+        }
       }
+
+      // 状態をクリア
+      setCurrentProgram(null);
+      setPlayingType(null);
     };
-  }, []);
+  }, [clearAudioEventListeners]);
 
   /* -----------------------------------------------------カスタムコントロール */
   // 1分間戻る処理
