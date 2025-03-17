@@ -205,84 +205,6 @@ export default function Page() {
   }, []);
 
   // HLSストリームの初期化
-  // const initializeHLS = useCallback((url: string) => {
-  //   if (!audioRef.current) return;
-
-  //   // 既存のHLSインスタンスを完全に破棄
-  //   if (hlsRef.current) {
-  //     try {
-  //       console.log("Destroying previous HLS instance");
-  //       // まずストリームの読み込みを停止
-  //       hlsRef.current.stopLoad();
-  //       // イベントリスナーを明示的にすべて削除
-  //       hlsRef.current.removeAllListeners();
-  //       // メディア要素との接続を解除
-  //       hlsRef.current.detachMedia();
-  //       // インスタンスを破棄
-  //       hlsRef.current.destroy();
-  //       hlsRef.current = null;
-  //     } catch (error) {
-  //       console.error("HLS cleanup error:", error);
-  //     }
-  //   }
-
-  //   if (Hls.isSupported()) {
-  //     const hls = new Hls({
-  //       // 基本設定
-  //       maxBufferLength: 30,
-  //       maxMaxBufferLength: 600,
-  //       maxBufferSize: 60 * 1000 * 1000,
-  //       maxBufferHole: 0.5,
-  //     });
-
-  //     hlsRef.current = hls;
-
-  //     // エラーハンドリング
-  //     hls.on(Hls.Events.ERROR, (event, data) => {
-  //       // console.error("HLS error:", data);
-  //       if (data.fatal) {
-  //         switch (data.type) {
-  //           case Hls.ErrorTypes.NETWORK_ERROR:
-  //             console.warn(
-  //               "Fatal network error encountered, trying to recover..."
-  //             );
-  //             hls.startLoad();
-  //             break;
-  //           case Hls.ErrorTypes.MEDIA_ERROR:
-  //             console.warn(
-  //               "Fatal media error encountered, trying to recover..."
-  //             );
-  //             hls.recoverMediaError();
-  //             break;
-  //           default:
-  //             console.error("Fatal error, cannot recover:", data);
-  //             if (
-  //               data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
-  //               data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT
-  //             ) {
-  //               // マニフェストのロードに失敗した場合、再試行
-  //               console.log("Manifest load failed, retrying...");
-  //               setTimeout(() => {
-  //                 hls.loadSource(url);
-  //               }, 1000);
-  //             } else {
-  //               hls.destroy();
-  //               setError("再生中に致命的なエラーが発生しました");
-  //             }
-  //             break;
-  //         }
-  //       }
-  //     });
-
-  //     hls.loadSource(url);
-  //     if (audioRef.current) {
-  //       hls.attachMedia(audioRef.current);
-  //     }
-  //   } else if (audioRef.current.canPlayType("application/vnd.apple.mpegurl")) {
-  //     audioRef.current.src = url;
-  //   }
-  // }, []);
-  // HLSストリームの初期化関数を修正
   const initializeHLS = useCallback((url: string) => {
     if (!audioRef.current) return;
 
@@ -651,6 +573,11 @@ export default function Page() {
 
         // 各放送局ごとに処理
         for (const stationId of favoriteStationIds) {
+          // この局のお気に入り番組タイトルのみを取得
+          const stationFavorites = favs.filter(
+            (fav: Favorite) => fav.stationId === stationId
+          );
+
           // 該当放送局の1週間分の番組表を取得
           const weeklyPrograms = await radikoClient.getPrograms({
             token: auth.token,
@@ -660,21 +587,16 @@ export default function Page() {
 
           if (!weeklyPrograms || weeklyPrograms.length === 0) continue;
 
-          // お気に入りに登録されているタイトルが一致する番組を探す
+          // お気に入りに一致する番組を探す
           const favoritePrograms = weeklyPrograms.filter((program) => {
-            // 1. タイトルがお気に入りに一致する
-            const isFavorite = favs.some(
-              (favorite: Favorite) => favorite.title === program.title
+            // 1. この放送局の番組で、お気に入りに登録されたタイトルと局が一致するものを探す
+            const isFavorite = stationFavorites.some(
+              (fav: Favorite) =>
+                fav.title === program.title && fav.stationId === stationId
             );
-
             if (!isFavorite) return false;
 
-            // 2. 放送局IDが一致する
-            const matchesStation = program.station_id === stationId;
-
-            if (!matchesStation) return false;
-
-            // 3. 番組終了時間が現在時刻より過去（再生可能）か確認
+            // 2. 番組終了時間が現在時刻より過去（再生可能）か確認
             const endTime = new Date(
               parseInt(program.endTime.substring(0, 4)),
               parseInt(program.endTime.substring(4, 6)) - 1,
