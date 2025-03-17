@@ -1005,20 +1005,36 @@ export default function Page() {
         );
         if (!availablePrograms.length) return;
 
-        // 放送日が最も古い番組を選択
-        const oldestProgram = availablePrograms.reduce((oldest, current) => {
-          const oldestTime = parseInt(oldest.startTime);
-          const currentTime = parseInt(current.startTime);
-          return currentTime < oldestTime ? current : oldest;
-        }, availablePrograms[0]);
+        // 再生途中の番組（currentTime > 0）を抽出
+        const inProgressPrograms = availablePrograms.filter(
+          (program) => program.currentTime && program.currentTime > 0
+        );
+
+        let programToPlay;
+
+        if (inProgressPrograms.length > 0) {
+          // 1.再生途中の番組がある場合は、その中から放送日が最も古い番組を選択
+          programToPlay = inProgressPrograms.reduce((oldest, current) => {
+            const oldestTime = parseInt(oldest.startTime);
+            const currentTime = parseInt(current.startTime);
+            return currentTime < oldestTime ? current : oldest;
+          }, inProgressPrograms[0]);
+        } else {
+          // 2.再生途中の番組がない場合は、未視聴の番組から放送日が最も古い番組を選択
+          programToPlay = availablePrograms.reduce((oldest, current) => {
+            const oldestTime = parseInt(oldest.startTime);
+            const currentTime = parseInt(current.startTime);
+            return currentTime < oldestTime ? current : oldest;
+          }, availablePrograms[0]);
+        }
 
         // 選択した番組の局を選択
-        await handleStationSelect(oldestProgram.station_id);
+        await handleStationSelect(programToPlay.station_id);
         // 選択した番組の日付タブを選択
         const oldestDate = new Date(
-          parseInt(oldestProgram.startTime.substring(0, 4)),
-          parseInt(oldestProgram.startTime.substring(4, 6)) - 1,
-          parseInt(oldestProgram.startTime.substring(6, 8))
+          parseInt(programToPlay.startTime.substring(0, 4)),
+          parseInt(programToPlay.startTime.substring(4, 6)) - 1,
+          parseInt(programToPlay.startTime.substring(6, 8))
         );
         const oldestIndex = dates.findIndex(
           (date) =>
@@ -1027,10 +1043,10 @@ export default function Page() {
             date.getDate() === oldestDate.getDate()
         );
         // 該当日を選択
-        handleTabChange(oldestIndex, oldestProgram);
+        handleTabChange(oldestIndex, programToPlay);
         // 番組を再生
         handleTimeFreePlay(
-          oldestProgram,
+          programToPlay,
           savedSpeed ? parseFloat(savedSpeed) : 1.0
         );
       } catch (error) {
