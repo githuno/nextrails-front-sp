@@ -20,7 +20,7 @@ import {
   AreaId,
 } from "./constants";
 import DOMPurify from "isomorphic-dompurify";
-// Custom hook to track changes in dependencies and log them
+// トレース＆メモリ監視用のカスタムフック
 import useTrackedEffect from "@/hooks/useTrackedEffect";
 
 // import { useToast } from "@/hooks/toast";
@@ -129,7 +129,12 @@ export default function Page() {
         changes
       );
     },
-    [playingType, currentAreaName, currentProgram]
+    [playingType, currentAreaName, currentProgram],
+    {
+      monitorMemory: true, // メモリ監視を有効化
+      monitorInterval: 30000, // 30秒ごとに監視
+      memoryTag: "RadikoPlayer", // ログの識別用タグ
+    }
   );
 
   // 日付タブの一覧を生成（前後7日間に変更）
@@ -203,60 +208,36 @@ export default function Page() {
   const initializeHLS = useCallback((url: string) => {
     if (!audioRef.current) return;
 
-    // 既存のHLSインスタンスをクリーンアップ
+    // 既存のHLSインスタンスを完全に破棄
     if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
+      try {
+        console.log("Destroying previous HLS instance");
+        // まずストリームの読み込みを停止
+        hlsRef.current.stopLoad();
+        // イベントリスナーを明示的にすべて削除
+        hlsRef.current.removeAllListeners();
+        // メディア要素との接続を解除
+        hlsRef.current.detachMedia();
+        // インスタンスを破棄
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      } catch (error) {
+        console.error("HLS cleanup error:", error);
+      }
     }
 
     if (Hls.isSupported()) {
       const hls = new Hls({
+        // 基本設定
         maxBufferLength: 30,
         maxMaxBufferLength: 600,
         maxBufferSize: 60 * 1000 * 1000,
         maxBufferHole: 0.5,
-        highBufferWatchdogPeriod: 2,
-        nudgeOffset: 0.1,
-        nudgeMaxRetry: 5,
-        maxFragLookUpTolerance: 0.5,
-
-        // ライブストリーミングの設定を最適化
-        liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: 10,
-        liveDurationInfinity: true,
-        liveBackBufferLength: 90,
-
-        // メディアソース設定
-        enableWorker: true,
-        stretchShortVideoTrack: false,
-        maxAudioFramesDrift: 1,
-
-        // ローディング設定
-        manifestLoadingTimeOut: 20000,
-        manifestLoadingMaxRetry: 4,
-        manifestLoadingRetryDelay: 500,
-        manifestLoadingMaxRetryTimeout: 64000,
-
-        // フラグメントローディング設定
-        fragLoadingTimeOut: 20000,
-        fragLoadingMaxRetry: 6,
-        fragLoadingRetryDelay: 500,
-        fragLoadingMaxRetryTimeout: 64000,
-
-        // ストリーミング設定
-        startLevel: -1,
-        levelLoadingTimeOut: 10000,
-        levelLoadingMaxRetry: 4,
-        levelLoadingRetryDelay: 500,
-        levelLoadingMaxRetryTimeout: 64000,
-
-        // デバッグ設定
-        // debug: true,
       });
 
       hlsRef.current = hls;
 
-      // エラーハンドリングを改善
+      // エラーハンドリング
       hls.on(Hls.Events.ERROR, (event, data) => {
         // console.error("HLS error:", data);
         if (data.fatal) {
@@ -292,62 +273,6 @@ export default function Page() {
           }
         }
       });
-
-      // デバッグイベントの設定を改善
-      const debugEvents = [
-        Hls.Events.MANIFEST_LOADING,
-        Hls.Events.MANIFEST_LOADED,
-        Hls.Events.MANIFEST_PARSED,
-        Hls.Events.LEVEL_LOADING,
-        Hls.Events.LEVEL_LOADED,
-        Hls.Events.LEVEL_SWITCHED,
-        Hls.Events.LEVEL_UPDATED,
-        Hls.Events.FRAG_LOADING,
-        Hls.Events.FRAG_LOADED,
-        Hls.Events.FRAG_PARSED,
-        Hls.Events.BUFFER_APPENDING,
-        Hls.Events.BUFFER_APPENDED,
-      ];
-
-      // debugEvents.forEach((event) => {
-      //   hls.on(event, (...args: any) => {
-      //     console.log(`HLS ${event}:`, ...args);
-      //   });
-      // });
-
-      // メディア初期化イベントの追加
-      // hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-      //   if (playingType === "timefree") {
-      //     audioRef.current?.play().catch((error) => {
-      //       // console.error("Playback error:", error);
-      //       if (error.name === "NotAllowedError") {
-      //         setError(
-      //           "自動再生が許可されていません。再生ボタンをクリックしてください。"
-      //         );
-      //       } else {
-      //         setError("再生の開始に失敗しました");
-      //       }
-      //     });
-      //   }
-      // });
-
-      // ストリーム開始時のイベントハンドラ
-      // hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      //   console.log("Manifest parsed, stream ready");
-      //   if (audioRef.current?.paused) {
-      //     audioRef.current.play().catch(console.error);
-      //   }
-      // });
-
-      // レベル切り替え時のイベント
-      // hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-      //   console.log("Stream quality level switched:", data);
-      // });
-
-      // フラグメントの更新イベント
-      // hls.on(Hls.Events.FRAG_CHANGED, (event, data) => {
-      //   console.log("Fragment changed:", data);
-      // });
 
       hls.loadSource(url);
       if (audioRef.current) {
@@ -545,7 +470,7 @@ export default function Page() {
   const RADIKO_FAVORITES_KEY = "radiko_favorites";
   const [favorites, setFavorites] = useState<Favorite[]>([]);
 
-  // お気に入り関連の関数
+  // お気に入りの取得
   const loadFavorites = useCallback(() => {
     try {
       const saved = localStorage.getItem(RADIKO_FAVORITES_KEY);
@@ -595,7 +520,7 @@ export default function Page() {
     [favorites]
   );
 
-  // お気に入り番組を自動保存
+  // お気に入り番組をPlAYBACK_PROGRAMへ自動保存
   const saveFavoritePrograms = useCallback(
     async (stations: Station[]) => {
       const favs = loadFavorites();
@@ -603,7 +528,7 @@ export default function Page() {
       try {
         setIsLoading(true);
 
-        // お気に入りに登録されている放送局のIDを取得 (Array.fromを使用してエラー修正)
+        // お気に入りに登録されている放送局のIDを取得
         const favoriteStationIds = Array.from(
           new Set(favs.map((fav: Favorite) => fav.stationId))
         ).filter((id) =>
@@ -616,6 +541,7 @@ export default function Page() {
         // 既存の保存済み番組を取得
         const savedPrograms = getSavedPlaybackPrograms();
         let updated = false;
+        const now = new Date();
 
         // 各放送局ごとに処理
         for (const stationId of favoriteStationIds) {
@@ -628,10 +554,31 @@ export default function Page() {
 
           if (!weeklyPrograms || weeklyPrograms.length === 0) continue;
 
-          // お気に入りに登録されているタイトルと一致する番組を探す
-          const favoritePrograms = weeklyPrograms.filter((program) =>
-            favs.some((favorite: Favorite) => favorite.title === program.title)
-          );
+          // お気に入りに登録されているタイトルが一致する番組を探す
+          const favoritePrograms = weeklyPrograms.filter((program) => {
+            // 1. タイトルがお気に入りに一致する
+            const isFavorite = favs.some(
+              (favorite: Favorite) => favorite.title === program.title
+            );
+
+            if (!isFavorite) return false;
+
+            // 2. 放送局IDが一致する
+            const matchesStation = program.station_id === stationId;
+
+            if (!matchesStation) return false;
+
+            // 3. 番組終了時間が現在時刻より過去（再生可能）か確認
+            const endTime = new Date(
+              parseInt(program.endTime.substring(0, 4)),
+              parseInt(program.endTime.substring(4, 6)) - 1,
+              parseInt(program.endTime.substring(6, 8)),
+              parseInt(program.endTime.substring(8, 10)),
+              parseInt(program.endTime.substring(10, 12))
+            );
+
+            return endTime < now; // 終了時間が現在より前なら再生可能
+          });
 
           if (favoritePrograms.length === 0) continue;
 
@@ -884,7 +831,9 @@ export default function Page() {
       const playlistUrl = url.liveStreaming
         .replace("{stationId}", selectedStation)
         .replace("{token}", auth.token);
+
       initializeHLS(playlistUrl);
+
       audioRef.current?.play().catch((error) => {
         console.error("Playback error:", error);
         setError("再生の開始に失敗しました");
@@ -1032,17 +981,17 @@ export default function Page() {
     const audio = audioRef.current;
     if (!audio) return;
 
-    // イベントリスナーのリストを明示的に削除
-    ["pause", "seeking", "ratechange", "timeupdate", "ended"].forEach(
-      (type) => {
-        if (currentProgram) {
-          audio.removeEventListener(type, () =>
-            savePlaybackProgram(currentProgram)
-          );
+      // イベントリスナーのリストを明示的に削除
+      ["pause", "seeking", "ratechange", "timeupdate", "ended"].forEach(
+        (type) => {
+          if (currentProgram) {
+            audio.removeEventListener(type, () =>
+              savePlaybackProgram(currentProgram)
+            );
+          }
         }
-      }
-    );
-  }, []);
+      );
+    }, []);
 
   // 再生終了時の処理
   const onEnded = useCallback(() => {
@@ -1253,29 +1202,30 @@ export default function Page() {
           {/* 放送局 */}
           <h2 className="text-xl font-semibold mb-2">放送局</h2>
           <div className="grid grid-cols-4 md:grid-cols-5 gap-1 text-sm">
-            {stations && stations.map((station) => (
-              <button
-                key={station.id}
-                onClick={() => handleStationSelect(station.id)}
-                className={`p-1 rounded ${
-                  // 選択中以外は画像を色なし
-                  selectedStation === station.id
-                    ? "bg-blue-500 text-white shadow-md"
-                    : "border"
-                }`}
-              >
-                <img
-                  src={station.banner}
-                  alt={station.name}
-                  className={`${
-                    selectedStation &&
-                    selectedStation !== station.id &&
-                    "grayscale-[80%]"
+            {stations &&
+              stations.map((station) => (
+                <button
+                  key={station.id}
+                  onClick={() => handleStationSelect(station.id)}
+                  className={`p-1 rounded ${
+                    // 選択中以外は画像を色なし
+                    selectedStation === station.id
+                      ? "bg-blue-500 text-white shadow-md"
+                      : "border"
                   }`}
-                />
-                <div className="text-[0.5rem] truncate">{station.name}</div>
-              </button>
-            ))}
+                >
+                  <img
+                    src={station.banner}
+                    alt={station.name}
+                    className={`${
+                      selectedStation &&
+                      selectedStation !== station.id &&
+                      "grayscale-[80%]"
+                    }`}
+                  />
+                  <div className="text-[0.5rem] truncate">{station.name}</div>
+                </button>
+              ))}
           </div>
 
           {/* 現在放送中の番組情報 */}
