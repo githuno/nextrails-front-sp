@@ -10,6 +10,8 @@ import React, {
 import Hls from "hls.js";
 import RadikoClient from "./radikoClient";
 import { AreaSelect } from "./AreaSelect";
+import HistoryDrawer from "./HistoryDrawer";
+import HistoryButton from "./HistoryButton";
 import {
   url,
   Auth,
@@ -1289,6 +1291,51 @@ export default function Page() {
     }
   };
 
+  /* -----------------------------------------------------------視聴履歴の管理 */
+  // 視聴履歴ドロワーの状態
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] =
+    useState<boolean>(false);
+
+  // 視聴履歴ドロワーの開閉
+  const toggleHistoryDrawer = useCallback(() => {
+    setIsHistoryDrawerOpen((prev) => !prev);
+  }, []);
+
+  // 視聴履歴から番組を再生する関数
+  const playFromHistory = useCallback(
+    (program: Program) => {
+      // ドロワーを閉じる
+      setIsHistoryDrawerOpen(false);
+
+      // 対応する放送局を選択
+      handleStationSelect(program.station_id).then(() => {
+        // 対応する日付タブを選択
+        const programDate = new Date(
+          parseInt(program.startTime.substring(0, 4)),
+          parseInt(program.startTime.substring(4, 6)) - 1,
+          parseInt(program.startTime.substring(6, 8))
+        );
+
+        const tabIndex = dates.findIndex(
+          (date) =>
+            date.getFullYear() === programDate.getFullYear() &&
+            date.getMonth() === programDate.getMonth() &&
+            date.getDate() === programDate.getDate()
+        );
+
+        // 該当日を選択し、その後番組を再生
+        if (tabIndex !== -1) {
+          handleTabChange(tabIndex, program);
+          handleTimeFreePlay(program);
+        } else {
+          // 該当する日付タブが見つからない場合は直接再生
+          handleTimeFreePlay(program);
+        }
+      });
+    },
+    [dates, handleStationSelect, handleTabChange, handleTimeFreePlay]
+  );
+
   /* -------------------------------------------------------------レンダリング */
   // SSRではnullを返す
   const [isClient, setIsClient] = useState(false);
@@ -1700,6 +1747,16 @@ export default function Page() {
           </div>
         </div>
       </div>
+      {/* 視聴履歴ボタンとドロワー */}
+      <HistoryButton onClick={toggleHistoryDrawer} />
+      <HistoryDrawer
+        isOpen={isHistoryDrawerOpen}
+        onClose={toggleHistoryDrawer}
+        onPlayFromHistory={playFromHistory}
+        stations={stations}
+        getSavedPlaybackPrograms={getSavedPlaybackPrograms}
+        playbackProgramsKey={PLAYBACK_PROGRAMS_KEY}
+      />
     </div>
   );
 }
