@@ -44,6 +44,7 @@ export async function POST(request: Request) {
 // vercelデプロイにおける時間制限
 // ：https://www.rasukarusan.com/entry/2023/12/23/104646
 // ：https://vercel.com/docs/functions/limitations#max-duration
+// ：https://nextjs.org/docs/app/api-reference/file-conventions/route-segment-config
 export const runtime = 'edge';
 
 // SSEエンドポイント
