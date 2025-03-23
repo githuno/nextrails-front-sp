@@ -110,14 +110,14 @@ export default function Page() {
   // const { showSuccess } = useToast();
 
   // clientインスタンスの生成
-  const radikoClient = new RadikoClient();
+  // const radikoClient = new RadikoClient();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // エリア情報の取得と認証
   const [currentAreaName, setCurrentAreaName] = useState<string>("未判定");
   const onAreaChange = async () => {
-    const auth = await radikoClient.getAuthInfo();
-    const name = await radikoClient.getAuthName();
+    const auth = await RadikoClient.getAuthInfo();
+    const name = await RadikoClient.getAuthName();
     setAuth(auth);
     setCurrentAreaName(name);
   };
@@ -297,6 +297,9 @@ export default function Page() {
     }
   }, []);
 
+  // イベントハンドラーの参照を保存するためのrefを使用
+  const eventHandlersRef = useRef<{ [key: string]: EventListener }>({});
+
   // オーディオ要素のイベントリスナーをクリア
   const clearAudioEventListeners = useCallback(() => {
     const audio = audioRef.current;
@@ -305,7 +308,13 @@ export default function Page() {
     // 保存されたイベントハンドラーを使って削除
     if (eventHandlersRef.current) {
       Object.entries(eventHandlersRef.current).forEach(([event, handler]) => {
-        audio.removeEventListener(event, handler);
+        if (event === "timefreeController" || event === "saveInterval") {
+          // 特殊なハンドラー（関数呼び出し）
+          (handler as () => void)();
+        } else {
+          // 通常のイベントリスナー
+          audio.removeEventListener(event, handler);
+        }
       });
       // リファレンスをクリア
       eventHandlersRef.current = {};
@@ -452,49 +461,6 @@ export default function Page() {
     [selectedStation, getSavedPlaybackPrograms]
   );
 
-  // イベントハンドラーの参照を保存するためのrefを使用
-  const eventHandlersRef = useRef<{ [key: string]: EventListener }>({});
-
-  // 定期的な再生位置の保存
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || playingType !== "timefree" || !currentProgram) return;
-
-    // 名前付き関数を保存
-    const handleEvent = () => savePlaybackProgram(currentProgram);
-
-    // イベントハンドラを名前付きで保存
-    eventHandlersRef.current = {
-      pause: handleEvent,
-      seeking: handleEvent,
-      ratechange: handleEvent,
-      // timeupdate: handleEvent,
-    };
-
-    // イベントリスナーを追加
-    Object.entries(eventHandlersRef.current).forEach(([event, handler]) => {
-      audio.addEventListener(event, handler);
-    });
-
-    // 5秒ごとに再生位置を自動保存する機能
-    const saveInterval = setInterval(() => {
-      if (audio.paused) return; // 一時停止中は保存しない
-      savePlaybackProgram(currentProgram);
-    }, 5000);
-
-    // クリーンアップ
-    return () => {
-      clearInterval(saveInterval);
-      if (audio) {
-        Object.entries(eventHandlersRef.current).forEach(([event, handler]) => {
-          audio.removeEventListener(event, handler);
-        });
-      }
-      // 参照をクリア
-      eventHandlersRef.current = {};
-    };
-  }, [playingType, currentProgram, savePlaybackProgram]);
-
   /* ---------------------------------------------------------------お気に入り */
   // お気に入り関連の定数
   const RADIKO_FAVORITES_KEY = "radiko_favorites";
@@ -581,7 +547,7 @@ export default function Page() {
           );
 
           // 該当放送局の1週間分の番組表を取得
-          const weeklyPrograms = await radikoClient.getPrograms({
+          const weeklyPrograms = await RadikoClient.getPrograms({
             token: auth.token,
             stationId,
             type: "weekly",
@@ -649,7 +615,7 @@ export default function Page() {
         setIsLoading(false);
       }
     },
-    [auth, radikoClient, getSavedPlaybackPrograms]
+    [auth, RadikoClient, getSavedPlaybackPrograms]
   );
 
   /* --------------------------------------------------------------------操作 */
@@ -684,7 +650,7 @@ export default function Page() {
       // 新しい AbortController を作成
       abortControllerRef.current = new AbortController();
       try {
-        const programs = await radikoClient.getPrograms({
+        const programs = await RadikoClient.getPrograms({
           token: auth.token,
           stationId,
           date,
@@ -764,7 +730,7 @@ export default function Page() {
 
     try {
       // 1.現在放送中の番組を取得
-      const nowOnAir = await radikoClient.getProgramNow({
+      const nowOnAir = await RadikoClient.getProgramNow({
         token: auth.token,
         area: auth.areaId as AreaId,
         stationId,
@@ -772,7 +738,7 @@ export default function Page() {
       setNowOnAir(nowOnAir);
 
       // 2.選択された局の番組表を取得
-      const weeklyPrograms = await radikoClient.getPrograms({
+      const weeklyPrograms = await RadikoClient.getPrograms({
         token: auth.token,
         stationId,
         type: "weekly",
@@ -920,6 +886,11 @@ export default function Page() {
       if (!auth) return;
       setPlayingType("timefree");
 
+      // 使用する再生速度を決定（引数があればそれを優先）
+      const targetSpeed = stateSpeed !== undefined ? stateSpeed : speed;
+      // 状態を更新
+      setSpeed(targetSpeed);
+
       // 番組がストレージに保存されている場合は再生位置を復元
       const savedPrograms = getSavedPlaybackPrograms();
       const savedProgram = savedPrograms.find(
@@ -944,32 +915,80 @@ export default function Page() {
 
         // 再生およびイベントリスナーの設定
         if (audioRef.current) {
-          // 再生速度の設定
-          audioRef.current.playbackRate = speed;
-          setSpeed(stateSpeed || speed);
-          // 再生位置の設定
-          audioRef.current.currentTime = program.currentTime || 0;
+          // 以前のイベントリスナーをクリア
+          clearAudioEventListeners();
 
           // AbortControllerを使用してイベントリスナーを管理
           const controller = new AbortController();
+          // コントローラーを参照として保存
+          const currentController = controller;
 
-          const handleCanPlay = () => {
-            if (audioRef.current) {
-              // 再生位置を設定
-              audioRef.current.currentTime = program.currentTime || 0;
-              // 再生速度を設定
-              audioRef.current.playbackRate = stateSpeed || speed;
-              setSpeed(stateSpeed || speed);
-              // 初期状態を保存(必要？)
+          // 定期的な再生位置保存のインターバル
+          const saveInterval = setInterval(() => {
+            if (audioRef.current && !audioRef.current.paused) {
               savePlaybackProgram(program);
-              // イベントが一度だけ必要なので、処理後にリスナーをアボート
-              controller.abort();
+            }
+          }, 5000);
+
+          // イベントハンドラを定義
+          const handleEvent = () => savePlaybackProgram(program);
+
+          // すべてのハンドラをまとめて保存（インターバルIDと、AbortControllerも含む）
+          eventHandlersRef.current = {
+            timefreeController: () => {
+              currentController.abort();
+              clearInterval(saveInterval);
+            },
+            saveInterval: (() =>
+              clearInterval(saveInterval)) as unknown as EventListener,
+            pause: handleEvent,
+            seeking: handleEvent,
+            ratechange: handleEvent,
+            // 'timeupdate': handleEvent,
+          };
+
+          // canplayイベントで一度だけ実行される処理
+          const handleCanPlay = () => {
+            const audio = audioRef.current;
+            if (!audio) return;
+
+            // 再生位置を設定
+            audio.currentTime = program.currentTime || 0;
+            // 再生速度を設定
+            audio.playbackRate = targetSpeed;
+            // 初期状態を保存
+            savePlaybackProgram(program);
+          };
+
+          // loadedmetadataイベントでも再生速度を設定
+          const handleLoadedMetadata = () => {
+            if (audioRef.current) {
+              audioRef.current.playbackRate = targetSpeed;
             }
           };
 
+          // 定期的なイベントリスナーを追加
+          Object.entries(eventHandlersRef.current).forEach(
+            ([event, handler]) => {
+              if (event !== "timefreeController" && event !== "saveInterval") {
+                audioRef.current?.addEventListener(event, handler);
+              }
+            }
+          );
+
+          // 一回限りのイベントリスナーを追加
           audioRef.current.addEventListener("canplay", handleCanPlay, {
             signal: controller.signal,
+            once: true,
           });
+          audioRef.current.addEventListener(
+            "loadedmetadata",
+            handleLoadedMetadata,
+            {
+              signal: controller.signal,
+              once: true,
+            }
+          );
 
           // 自動再生
           if (hlsRef.current) {
@@ -987,7 +1006,15 @@ export default function Page() {
         setError("再生の開始に失敗しました");
       }
     },
-    [selectedStation, initializeHLS, auth]
+    [
+      auth,
+      selectedStation,
+      initializeHLS,
+      speed,
+      savePlaybackProgram,
+      getSavedPlaybackPrograms,
+      clearAudioEventListeners,
+    ]
   );
 
   // 再生状態の復元処理
@@ -1102,8 +1129,14 @@ export default function Page() {
       setProgramsByDate({});
       setSelectedStation("");
       setNowOnAir(null);
+      // 注: window.gc()は標準ブラウザでは利用できません。
+      // メモリプロファイリング時にのみ特別なフラグで有効化されます。
+      // メモリリークを防ぐために、windowメモリを明示的に全解放
+      if (typeof window !== "undefined" && window.gc) {
+        window.gc();
+      }
       // 放送局を取得
-      const stations = await radikoClient.getStations(auth.areaId);
+      const stations = await RadikoClient.getStations(auth.areaId as AreaId);
       setStations(stations);
       // お気に入り番組を保存
       await saveFavoritePrograms(stations);
@@ -1135,6 +1168,8 @@ export default function Page() {
             type: null,
           });
 
+          // 注: window.gc()は標準ブラウザでは利用できません。
+          // メモリプロファイリング時にのみ特別なフラグで有効化されます。
           // 明示的なGCのトリガー
           if (typeof window !== "undefined" && window.gc) {
             window.gc();
@@ -1367,7 +1402,7 @@ export default function Page() {
         <div id="info">
           {/* エリア選択 */}
           <AreaSelect
-            radikoClient={radikoClient}
+            radikoClient={RadikoClient}
             currentAreaName={currentAreaName}
             onAreaChange={onAreaChange}
           />

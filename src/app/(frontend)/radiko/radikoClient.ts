@@ -294,12 +294,17 @@ const getStations = async (
   }
 };
 
-const getProgramNow = async (
-  token: string,
-  area: AreaId,
-  stationId: string,
-  signal?: AbortSignal
-): Promise<Program> => {
+const getProgramNow = async ({
+  token,
+  area,
+  stationId,
+  signal,
+}: {
+  token: string;
+  area: AreaId;
+  stationId: string;
+  signal?: AbortSignal;
+}): Promise<Program> => {
   try {
     const programsRes = await fetch(
       url.programNow.replace("{area}", area).replace("{token}", token),
@@ -338,13 +343,19 @@ const getProgramNow = async (
   }
 };
 
-const getPrograms = async (
-  token: string,
-  stationId: string,
-  type?: "today" | "weekly" | "date",
-  date?: string,
-  signal?: AbortSignal
-): Promise<Program[]> => {
+const getPrograms = async ({
+  token,
+  stationId,
+  type = "date",
+  date,
+  signal,
+}: {
+  token: string;
+  stationId: string;
+  type?: "today" | "weekly" | "date";
+  date?: string;
+  signal?: AbortSignal;
+}): Promise<Program[]> => {
   try {
     const targetUrl = (() => {
       switch (type) {
@@ -399,31 +410,183 @@ const funcGetErrorMessage = (err: unknown): string => {
   return "予期せぬエラーが発生しました";
 };
 
-/** RadikoClient クラス ----------------------------------------------------------*/
-export default class RadikoClient {
-  // エラーメッセージの取得
-  getErrorMessage = funcGetErrorMessage;
-  // 認証情報の取得
-  getAuthName = getStoredAuthName;
-  getAuthInfo = getStoredAuthInfo;
+/** RadikoClient クラス ------------------------------------------------------*/
+// export default class RadikoClient {
+//   // エラーメッセージの取得
+//   getErrorMessage = funcGetErrorMessage;
+//   // 認証情報の取得
+//   getAuthName = getStoredAuthName;
+//   getAuthInfo = getStoredAuthInfo;
 
-  // IPアドレスでの認証
-  async authenticate(ip: string): Promise<Auth> {
-    return authenticateWithIp(ip);
+//   // IPアドレスでの認証
+//   async authenticate(ip: string): Promise<Auth> {
+//     return authenticateWithIp(ip);
+//   }
+
+//   // エリアIDでのカスタム認証
+//   async customAuthenticate(areaId: AreaId): Promise<Auth> {
+//     return customAuthenticate(areaId);
+//   }
+
+//   // 放送局情報の取得
+//   async getStations(areaId: string, signal?: AbortSignal): Promise<Station[]> {
+//     return getStations(areaId as AreaId, signal);
+//   }
+
+//   // 現在の番組情報の取得
+//   async getProgramNow({
+//     token,
+//     area,
+//     stationId,
+//     signal,
+//   }: {
+//     token: string;
+//     area: AreaId;
+//     stationId: string;
+//     signal?: AbortSignal;
+//   }): Promise<Program> {
+//     return getProgramNow(token, area, stationId, signal);
+//   }
+
+//   // 番組情報の取得
+//   async getPrograms({
+//     token,
+//     stationId,
+//     type,
+//     date,
+//     signal,
+//   }: {
+//     token: string;
+//     stationId: string;
+//     type?: "today" | "weekly" | "date";
+//     date?: string;
+//     signal?: AbortSignal;
+//   }): Promise<Program[]> {
+//     return getPrograms(token, stationId, type, date, signal);
+//   }
+// }
+
+
+/** RadikoClient ラッパー ----------------------------------------------------*/
+// 参考：https://medium.com/@perisicnikola37/dont-use-react-imports-like-this-use-wrapper-pattern-instead-b7a49b864ff4
+// const RadikoClient = {
+//   getErrorMessage: funcGetErrorMessage,
+//   getAuthName: getStoredAuthName,
+//   getAuthInfo: getStoredAuthInfo,
+//   authenticate: authenticateWithIp,
+//   customAuthenticate,
+//   getStations,
+//   getProgramNow,
+//   getPrograms,
+// };
+
+// export default RadikoClient;
+
+/** 状態をもたせる ----------------------------------------------------------- */
+// ...既存のインポート文
+import { useState, useCallback } from 'react';
+
+// 状態タイプの定義を追加
+export type RequestState = {
+  isLoading: boolean;
+  error: string | null;
+};
+
+// イベント購読用の型定義
+type Listener = (state: RequestState) => void;
+
+// RadikoClientStateManagerクラスを作成
+class RadikoClientStateManager {
+  private state: RequestState = {
+    isLoading: false,
+    error: null
+  };
+  private listeners: Listener[] = [];
+
+  // 状態を取得
+  getState(): RequestState {
+    return { ...this.state };
   }
 
-  // エリアIDでのカスタム認証
-  async customAuthenticate(areaId: AreaId): Promise<Auth> {
-    return customAuthenticate(areaId);
+  // 状態を更新
+  setState(newState: Partial<RequestState>): void {
+    this.state = { ...this.state, ...newState };
+    this.notifyListeners();
   }
 
-  // 放送局情報の取得
-  async getStations(areaId: string, signal?: AbortSignal): Promise<Station[]> {
-    return getStations(areaId as AreaId, signal);
+  // リスナーに通知
+  private notifyListeners(): void {
+    this.listeners.forEach(listener => listener(this.state));
   }
 
-  // 現在の番組情報の取得
-  async getProgramNow({
+  // リスナーを追加
+  subscribe(listener: Listener): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== listener);
+    };
+  }
+}
+
+// 状態管理のインスタンスを作成
+const stateManager = new RadikoClientStateManager();
+
+// 拡張したRadikoClientの実装
+const RadikoClient = {
+  // 既存のメソッド
+  getErrorMessage: funcGetErrorMessage,
+  getAuthName: getStoredAuthName,
+  getAuthInfo: getStoredAuthInfo,
+
+  // 状態管理関連のメソッド
+  getState: () => stateManager.getState(),
+  subscribe: (listener: Listener) => stateManager.subscribe(listener),
+
+  // API呼び出しをラップして状態管理を組み込んだメソッド
+  authenticate: async (ip: string): Promise<Auth> => {
+    try {
+      stateManager.setState({ isLoading: true, error: null });
+      const result = await authenticateWithIp(ip);
+      stateManager.setState({ isLoading: false });
+      return result;
+    } catch (error) {
+      const errorMessage = funcGetErrorMessage(error);
+      stateManager.setState({ isLoading: false, error: errorMessage });
+      throw error;
+    }
+  },
+
+  customAuthenticate: async (areaId: AreaId): Promise<Auth> => {
+    try {
+      stateManager.setState({ isLoading: true, error: null });
+      const result = await customAuthenticate(areaId);
+      stateManager.setState({ isLoading: false });
+      return result;
+    } catch (error) {
+      const errorMessage = funcGetErrorMessage(error);
+      stateManager.setState({ isLoading: false, error: errorMessage });
+      throw error;
+    }
+  },
+
+  getStations: async (areaId: string, signal?: AbortSignal): Promise<Station[]> => {
+    try {
+      stateManager.setState({ isLoading: true, error: null });
+      const result = await getStations(areaId as AreaId, signal);
+      stateManager.setState({ isLoading: false });
+      return result;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        stateManager.setState({ isLoading: false });
+        throw error;
+      }
+      const errorMessage = funcGetErrorMessage(error);
+      stateManager.setState({ isLoading: false, error: errorMessage });
+      throw error;
+    }
+  },
+
+  getProgramNow: async ({
     token,
     area,
     stationId,
@@ -433,12 +596,24 @@ export default class RadikoClient {
     area: AreaId;
     stationId: string;
     signal?: AbortSignal;
-  }): Promise<Program> {
-    return getProgramNow(token, area, stationId, signal);
-  }
+  }): Promise<Program> => {
+    try {
+      stateManager.setState({ isLoading: true, error: null });
+      const result = await getProgramNow({ token, area, stationId, signal });
+      stateManager.setState({ isLoading: false });
+      return result;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        stateManager.setState({ isLoading: false });
+        throw error;
+      }
+      const errorMessage = funcGetErrorMessage(error);
+      stateManager.setState({ isLoading: false, error: errorMessage });
+      throw error;
+    }
+  },
 
-  // 番組情報の取得
-  async getPrograms({
+  getPrograms: async ({
     token,
     stationId,
     type,
@@ -450,7 +625,87 @@ export default class RadikoClient {
     type?: "today" | "weekly" | "date";
     date?: string;
     signal?: AbortSignal;
-  }): Promise<Program[]> {
-    return getPrograms(token, stationId, type, date, signal);
-  }
+  }): Promise<Program[]> => {
+    try {
+      stateManager.setState({ isLoading: true, error: null });
+      const result = await getPrograms({ token, stationId, type, date, signal });
+      stateManager.setState({ isLoading: false });
+      return result;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        stateManager.setState({ isLoading: false });
+        throw error;
+      }
+      const errorMessage = funcGetErrorMessage(error);
+      stateManager.setState({ isLoading: false, error: errorMessage });
+      throw error;
+    }
+  },
+};
+
+export default RadikoClient;
+
+// Reactフック：RadikoClientの状態を使用するためのカスタムフック
+export function useRadikoClientState(): RequestState {
+  const [state, setState] = useState<RequestState>(RadikoClient.getState());
+
+  useCallback(() => {
+    // コンポーネントマウント時にサブスクライブ
+    const unsubscribe = RadikoClient.subscribe(newState => {
+      setState(newState);
+    });
+    
+    // クリーンアップ時にアンサブスクライブ
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  return state;
 }
+
+/**使用例
+ * import React, { useEffect } from "react";
+ * import RadikoClient, { useRadikoClientState } from "./radikoClient";
+ * 
+ * // コンポーネント内で使用
+ * function SomeComponent() {
+ *   // RadikoClientの状態を取得
+ *   const { isLoading, error } = useRadikoClientState();
+ * 
+ *   // ...他の実装
+ * 
+ *   // 状態を表示する例
+ *   return (
+ *     <div>
+ *       {isLoading && <div>ロード中...</div>}
+ *       {error && <div className="error">{error}</div>}
+ *     </div>
+ *   );
+ * }
+ */
+
+/* // ...既存のインポート
+import RadikoClient, { useRadikoClientState } from "./radikoClient";
+
+export default function Page() {
+  // RadikoClientの状態を使用
+  const { isLoading: clientLoading, error: clientError } = useRadikoClientState();
+  
+  // 独自の状態（必要な場合のみ保持）
+  const [localLoading, setLocalLoading] = useState<boolean>(false);
+  const [localError, setLocalError] = useState<string>("");
+  
+  // 全体のローディング状態（クライアントとローカル状態を統合）
+  const isLoading = clientLoading || localLoading;
+  // エラー状態の統合
+  const error = clientError || localError;
+
+  // ...以下は既存のコード
+
+  // ローカルステートの代わりにクライアントのステートを使用
+  // setIsLoading(true) → RadikoClient.getState().isLoading で参照
+  // setError(...) → RadikoClient.getState().error で参照
+
+  // ...
+} */

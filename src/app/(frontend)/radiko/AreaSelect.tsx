@@ -12,7 +12,7 @@ import {
 import RadikoClient from "./radikoClient";
 
 interface AreaSelectProps {
-  radikoClient: RadikoClient;
+  radikoClient: typeof RadikoClient;
   currentAreaName: string;
   onAreaChange: () => void;
 }
