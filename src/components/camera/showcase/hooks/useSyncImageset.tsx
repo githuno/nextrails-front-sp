@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { apiFetch } from "@/hooks/fetch";
+import { apiFetch } from "@/hooks/useFetch";
 import { useStorage } from "@/components/storage";
 import { useImageset, type Imageset, type File } from "@/components/camera";
 
@@ -179,7 +179,7 @@ const useSyncImageset = () => {
       options?: { params: string };
     }): Promise<void> => {
       setIsSyncing((prev) => [...prev, setName]);
-      
+
       try {
         // クラウドからファイルを取得
         const cloudFiles = await pullFiles({ setName, options });

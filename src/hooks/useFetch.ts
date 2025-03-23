@@ -1,49 +1,9 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
-
-/**
- * APIリクエストの基本設定
- */
-const apiFetch = async <T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> => {
-  const baseOptions: RequestInit = {
-    credentials: "include", // クッキーを送信する
-    headers: {
-      Accept: "application/json", // JSON形式でレスポンスを受け取る
-    },
-  };
-
-  // FormDataの場合はContent-Typeを設定しない
-  if (!(options.body instanceof FormData)) {
-    baseOptions.headers = {
-      ...baseOptions.headers,
-      "Content-Type": "application/json", // JSON形式でリクエストを送信する
-    };
-  }
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...baseOptions,
-    ...options,
-    headers: {
-      ...baseOptions.headers,
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || response.statusText);
-  }
-
-  return response.json();
-};
-
+import { apiFetch } from "@/utils/fetch";
 /**
  * 以下はReact Hooks となりコンポーネントのトップレベルでのみ呼び出すことができます
  * 非同期関数内や条件分岐内では Hooks を使用できません
  **/
-import { useEffect, useCallback, useState, useReducer } from "react";
+import { useEffect, useCallback, useState, useReducer, useRef } from "react";
 
 // キャッシュの型
 interface CacheData<T> {
@@ -121,28 +81,97 @@ interface QueryResult<T> {
 }
 
 /**
- * データ取得用のカスタムフック（キャッシュ機能付き）
+ * データ取得用のカスタムフック（キャッシュ機能、アボート機能、タイムアウト機能付き）
  * 
  * @param path APIエンドポイントのパス
  * @param options fetchオプション
  * @param cacheTime キャッシュの有効期間（ミリ秒）
+ * @param queryOptions.cacheTime キャッシュの有効期間（ミリ秒）
+ * @param queryOptions.timeoutMs タイムアウト時間（ミリ秒）
+ * @param queryOptions.enabled フェッチを有効にするかどうか
  * @returns QueryResult型のオブジェクト
+ * 
+ * @example
+ //  拡張版の使用例
+ const UserProfile = () => {
+  // タイムアウト付きのクエリ
+  const { 
+    data, 
+    error, 
+    isLoading, 
+    isError,
+    refetch,
+    cancel  // 👈 新機能：手動キャンセル
+  } = useQuery<User>(
+    '/api/user/profile',
+    {},
+    { timeoutMs: 5000 }  // 👈 5秒でタイムアウト
+  );
+
+  // 条件付きクエリの例
+  const {
+    data: conditionalData
+  } = useQuery<DetailData>(
+    `/api/details/${data?.id}`,
+    {},
+    { 
+      enabled: !!data?.id,  // 👈 data.idがある場合のみ実行
+      timeoutMs: 3000 
+    }
+  );
+
+  // キャンセルボタンの例
+  return (
+    <div>
+      {isLoading && (
+        <div>
+          読み込み中...
+          <button onClick={cancel}>キャンセル</button>
+        </div>
+      )}
+      残りの実装... 
+      </div>
+    );
+  };
+ *
  */
 function useQuery<T>(
   path: string,
   options: RequestInit = {},
-  cacheTime: number = 5 * 60 * 1000
-): QueryResult<T> {
+  queryOptions: {
+    cacheTime?: number;
+    timeoutMs?: number;
+    enabled?: boolean;
+  } = {}
+): QueryResult<T> & {
+  cancel: () => void;
+} {
+  const { cacheTime = 5 * 60 * 1000, timeoutMs, enabled = true } = queryOptions;
+  
   // useReducerでAPIの状態を管理
   const [state, dispatch] = useReducer(
     apiReducer<T>,
     { status: 'idle' } as ApiState<T>
   );
-
+  
+  // AbortControllerのRef
+  const controllerRef = useRef<AbortController | null>(null);
+  
+  // キャンセル関数
+  const cancel = useCallback(() => {
+    if (controllerRef.current) {
+      controllerRef.current.abort();
+      controllerRef.current = null;
+    }
+  }, []);
+  
   // データ取得関数
   const fetchData = useCallback(async () => {
+    // enabledがfalseの場合は何もしない
+    if (!enabled) return;
+    
     dispatch({ type: 'FETCH_START' });
-
+    
     // キャッシュチェック
     const cachedData = cache.get(path);
     if (cachedData && isCacheValid(cachedData.timestamp, cacheTime)) {
@@ -153,47 +182,80 @@ function useQuery<T>(
       });
       return;
     }
-
+    
+    // 既存のコントローラーがあればキャンセル
+    cancel();
+    
+    // 新しいコントローラーを作成
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    
     try {
-      const data = await apiFetch<T>(path, { ...options, method: "GET" });
+      const data = await apiFetch<T>(
+        path, 
+        { ...options, method: "GET" },
+        { 
+          signal: controller.signal,
+          timeoutMs 
+        }
+      );
+      
+      // アンマウント後の状態更新を防止
+      if (!controllerRef.current) return;
+      
       cache.set(path, { data, timestamp: Date.now() });
       dispatch({ type: 'FETCH_SUCCESS', data });
     } catch (error) {
-      dispatch({
-        type: 'FETCH_ERROR',
-        error: error instanceof Error ? error : new Error(String(error))
-      });
+      // アンマウント後の状態更新を防止
+      if (!controllerRef.current) return;
+      
+      // アボートエラーの場合は特別な処理
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        // タイムアウトまたはキャンセルの場合は特別なメッセージ
+        dispatch({
+          type: 'FETCH_ERROR',
+          error: new Error('リクエストがキャンセルまたはタイムアウトしました')
+        });
+      } else {
+        dispatch({
+          type: 'FETCH_ERROR',
+          error: error instanceof Error ? error : new Error(String(error))
+        });
+      }
     }
-  }, [path, cacheTime]);
-
-  // 初回マウント時にデータを取得
+  }, [path, cacheTime, enabled, options, timeoutMs, cancel]);
+  
+  // 初回マウント時とdepsの変更時にデータを取得
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
-
-  // 便利なプロパティを計算
+    
+    // クリーンアップ関数でアボート
+    return () => {
+      cancel();
+    };
+  }, [fetchData, cancel]);
+  
+  // 現在の状態から派生値を計算
   const isLoading = state.status === 'loading';
   const isSuccess = state.status === 'success';
   const isError = state.status === 'error';
   const isIdle = state.status === 'idle';
   
-  // データとエラーを抽出
   const data = isSuccess ? state.data : null;
   const error = isError ? state.error : null;
   
-  // キャッシュ情報
   const cachedAt = isSuccess ? new Date(state.timestamp) : null;
-
+  
   // キャッシュをクリアする関数
   const clearCache = useCallback(() => {
     cache.delete(path);
   }, [path]);
-
+  
   // すべてのキャッシュを削除
   const clearAllCache = useCallback(() => {
     cache.clear();
   }, []);
-
+  
   return {
     // 状態
     state,
@@ -201,6 +263,7 @@ function useQuery<T>(
     refetch: fetchData,
     clearCache,
     clearAllCache,
+    cancel,
     // 便利なプロパティ
     isLoading,
     isSuccess,
@@ -231,41 +294,139 @@ interface MutationResult<T> {
   reset: () => void;
 }
 /**
- * データ変更用のカスタムフック（POST/PUT/DELETE操作）
+ * データ変更用のカスタムフック（POST/PUT/DELETE操作、アボート機能、タイムアウト機能付き）
  * 
  * @param path APIエンドポイントのパス
  * @param method HTTPメソッド（POST/PUT/DELETE）
+ * @param mutationOptions.timeoutMs タイムアウト時間（ミリ秒）
  * @returns MutationResult型のオブジェクト
+ * 
+ * @example
+ const UserProfile = () => {
+  // タイムアウト付きのクエリ
+  const { 
+    data, 
+    error, 
+    isLoading, 
+    isError,
+    refetch,
+    cancel  // 👈 新機能：手動キャンセル
+  } = useQuery<User>(
+    '/api/user/profile',
+    {},
+    { timeoutMs: 5000 }  // 👈 5秒でタイムアウト
+  );
+
+  // 条件付きクエリの例
+  const {
+    data: conditionalData
+  } = useQuery<DetailData>(
+    `/api/details/${data?.id}`,
+    {},
+    { 
+      enabled: !!data?.id,  // 👈 data.idがある場合のみ実行
+      timeoutMs: 3000 
+    }
+  );
+
+  // キャンセルボタンの例
+  return (
+    <div>
+      {isLoading && (
+        <div>
+          読み込み中...
+          <button onClick={cancel}>キャンセル</button>
+        </div>
+      )}
+      残りの実装...
+      </div>
+    );
+  };
+ *
  */
 function useMutation<T>(
   path: string,
-  method: "POST" | "PUT" | "DELETE" = "POST"
-): MutationResult<T> {
+  method: "POST" | "PUT" | "DELETE" = "POST",
+  mutationOptions: {
+    timeoutMs?: number;
+  } = {}
+): MutationResult<T> & {
+  cancel: () => void;
+} {
+  const { timeoutMs } = mutationOptions;
+  
   const [state, dispatch] = useReducer(
     apiReducer<T>,
     { status: 'idle' } as ApiState<T>
   );
-
+  
+  // AbortControllerのRef
+  const controllerRef = useRef<AbortController | null>(null);
+  
+  // キャンセル関数
+  const cancel = useCallback(() => {
+    if (controllerRef.current) {
+      controllerRef.current.abort();
+      controllerRef.current = null;
+    }
+  }, []);
+  
+  // アンマウント時のキャンセル処理
+  useEffect(() => {
+    return () => {
+      cancel();
+    };
+  }, [cancel]);
+  
   // データ送信関数
   const mutate = async <U = any>(data?: U): Promise<T | null> => {
     dispatch({ type: 'FETCH_START' });
-
+    
+    // 既存のコントローラーがあればキャンセル
+    cancel();
+    
+    // 新しいコントローラーを作成
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    
     try {
-      const response = await apiFetch<T>(path, {
-        method,
-        body: data ? JSON.stringify(data) : undefined,
-      });
+      const response = await apiFetch<T>(
+        path,
+        {
+          method,
+          body: data ? JSON.stringify(data) : undefined,
+        },
+        { 
+          signal: controller.signal,
+          timeoutMs 
+        }
+      );
+      
+      // アンマウント後の状態更新を防止
+      if (!controllerRef.current) return null;
+      
       dispatch({ type: 'FETCH_SUCCESS', data: response });
       return response;
     } catch (error) {
-      dispatch({
-        type: 'FETCH_ERROR',
-        error: error instanceof Error ? error : new Error(String(error))
-      });
+      // アンマウント後の状態更新を防止
+      if (!controllerRef.current) return null;
+      
+      // アボートエラーの場合は特別な処理
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        dispatch({
+          type: 'FETCH_ERROR',
+          error: new Error('リクエストがキャンセルまたはタイムアウトしました')
+        });
+      } else {
+        dispatch({
+          type: 'FETCH_ERROR',
+          error: error instanceof Error ? error : new Error(String(error))
+        });
+      }
       return null;
     }
   };
-
+  
   // 状態をリセット
   const reset = useCallback(() => {
     dispatch({ type: 'FETCH_START' });
@@ -274,21 +435,21 @@ function useMutation<T>(
       data: null as unknown as T 
     });
   }, []);
-
-  // 便利なプロパティを計算
+  
+  // 現在の状態から派生値を計算
   const isLoading = state.status === 'loading';
   const isSuccess = state.status === 'success';
   const isError = state.status === 'error';
   const isIdle = state.status === 'idle';
   
-  // データとエラーを抽出
   const data = isSuccess ? state.data : null;
   const error = isError ? state.error : null;
-
+  
   return {
     state,
     mutate,
     reset,
+    cancel,
     isLoading,
     isSuccess,
     isError,
@@ -457,21 +618,3 @@ const useDataFetching = <T>(url: string) => {
 
   return { data, error, loading, refetch: fetchData };
 };
-
-const handleAsync = async <T>(
-  promise: Promise<T>
-): Promise<[T, null] | [null, Error]> => {
-  try {
-    const data = await promise;
-    return [data, null];
-  } catch (error) {
-    return [null, error instanceof Error ? error : new Error(String(error))];
-  }
-};
-// 使用例
-// const [user, error] = await handleAsync(fetchData(1));
-// if (error) {
-//   console.error("Error:", error.message);
-// } else {
-//   console.log("User:", user.name);
-// }

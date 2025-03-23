@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { apiFetch } from "@/hooks/fetch";
+import { apiFetch } from "@/hooks/useFetch";
 import { CloudManager, CloudState } from "./type";
 
 // Google関連のエンドポイント

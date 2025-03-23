@@ -5,7 +5,7 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { apiFetch } from "@/hooks/fetch";
+import { apiFetch } from "@/hooks/useFetch";
 
 import { useR2 } from "./nativeProvider";
 import { useGDrive } from "./gDriveProvider";

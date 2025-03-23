@@ -1,14 +1,25 @@
-import React, { createContext, useContext, useCallback, useEffect } from "react";
-import { useToast } from "./toast";
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+} from "react";
+import { useToast } from "./useToast";
 
 interface ErrorBoundaryContextType {
   handleError: (error: unknown) => void;
-  withErrorHandling: <T extends (...args: any[]) => Promise<any>>(fn: T) => (...args: Parameters<T>) => Promise<ReturnType<T>>;
+  withErrorHandling: <T extends (...args: any[]) => Promise<any>>(
+    fn: T
+  ) => (...args: Parameters<T>) => Promise<ReturnType<T>>;
 }
 
-const ErrorBoundaryContext = createContext<ErrorBoundaryContextType | null>(null);
+const ErrorBoundaryContext = createContext<ErrorBoundaryContextType | null>(
+  null
+);
 
-export const ErrorBoundaryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const ErrorBoundaryProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const { showError } = useToast();
 
   const handleError = useCallback(
@@ -59,12 +70,15 @@ export const ErrorBoundaryProvider: React.FC<{ children: React.ReactNode }> = ({
       originalConsoleError.apply(console, args);
     };
 
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
-    window.addEventListener('error', handleGlobalError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+    window.addEventListener("error", handleGlobalError);
 
     return () => {
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener(
+        "unhandledrejection",
+        handleUnhandledRejection
+      );
+      window.removeEventListener("error", handleGlobalError);
       console.error = originalConsoleError;
     };
   }, [handleError]);
@@ -79,7 +93,9 @@ export const ErrorBoundaryProvider: React.FC<{ children: React.ReactNode }> = ({
 export const useErrorBoundary = () => {
   const context = useContext(ErrorBoundaryContext);
   if (!context) {
-    throw new Error('useErrorBoundary must be used within an ErrorBoundaryProvider');
+    throw new Error(
+      "useErrorBoundary must be used within an ErrorBoundaryProvider"
+    );
   }
   return context;
 };
