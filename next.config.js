@@ -22,4 +22,5 @@ const nextConfig = {
   ],
 };
 
-module.exports = nextConfig;
+// CommonJSのexportをESMに変更
+export default nextConfig;
