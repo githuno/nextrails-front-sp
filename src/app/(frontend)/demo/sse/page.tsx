@@ -118,6 +118,8 @@ const LastEventCard = React.memo(
     );
   }
 );
+// 表示名を追加
+LastEventCard.displayName = "LastEventCard";
 
 // イベント履歴を表示するメモ化コンポーネント
 const EventHistoryList = React.memo(
@@ -190,6 +192,8 @@ const EventHistoryList = React.memo(
     );
   }
 );
+// 表示名を追加
+EventHistoryList.displayName = "EventHistoryList";
 
 export default function Page() {
   // 接続状態を管理
@@ -610,11 +614,11 @@ export default function Page() {
         <p className="text-xs text-indigo-700 dark:text-indigo-300">
           受信したSSEイベントは
           <code className="bg-indigo-100 dark:bg-indigo-800 px-1 py-0.5 rounded">
-            publish('server:event', data)
+            publish(&apos;server:event&apos;, data)
           </code>
           および
           <code className="bg-indigo-100 dark:bg-indigo-800 px-1 py-0.5 rounded">
-            publish('server:イベント名', data)
+            publish(&apos;server:イベント名&apos;, data)
           </code>
           を通じてPubSubシステムに送信されます。
         </p>

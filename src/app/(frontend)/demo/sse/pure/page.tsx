@@ -412,8 +412,8 @@ export default function Page() {
           PubSub連携情報
         </h2>
         <p className="text-xs text-indigo-700 dark:text-indigo-300">
-          受信したSSEイベントは<code className="bg-indigo-100 dark:bg-indigo-800 px-1 py-0.5 rounded">pubSub.emit('server:event', data)</code>および
-          <code className="bg-indigo-100 dark:bg-indigo-800 px-1 py-0.5 rounded">pubSub.emit('server:イベント名', data)</code>を通じてPubSubシステムに送信されます。
+          受信したSSEイベントは<code className="bg-indigo-100 dark:bg-indigo-800 px-1 py-0.5 rounded">pubSub.emit(&apos;server:event&apos;, data)</code>および
+          <code className="bg-indigo-100 dark:bg-indigo-800 px-1 py-0.5 rounded">pubSub.emit(&apos;server:イベント名&apos;, data)</code>を通じてPubSubシステムに送信されます。
         </p>
         <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-1">
           例: PubSubページでのログインイベントは<code className="bg-indigo-100 dark:bg-indigo-800 px-1 py-0.5 rounded">server:user:login</code>として受信できます。
