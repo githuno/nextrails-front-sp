@@ -247,7 +247,6 @@ export default function YoutubePage() {
   useEffect(() => {
     setIsClient(true);
   }, []);
-
   if (!isClient) return null;
 
   return (
