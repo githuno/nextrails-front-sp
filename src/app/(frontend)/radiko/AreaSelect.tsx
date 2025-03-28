@@ -9,7 +9,7 @@ import {
   areaIdToRegionMap,
   getClientIP,
 } from "./constants";
-import RadikoClient from "./radikoClient";
+import RadikoClient from "./client";
 
 interface AreaSelectProps {
   radikoClient: typeof RadikoClient;

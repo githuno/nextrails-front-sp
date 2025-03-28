@@ -8,7 +8,7 @@ import React, {
   useMemo,
 } from "react";
 import Hls from "hls.js";
-import RadikoClient from "./radikoClient";
+import RadikoClient from "./client";
 import { AreaSelect } from "./AreaSelect";
 import HistoryDrawer from "./HistoryDrawer";
 import HistoryButton from "./HistoryButton";
