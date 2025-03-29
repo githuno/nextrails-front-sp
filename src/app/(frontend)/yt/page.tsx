@@ -66,33 +66,91 @@ export default function YoutubePage() {
     };
   }, []);
 
-  // 保存された再生速度を読み込む
-  useEffect(() => {
-    // クライアントサイドでのみ実行
-    if (typeof window !== "undefined") {
-      try {
-        const savedSpeed = localStorage.getItem(YT_SPEED_KEY);
-        if (savedSpeed) {
-          const speed = parseFloat(savedSpeed);
-          setPlaybackSpeed(speed);
-        }
-      } catch (err) {
-        console.error("再生速度の復元に失敗しました:", err);
-      }
-    }
-  }, []);
-
   // 再生速度変更時の処理
   const handleSpeedChange = useCallback((newSpeed: number) => {
+    // まず状態を更新
     setPlaybackSpeed(newSpeed);
 
-    // ローカルストレージに保存
+    // ローカルストレージに保存（この部分は常に行う）
     try {
       localStorage.setItem(YT_SPEED_KEY, newSpeed.toString());
+      console.log(`再生速度を保存しました: ${newSpeed}x`);
     } catch (err) {
       console.error("再生速度の保存に失敗しました:", err);
     }
+
+    // プレイヤーが存在し、かつ初期化済みの場合のみ速度変更を行う
+    if (
+      playerRef.current &&
+      typeof playerRef.current.setPlaybackRate === "function"
+    ) {
+      try {
+        // 再生速度を変更
+        playerRef.current.setPlaybackRate(newSpeed);
+        console.log(`プレーヤーの再生速度を設定しました: ${newSpeed}x`);
+      } catch (error) {
+        console.error("再生速度の設定に失敗しました:", error);
+      }
+    } else {
+      console.log("プレーヤーが準備できていないため、再生速度を設定できません");
+    }
   }, []);
+
+  // 再生位置保存用のタイマー参照
+  const savePositionTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 再生位置を保存する関数
+  const saveCurrentPosition = useCallback(() => {
+    if (!playerRef.current || !selectedVideo) return;
+
+    try {
+      const videoId = selectedVideo.id.videoId!;
+      const currentTime = playerRef.current.getCurrentTime();
+      const duration = playerRef.current.getDuration();
+
+      if (currentTime > 0 && duration > 0) {
+        console.log(`再生位置を保存: ${currentTime}/${duration}秒`);
+
+        // HistoryItemのcurrentTimeとdurationを更新
+        const historyItem: HistoryItem = {
+          videoId,
+          title: selectedVideo.snippet.title,
+          channelTitle: selectedVideo.snippet.channelTitle,
+          thumbnailUrl:
+            selectedVideo.snippet.thumbnails.medium?.url ||
+            selectedVideo.snippet.thumbnails.default?.url ||
+            "",
+          watchedAt: Date.now(),
+          currentTime,
+          duration,
+        };
+        youtubeClient.addToHistory(historyItem);
+      }
+    } catch (error) {
+      console.error("再生位置の保存に失敗しました:", error);
+    }
+  }, [selectedVideo]);
+
+  // 定期的に再生位置を保存するタイマーを設定
+  useEffect(() => {
+    // 動画が選択されているときのみ実行
+    if (!selectedVideo || !selectedVideo.id.videoId) return;
+
+    // 5秒ごとに再生位置を保存
+    savePositionTimerRef.current = setInterval(() => {
+      saveCurrentPosition();
+    }, 5000);
+
+    return () => {
+      // コンポーネントのクリーンアップ時にタイマーをクリア
+      if (savePositionTimerRef.current) {
+        clearInterval(savePositionTimerRef.current);
+
+        // 最後の再生位置を保存
+        saveCurrentPosition();
+      }
+    };
+  }, [selectedVideo, saveCurrentPosition]);
 
   // プレイヤーの初期化
   const initializePlayer = useCallback(
@@ -101,10 +159,28 @@ export default function YoutubePage() {
 
       if (playerRef.current) {
         playerRef.current.loadVideoById(videoId);
-        // 再生速度を設定
+
         setTimeout(() => {
           if (playerRef.current) {
-            playerRef.current.setPlaybackRate(playbackSpeed);
+            // playerRef.current.setPlaybackRate(playbackSpeed);
+
+            // 履歴から再生位置を復元
+            try {
+              const history = youtubeClient.getHistory();
+              const savedItem = history.find(
+                (item) => item.videoId === videoId
+              );
+
+              if (savedItem && savedItem.currentTime && savedItem.duration) {
+                // 95%以上再生した動画は最初から再生
+                if (savedItem.currentTime < savedItem.duration * 0.95) {
+                  console.log(`再生位置を復元: ${savedItem.currentTime}秒`);
+                  playerRef.current.seekTo(savedItem.currentTime, true);
+                }
+              }
+            } catch (error) {
+              console.error("再生位置の復元に失敗しました:", error);
+            }
           }
         }, 1000); // 少し遅延を入れて確実に設定されるようにする
         return;
@@ -122,9 +198,31 @@ export default function YoutubePage() {
         events: {
           onReady: (event) => {
             // プレイヤー準備完了時に保存された再生速度を適用
-            event.target.setPlaybackRate(playbackSpeed);
+            // event.target.setPlaybackRate(playbackSpeed);
+            // 履歴から再生位置を復元
+            try {
+              const history = youtubeClient.getHistory();
+              const savedItem = history.find(
+                (item) => item.videoId === videoId
+              );
+
+              if (savedItem && savedItem.currentTime && savedItem.duration) {
+                // 95%以上再生した動画は最初から再生
+                if (savedItem.currentTime < savedItem.duration * 0.95) {
+                  console.log(`再生位置を復元: ${savedItem.currentTime}秒`);
+                  event.target.seekTo(savedItem.currentTime, true);
+                }
+              }
+            } catch (error) {
+              console.error("再生位置の復元に失敗しました:", error);
+            }
           },
           onStateChange: (event: YT.OnStateChangeEvent) => {
+            // プレーヤーの状態変更時（再生、一時停止、バッファリング、終了など）
+            if (event.data === YT.PlayerState.PAUSED) {
+              // 一時停止時に再生位置を保存
+              saveCurrentPosition();
+            }
             // 動画再生開始時に履歴に追加
             if (event.data === window.YT.PlayerState.PLAYING && selectedVideo) {
               const historyItem: HistoryItem = {
@@ -140,10 +238,15 @@ export default function YoutubePage() {
               youtubeClient.addToHistory(historyItem);
             }
           },
+          // 再生レート変更時
+          onPlaybackRateChange: () => {
+            // 再生速度変更時に再生位置を保存
+            saveCurrentPosition();
+          },
         },
       });
     },
-    [isYouTubeApiReady, selectedVideo, playbackSpeed]
+    [isYouTubeApiReady, selectedVideo]
   );
 
   // 動画選択時の処理
@@ -249,6 +352,7 @@ export default function YoutubePage() {
   useEffect(() => {
     if (selectedVideo && selectedVideo.id.videoId) {
       initializePlayer(selectedVideo.id.videoId);
+      handleSpeedChange(1.0); // 初期速度を1.0に設定 ※この時点ではplayerRefはnullのため保存された速度を渡しても適用されない
     }
   }, [selectedVideo, initializePlayer, isYouTubeApiReady]);
 
