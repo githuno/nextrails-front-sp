@@ -149,6 +149,19 @@ export default function YoutubePage() {
   // 動画選択時の処理
   const handleVideoSelect = useCallback((video: SearchItem) => {
     setSelectedVideo(video);
+    // 履歴に追加
+    const historyItem: HistoryItem = {
+      videoId: video.id.videoId!,
+      title: video.snippet.title,
+      channelTitle: video.snippet.channelTitle,
+      thumbnailUrl:
+        video.snippet.thumbnails.medium?.url ||
+        video.snippet.thumbnails.default?.url ||
+        "",
+      watchedAt: Date.now(),
+    };
+    youtubeClient.addToHistory(historyItem);
+    // エラーをリセット
     setError(null);
 
     // 動画詳細情報を取得
