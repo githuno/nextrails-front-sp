@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import useUndo from "@/hooks/useUndo";
+import { useEfficientUndo } from "@/hooks/useUndo";
 
 interface Point {
   x: number;
@@ -56,7 +56,7 @@ const DrawingPage: React.FC = () => {
 
     // パフォーマンス最適化のためのメモ化された値
     // stack,                // 内部アンドゥスタックへの直接参照（高度な操作用）
-  } = useUndo<DrawingState>(
+  } = useEfficientUndo<DrawingState>(
     {
       // 初期状態
       strokes: [],

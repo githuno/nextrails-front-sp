@@ -142,7 +142,7 @@ const DEFAULT_OPTIONS = {
   plugins: [],
 };
 
-function useUndo<T>(
+function useEfficientUndo<T>(
   initialState: T,
   options: UseUndoOptions = {}
 ): UseUndoResult<T> {
@@ -733,7 +733,28 @@ function useUndo<T>(
   };
 }
 
-export default useUndo;
+function useUndo<T>([state, setState]: [T, React.Dispatch<React.SetStateAction<T>>]) {
+  const history = useRef([state])
+  const [index, setIndex] = useState(0)
+
+  function undo() {
+    setIndex(Math.max(index - 1, 0))
+  }
+  function redo() {
+    setIndex(Math.min(index + 1, history.current.length - 1))
+  }
+  function newSetState(nextState: T) {
+    const nextIndex = index + 1
+    history.current = history.current.slice(0, nextIndex)
+    history.current[nextIndex] = nextState
+    setIndex(nextIndex)
+    setState(nextState)
+  }
+
+  return [history.current[index], newSetState, undo, redo]
+}
+
+export {useUndo, useEfficientUndo};
 export type {
   UseUndoResult,
   UseUndoOptions,
