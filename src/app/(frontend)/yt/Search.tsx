@@ -84,7 +84,7 @@ export default function Search({ onVideoSelect }: SearchProps) {
   return (
     <div className="w-full">
       <form onSubmit={handleSubmit} className="mb-4">
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 px-4">
           <input
             type="text"
             value={searchTerm}
@@ -127,7 +127,7 @@ export default function Search({ onVideoSelect }: SearchProps) {
             {searchResults.pageInfo.totalResults.toLocaleString()} 件の検索結果
           </h3>
 
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-1 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
             {searchResults.items.map((video, index) => (
               <div
                 key={`${video.id.videoId}-${index}`}

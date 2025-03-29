@@ -4,6 +4,8 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 import Search from "./Search";
 import HistoryDrawer from "./HistoryDrawer";
 import HistoryButton from "./HistoryButton";
+import FavoriteButton from "./FavoriteButton";
+import FavoriteDrawer from "./FavoriteDrawer";
 import SpeedController from "./SpeedController";
 import {
   SearchItem,
@@ -23,7 +25,10 @@ export default function YoutubePage() {
   const [selectedVideo, setSelectedVideo] = useState<SearchItem | null>(null);
   const [videoDetails, setVideoDetails] = useState<VideoDetail | null>(null);
   const [isFavorite, setIsFavorite] = useState<boolean>(false);
+  // ドロワーの状態
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] =
+    useState<boolean>(false);
+  const [isFavoriteDrawerOpen, setIsFavoriteDrawerOpen] =
     useState<boolean>(false);
 
   // 再生速度の状態
@@ -207,9 +212,6 @@ export default function YoutubePage() {
         // お気に入り状態を確認
         const isFav = youtubeClient.isFavorite(videoId);
         setIsFavorite(isFav);
-
-        // 履歴ドロワーを閉じる
-        setIsHistoryDrawerOpen(false);
       } else {
         setError("動画が見つかりませんでした。");
       }
@@ -240,6 +242,10 @@ export default function YoutubePage() {
   // 履歴ドロワーの開閉
   const toggleHistoryDrawer = useCallback(() => {
     setIsHistoryDrawerOpen((prev) => !prev);
+  }, []);
+  // お気に入りドロワーの開閉
+  const toggleFavoriteDrawer = useCallback(() => {
+    setIsFavoriteDrawerOpen((prev) => !prev);
   }, []);
 
   // クライアントサイドのみでレンダリング
@@ -414,6 +420,13 @@ export default function YoutubePage() {
       <HistoryDrawer
         isOpen={isHistoryDrawerOpen}
         onClose={toggleHistoryDrawer}
+        onVideoSelect={playVideoFromId}
+      />
+      {/* お気に入りボタンとドロワー */}
+      <FavoriteButton onClick={toggleFavoriteDrawer} />
+      <FavoriteDrawer
+        isOpen={isFavoriteDrawerOpen}
+        onClose={toggleFavoriteDrawer}
         onVideoSelect={playVideoFromId}
       />
     </div>

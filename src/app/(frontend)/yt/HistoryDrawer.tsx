@@ -77,6 +77,11 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
     };
   }, [isOpen, historyUpdateTrigger]);
 
+  const handleVideoSelect = (videoId: string) => {
+    onVideoSelect(videoId);
+    onClose(); // 動画選択後にドロワーを閉じる
+  };
+
   return (
     <div className={`fixed inset-0 z-40 ${isOpen ? "visible" : "invisible"}`}>
       {/* オーバーレイ */}
@@ -128,7 +133,7 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                   {historyData.byDate[date].map((item) => (
                     <div
                       key={`${item.videoId}-${item.watchedAt}`}
-                      onClick={() => onVideoSelect(item.videoId)}
+                      onClick={() => handleVideoSelect(item.videoId)}
                       className="p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 flex relative"
                     >
                       {/* サムネイル */}
