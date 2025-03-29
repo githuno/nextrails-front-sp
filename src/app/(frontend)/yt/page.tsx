@@ -1,5 +1,6 @@
 "use client";
 
+// TODO: 再生速度の復元
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import Search from "./Search";
 import HistoryDrawer from "./HistoryDrawer";
@@ -162,8 +163,6 @@ export default function YoutubePage() {
 
         setTimeout(() => {
           if (playerRef.current) {
-            // playerRef.current.setPlaybackRate(playbackSpeed);
-
             // 履歴から再生位置を復元
             try {
               const history = youtubeClient.getHistory();
@@ -197,8 +196,6 @@ export default function YoutubePage() {
         },
         events: {
           onReady: (event) => {
-            // プレイヤー準備完了時に保存された再生速度を適用
-            // event.target.setPlaybackRate(playbackSpeed);
             // 履歴から再生位置を復元
             try {
               const history = youtubeClient.getHistory();
