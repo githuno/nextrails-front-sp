@@ -106,7 +106,12 @@ export default function Search({ onVideoSelect }: SearchProps) {
             </select>
             <button
               type="submit"
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm whitespace-nowrap min-w-[80px]"
+              className="relative px-4 py-2 bg-transparent text-white rounded text-sm whitespace-nowrap min-w-[80px] overflow-hidden
+                      before:content-[''] before:absolute before:inset-[-4px] before:rounded-[inherit]
+                      before:bg-[conic-gradient(from_0deg_at_50%_0%,#ffcc00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000)]
+                      before:[animation:spin_4s_linear_infinite] before:-z-10
+                      after:content-[''] after:absolute after:inset-[1px] after:bg-gradient-to-br after:from-red-500 after:to-purple-600 after:rounded-[inherit] after:-z-[5]
+                      hover:before:[animation:spin_1.5s_linear_infinite] disabled:before:[animation:none] disabled:after:bg-gradient-to-br disabled:after:from-gray-500 disabled:after:to-gray-600"
               disabled={isLoading}
             >
               {isLoading ? "検索中..." : "検索"}
@@ -127,12 +132,13 @@ export default function Search({ onVideoSelect }: SearchProps) {
             {searchResults.pageInfo.totalResults.toLocaleString()} 件の検索結果
           </h3>
 
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
+          {/* <div className="columns-2 md:columns-4 gap-2 sm:gap-4"> */}
             {searchResults.items.map((video, index) => (
               <div
                 key={`${video.id.videoId}-${index}`}
                 onClick={() => onVideoSelect(video)}
-                className="cursor-pointer bg-white border rounded overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                className="[clip-path:circle(65%)] cursor-pointer bg-white border rounded overflow-hidden shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="relative pb-[56.25%]">
                   <img
