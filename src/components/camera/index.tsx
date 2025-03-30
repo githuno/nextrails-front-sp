@@ -88,56 +88,56 @@ const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({
 
 // ----------------------------------------------------------------------------- ImagesetContent
 const ImagesetContent: React.FC = () => {
-  const { imageset } = useImageset();
+  // const { imageset } = useImageset();
   const { cameraState } = useCamera();
 
-  useEffect(() => {
-    if ("serviceWorker" in navigator && "PushManager" in window) {
-      console.log("Service Worker and Push is supported");
+  // useEffect(() => {
+  //   if ("serviceWorker" in navigator && "PushManager" in window) {
+  //     console.log("Service Worker and Push is supported");
 
-      navigator.serviceWorker
-        .register("/sw.js", {
-          scope: "/",
-          updateViaCache: "none",
-          type: "module",
-        })
-        .then((reg) => {
-          console.log("⚡️Service Worker registered", reg);
-          const sw = reg.installing || reg.waiting || reg.active;
-          console.log("sw-state:", sw?.state);
-          sw?.addEventListener("statechange", () => {
-            console.log("change sw-state:", sw?.state);
-          });
-        })
-        .catch((err) => {
-          console.log("Service Worker registration failed: ", err);
-        });
+  //     navigator.serviceWorker
+  //       .register("/sw.js", {
+  //         scope: "/",
+  //         updateViaCache: "none",
+  //         type: "module",
+  //       })
+  //       .then((reg) => {
+  //         console.log("⚡️Service Worker registered", reg);
+  //         const sw = reg.installing || reg.waiting || reg.active;
+  //         console.log("sw-state:", sw?.state);
+  //         sw?.addEventListener("statechange", () => {
+  //           console.log("change sw-state:", sw?.state);
+  //         });
+  //       })
+  //       .catch((err) => {
+  //         console.log("Service Worker registration failed: ", err);
+  //       });
 
-      navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data && event.data.type === "ALERT_IMAGESET_FILES") {
-          alert(event.data.message);
-        }
-      });
-    }
-    return () => {
-      navigator.serviceWorker.removeEventListener("message", (event) => {
-        if (event.data && event.data.type === "ALERT_IMAGESET_FILES") {
-          alert(event.data.message);
-        }
-      });
-    };
-  }, []);
+  //     navigator.serviceWorker.addEventListener("message", (event) => {
+  //       if (event.data && event.data.type === "ALERT_IMAGESET_FILES") {
+  //         alert(event.data.message);
+  //       }
+  //     });
+  //   }
+  //   return () => {
+  //     navigator.serviceWorker.removeEventListener("message", (event) => {
+  //       if (event.data && event.data.type === "ALERT_IMAGESET_FILES") {
+  //         alert(event.data.message);
+  //       }
+  //     });
+  //   };
+  // }, []);
 
-  const handleButtonClick = () => {
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: "CHECK_IMAGESET_FILES",
-        imageset: imageset,
-      });
-    } else {
-      alert("Service Worker not ready");
-    }
-  };
+  // const handleButtonClick = () => {
+  //   if (navigator.serviceWorker.controller) {
+  //     navigator.serviceWorker.controller.postMessage({
+  //       type: "CHECK_IMAGESET_FILES",
+  //       imageset: imageset,
+  //     });
+  //   } else {
+  //     alert("Service Worker not ready");
+  //   }
+  // };
 
   return (
     <>
@@ -192,8 +192,15 @@ export {
   ImagesetState, // TODO: typeとenumを統一する
 };
 
+// TODO: useCamera、useIDb、useStorageのリファクタリング
+// TODO: cameraコンポーネントを各フックスを使ってリファクタリング
+// TODO: useSWをpubsubと同じように使いたい（例:sw.subscribe, sw.publish）
+// TODO: APIエラー時（オフライン）
+// TODO: useContext使ってるとこ、pubsubで書き換えられるかも（トースト、エラー、imageset）
+// TODO: hooksによる非同期・API通信の最適化→ hydrationエラー解消
+// TODO: クエリパラメータで状態管理（モーダルオープン）
 // TODO: ServiceWorker（イベント）の実装
-// → useCloudImgによるオンラインアップデートは、ServiceWorkerで行う？
+// → useCloudによるオンラインアップロードは、ServiceWorkerで行う？
 // → Notion拡張機能　ユーザー向け：1️⃣テンプレートDB作成機能 2️⃣QR生成（ID）印刷機能 ｜自分（企業）用：3️⃣QR生成（アクション）4️⃣refurnishへの連携データ生成
 // → QRコードがサービス名文字列の場合、IDBで該当文字列とステートを検索する
 // → 画像が3枚以上の場合にトーストでDRAFT変更を促す

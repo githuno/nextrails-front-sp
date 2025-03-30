@@ -24,6 +24,10 @@ export interface ToastState {
   type: ToastType;
   position?: ToastPosition;
   duration?: number;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 interface ToastProps {
@@ -44,42 +48,39 @@ const groupToastsByPosition = (toasts: ToastState[]) => {
 };
 
 // トーストポータルコンポーネントを修正
-const ToastPortal: React.FC<{ position: ToastPosition; toasts: ToastState[]; onRemove: (id: string) => void }> = ({
-  position,
-  toasts,
-  onRemove
-}) => {
+const ToastPortal: React.FC<{
+  position: ToastPosition;
+  toasts: ToastState[];
+  onRemove: (id: string) => void;
+}> = ({ position, toasts, onRemove }) => {
   // 位置に応じたスタイルを定義
   const containerStyles = {
-    'top-right': 'top-0 right-0',
-    'top-left': 'top-0 left-0',
-    'bottom-right': 'bottom-0 right-0',
-    'bottom-left': 'bottom-0 left-0',
-    'top-center': 'top-0 left-1/2 -translate-x-1/2',
-    'bottom-center': 'bottom-0 left-1/2 -translate-x-1/2'
+    "top-right": "top-0 right-0",
+    "top-left": "top-0 left-0",
+    "bottom-right": "bottom-0 right-0",
+    "bottom-left": "bottom-0 left-0",
+    "top-center": "top-0 left-1/2 -translate-x-1/2",
+    "bottom-center": "bottom-0 left-1/2 -translate-x-1/2",
   }[position];
 
   return (
-    <div className={`fixed ${containerStyles} flex flex-col gap-2 p-4 pointer-events-none`}>
+    <div
+      className={`fixed ${containerStyles} flex flex-col gap-2 p-4 pointer-events-none`}
+    >
       {toasts.map((toast, index) => (
-        <Toast
-          key={toast.id}
-          toast={toast}
-          onRemove={onRemove}
-          index={index}
-        />
+        <Toast key={toast.id} toast={toast} onRemove={onRemove} index={index} />
       ))}
     </div>
   );
 };
 
 // Toast コンポーネント
-const Toast: React.FC<ToastProps & { index: number }> = ({ 
-  toast, 
-  onRemove, 
-  index 
+const Toast: React.FC<ToastProps & { index: number }> = ({
+  toast,
+  onRemove,
+  index,
 }) => {
-  const { message, type, position = POSITION } = toast;
+  const { message, type, position = POSITION, action } = toast;
 
   const backgroundColor = {
     info: "bg-blue-500",
@@ -92,23 +93,34 @@ const Toast: React.FC<ToastProps & { index: number }> = ({
 
   // 位置に応じたスタイルを定義
   const positionStyles = {
-    'top-right': 'top-4 right-4',
-    'top-left': 'top-4 left-4',
-    'bottom-right': 'bottom-4 right-4',
-    'bottom-left': 'bottom-4 left-4',
-    'top-center': 'top-4 left-1/2 -translate-x-1/2',
-    'bottom-center': 'bottom-4 left-1/2 -translate-x-1/2'
+    "top-right": "top-4 right-4",
+    "top-left": "top-4 left-4",
+    "bottom-right": "bottom-4 right-4",
+    "bottom-left": "bottom-4 left-4",
+    "top-center": "top-4 left-1/2 -translate-x-1/2",
+    "bottom-center": "bottom-4 left-1/2 -translate-x-1/2",
   }[position];
 
   // 位置に応じたアニメーションクラスを定義
   const animationClass = {
-    'top-right': 'animate-slide-in-right',
-    'top-left': 'animate-slide-in-left',
-    'bottom-right': 'animate-slide-in-right',
-    'bottom-left': 'animate-slide-in-left',
-    'top-center': 'animate-slide-in-down',
-    'bottom-center': 'animate-slide-in-up'
+    "top-right": "animate-slide-in-right",
+    "top-left": "animate-slide-in-left",
+    "bottom-right": "animate-slide-in-right",
+    "bottom-left": "animate-slide-in-left",
+    "top-center": "animate-slide-in-down",
+    "bottom-center": "animate-slide-in-up",
   }[position];
+
+  // アクションボタンのクリックハンドラ
+  const handleActionClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // トースト自体のクリックイベントが発火するのを防止
+
+    if (action?.onClick) {
+      action.onClick();
+    }
+
+    onRemove(toast.id); // アクション実行後にトーストを閉じる
+  };
 
   return (
     <div
@@ -123,10 +135,20 @@ const Toast: React.FC<ToastProps & { index: number }> = ({
         shadow-lg
         transition-all duration-300
         ${animationClass}
+        flex items-center justify-between
       `}
       onClick={() => onRemove(toast.id)}
     >
-      {message}
+      <div>{message}</div>
+      
+      {action && (
+        <button 
+          onClick={handleActionClick}
+          className="ml-4 px-3 py-1 bg-white bg-opacity-20 hover:bg-opacity-30 rounded text-sm font-medium transition-colors"
+        >
+          {action.label}
+        </button>
+      )}
     </div>
   );
 };
@@ -177,6 +199,7 @@ const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
         type: options.type || "info",
         position: options.position || POSITION,
         duration: options.duration || DURATION,
+        action: options.action, 
       };
 
       setToasts((prev) => [...prev, newToast]);
@@ -223,14 +246,16 @@ const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
     typeof document !== "undefined"
       ? createPortal(
           <>
-            {Object.entries(groupToastsByPosition(toasts)).map(([position, positionToasts]) => (
-              <ToastPortal
-                key={position}
-                position={position as ToastPosition}
-                toasts={positionToasts}
-                onRemove={removeToast}
-              />
-            ))}
+            {Object.entries(groupToastsByPosition(toasts)).map(
+              ([position, positionToasts]) => (
+                <ToastPortal
+                  key={position}
+                  position={position as ToastPosition}
+                  toasts={positionToasts}
+                  onRemove={removeToast}
+                />
+              )
+            )}
           </>,
           document.body
         )

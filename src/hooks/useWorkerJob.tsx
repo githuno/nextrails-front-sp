@@ -1,3 +1,4 @@
+'use client';
 import { useState, useRef, useCallback, useEffect } from "react";
 
 // ジョブ実行オプション
@@ -16,6 +17,8 @@ export interface JobOptions<P = any> {
   retryDelay?: number;
   // ID (複数ジョブの識別に使用)
   id?: string;
+  // 進捗状況のコールバック
+  onProgress?: (progress: number) => void;
 }
 
 // ジョブ実行結果
@@ -34,8 +37,8 @@ export interface JobResult<R = any> {
   id?: string;
 }
 
-// useJobWorkerフックのオプション
-export interface UseJobWorkerOptions {
+// useWorkerJobフックのオプション
+export interface UseWorkerJobOptions {
   // Workerのスクリプトパス
   scriptUrl: string;
   // Worker種別
@@ -56,8 +59,8 @@ export interface UseJobWorkerOptions {
  * ジョブベースのWeb Workerフック
  * 一時的な計算ジョブをWeb Workerで実行するための最適化された実装
  */
-export function useJobWorker<ResultType = any, PayloadType = any>(
-  options: UseJobWorkerOptions
+export function useWorkerJob<ResultType = any, PayloadType = any>(
+  options: UseWorkerJobOptions
 ) {
   // デフォルト値の設定
   const {
@@ -288,6 +291,11 @@ export function useJobWorker<ResultType = any, PayloadType = any>(
               } else if (type === "PROGRESS" && progressCallback) {
                 // 進捗更新
                 progressCallback(responsePayload?.percent || 0);
+                
+                // カスタム進捗ハンドラがあれば呼び出す（追加）
+                if (jobOptions.onProgress) {
+                  jobOptions.onProgress(responsePayload?.percent || 0);
+                }
               }
             };
 

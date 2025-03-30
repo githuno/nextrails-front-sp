@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useJobWorker, JobResult } from "@/hooks/useJobWorker";
+import { useWorkerJob, JobResult } from "@/hooks/useWorkerJob";
 
 export default function AdvancedJobWorkerDemo() {
   const [input, setInput] = useState<string>("35");
@@ -52,7 +52,7 @@ export default function AdvancedJobWorkerDemo() {
     sendDirectMessage, // 低レベルAPIのためジョブ終了後もworkerは終了されません
     getWorkerRef,
     terminateWorker,
-  } = useJobWorker({
+  } = useWorkerJob({
     scriptUrl: "/workers/generic-worker.js",
     debug: true,
     terminateAfterJob: true, // デフォルト値を設定：ジョブ後にWorkerを終了
@@ -782,7 +782,7 @@ export default function AdvancedJobWorkerDemo() {
       {/* デバッグ情報 */}
       <div className="mt-4 border-t pt-4 text-xs text-gray-500">
         <p>
-          このデモでは、useJobWorkerフックの全ての機能を試すことができます：
+          このデモでは、useWorkerJobフックの全ての機能を試すことができます：
         </p>
         <ul className="list-disc ml-5 mt-1">
           <li>executeJob: ジョブを実行し結果を待機</li>
@@ -803,7 +803,7 @@ export default function AdvancedJobWorkerDemo() {
           シンプルなデモページへ
         </a>
         <p className="text-xs text-gray-500 mt-1">
-          ※シンプルなデモでは、useJobWorkerフックの基本機能のみを使用しています。
+          ※シンプルなデモでは、useWorkerJobフックの基本機能のみを使用しています。
           <br />
           上級者向けオプションは使用できません。
         </p>
