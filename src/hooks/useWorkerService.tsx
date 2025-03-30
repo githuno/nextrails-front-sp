@@ -710,13 +710,13 @@ export function createServiceWorkerContext(
    */
   function useCustomServiceWorker(): ServiceWorkerContextType {
     const context = useContext(CustomServiceWorkerContext);
+    const defaultServiceWorker = useServiceWorker(); // 常に呼び出す
 
     if (context === defaultContext) {
       console.warn(
         `${name}ServiceWorkerProvider が見つかりません。デフォルト実装を使用します。`
       );
-      // デフォルトのuseServiceWorkerを使用
-      return useServiceWorker();
+      return defaultServiceWorker;
     }
 
     return context;
