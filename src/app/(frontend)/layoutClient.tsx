@@ -3,7 +3,7 @@
 import { ToastProvider } from "@/hooks/useToast";
 import { ErrorBoundaryProvider } from "@/hooks/useErrorBoundary";
 import { StorageProvider } from "@/components/storage";
-import { ServiceWorkerProvider } from "@/hooks/useServiceWorker";
+// import { ServiceWorkerProvider } from "@/hooks/useServiceWorker";
 
 export default function ClientProviders({
   children,
@@ -14,9 +14,9 @@ export default function ClientProviders({
     <ToastProvider>
       <ErrorBoundaryProvider>
         <StorageProvider>
-          <ServiceWorkerProvider options={{ debug: true, immediate: false }}>
+          {/* <ServiceWorkerProvider options={{ debug: true, immediate: false }}> */}
             {children}
-          </ServiceWorkerProvider>
+          {/* </ServiceWorkerProvider> */}
         </StorageProvider>
       </ErrorBoundaryProvider>
     </ToastProvider>
