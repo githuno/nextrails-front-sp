@@ -7,6 +7,8 @@ import HistoryDrawer from "./HistoryDrawer";
 import HistoryButton from "./HistoryButton";
 import FavoriteButton from "./FavoriteButton";
 import FavoriteDrawer from "./FavoriteDrawer";
+import ChannelFavoriteButton from "./ChannelFavoriteButton";
+import ChannelFavoriteDrawer from "./ChannelFavoriteDrawer";
 import SpeedController from "./SpeedController";
 import {
   SearchItem,
@@ -26,10 +28,13 @@ export default function YoutubePage() {
   const [selectedVideo, setSelectedVideo] = useState<SearchItem | null>(null);
   const [videoDetails, setVideoDetails] = useState<VideoDetail | null>(null);
   const [isFavorite, setIsFavorite] = useState<boolean>(false);
+  const [isChannelFavorite, setIsChannelFavorite] = useState<boolean>(false);
   // ドロワーの状態
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] =
     useState<boolean>(false);
   const [isFavoriteDrawerOpen, setIsFavoriteDrawerOpen] =
+    useState<boolean>(false);
+  const [isChannelFavoriteDrawerOpen, setIsChannelFavoriteDrawerOpen] =
     useState<boolean>(false);
 
   // 再生速度の状態
@@ -124,6 +129,7 @@ export default function YoutubePage() {
           watchedAt: Date.now(),
           currentTime,
           duration,
+          channelId: selectedVideo.snippet.channelId, // チャンネルIDを追加
         };
         youtubeClient.addToHistory(historyItem);
       }
@@ -231,6 +237,7 @@ export default function YoutubePage() {
                   selectedVideo.snippet.thumbnails.default?.url ||
                   "",
                 watchedAt: Date.now(),
+                channelId: selectedVideo.snippet.channelId, // チャンネルIDを追加
               };
               youtubeClient.addToHistory(historyItem);
             }
@@ -254,6 +261,7 @@ export default function YoutubePage() {
       videoId: video.id.videoId!,
       title: video.snippet.title,
       channelTitle: video.snippet.channelTitle,
+      channelId: video.snippet.channelId,
       thumbnailUrl:
         video.snippet.thumbnails.medium?.url ||
         video.snippet.thumbnails.default?.url ||
@@ -278,6 +286,12 @@ export default function YoutubePage() {
           // お気に入り状態を確認
           const isFav = youtubeClient.isFavorite(video.id.videoId!);
           setIsFavorite(isFav);
+
+          // チャンネルのお気に入り状態を確認
+          const isChannelFav = youtubeClient.isFavoriteChannel(
+            video.snippet.channelId
+          );
+          setIsChannelFavorite(isChannelFav);
         }
       } catch (err) {
         console.error("動画詳細の取得に失敗しました:", err);
@@ -345,6 +359,15 @@ export default function YoutubePage() {
     setIsFavorite(newFavoriteStatus);
   }, [selectedVideo]);
 
+  // チャンネルのお気に入り切り替え
+  const toggleChannelFavorite = useCallback(() => {
+    if (!selectedVideo) return;
+
+    const channelId = selectedVideo.snippet.channelId;
+    const newFavoriteStatus = youtubeClient.toggleFavoriteChannel(channelId);
+    setIsChannelFavorite(newFavoriteStatus);
+  }, [selectedVideo]);
+
   // プレイヤーの初期化
   useEffect(() => {
     if (selectedVideo && selectedVideo.id.videoId) {
@@ -360,6 +383,10 @@ export default function YoutubePage() {
   // お気に入りドロワーの開閉
   const toggleFavoriteDrawer = useCallback(() => {
     setIsFavoriteDrawerOpen((prev) => !prev);
+  }, []);
+  // チャンネルお気に入りドロワーの開閉
+  const toggleChannelFavoriteDrawer = useCallback(() => {
+    setIsChannelFavoriteDrawerOpen((prev) => !prev);
   }, []);
 
   // クライアントサイドのみでレンダリング
@@ -430,10 +457,52 @@ export default function YoutubePage() {
                   </button>
                 </div>
 
-                <div className="flex flex-wrap items-center text-gray-600 mt-2">
-                  <span className="mr-4 text-sm">
-                    {selectedVideo.snippet.channelTitle}
-                  </span>
+                <div className="flex flex-wrap items-center text-gray-600 mt-2 justify-between">
+                  <div className="flex items-center">
+                    <span className="mr-2 text-sm">
+                      {selectedVideo.snippet.channelTitle}
+                    </span>
+                    {/* チャンネルお気に入りボタン */}
+                    <button
+                      onClick={toggleChannelFavorite}
+                      className="text-red-500 hover:text-red-600"
+                      title={
+                        isChannelFavorite
+                          ? "チャンネルのお気に入りを解除"
+                          : "チャンネルをお気に入りに追加"
+                      }
+                    >
+                      {isChannelFavorite ? (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      ) : (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                          />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                   {videoDetails && (
                     <span className="text-sm">
                       {parseInt(
@@ -541,6 +610,13 @@ export default function YoutubePage() {
       <FavoriteDrawer
         isOpen={isFavoriteDrawerOpen}
         onClose={toggleFavoriteDrawer}
+        onVideoSelect={playVideoFromId}
+      />
+      {/* チャンネルお気に入りボタンとドロワー */}
+      <ChannelFavoriteButton onClick={toggleChannelFavoriteDrawer} />
+      <ChannelFavoriteDrawer
+        isOpen={isChannelFavoriteDrawerOpen}
+        onClose={toggleChannelFavoriteDrawer}
         onVideoSelect={playVideoFromId}
       />
     </div>

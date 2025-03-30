@@ -5,7 +5,13 @@ export const YOUTUBE_API_KEY = process.env.NEXT_PUBLIC_YOUTUBE_API_KEY || '';
 export const url = {
   search: 'https://www.googleapis.com/youtube/v3/search',
   videos: 'https://www.googleapis.com/youtube/v3/videos',
+  channels: 'https://www.googleapis.com/youtube/v3/channels',
 };
+
+// ローカルストレージのキー
+export const YT_HISTORY_KEY = 'youtube_history';
+export const YT_FAVORITES_KEY = 'youtube_favorites';
+export const YT_CHANNEL_FAVORITES_KEY = 'youtube_channel_favorites';
 
 // YouTubeのサムネイルサイズ
 export enum ThumbnailSize {
@@ -110,11 +116,33 @@ export interface HistoryItem {
   watchedAt: number;
   currentTime?: number; // 再生位置（秒）を追加
   duration?: number;    // 動画の総時間（秒）
+  channelId: string;
 }
 
-// ローカルストレージのキー
-export const YT_HISTORY_KEY = 'youtube_history';
-export const YT_FAVORITES_KEY = 'youtube_favorites';
+// チャンネル詳細情報の型定義
+export interface ChannelDetail {
+  id: string;
+  snippet: {
+    title: string;
+    description: string;
+    customUrl?: string;
+    publishedAt: string;
+    thumbnails: {
+      [key in ThumbnailSize]?: {
+        url: string;
+        width: number;
+        height: number;
+      };
+    };
+    country?: string;
+  };
+  statistics: {
+    viewCount: string;
+    subscriberCount: string;
+    hiddenSubscriberCount: boolean;
+    videoCount: string;
+  };
+}
 
 // 視聴履歴から日付文字列を生成するヘルパー関数
 export const formatWatchedDate = (timestamp: number): string => {
