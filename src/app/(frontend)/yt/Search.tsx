@@ -108,7 +108,7 @@ export default function Search({ onVideoSelect }: SearchProps) {
               type="submit"
               className="relative px-4 py-2 bg-transparent text-white rounded text-sm whitespace-nowrap min-w-[80px] overflow-hidden
                       before:content-[''] before:absolute before:inset-[-4px] before:rounded-[inherit]
-                      before:bg-[conic-gradient(from_0deg_at_50%_0%,#ffcc00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000)]
+                      before:bg-[conic-gradient(from_0deg_at_50%_0%,#ffcc00,#00ff00,#00ffff,#fff,#fff,#fff)]
                       before:[animation:spin_4s_linear_infinite] before:-z-10
                       after:content-[''] after:absolute after:inset-[1px] after:bg-gradient-to-br after:from-red-500 after:to-purple-600 after:rounded-[inherit] after:-z-[5]
                       hover:before:[animation:spin_1.5s_linear_infinite] disabled:before:[animation:none] disabled:after:bg-gradient-to-br disabled:after:from-gray-500 disabled:after:to-gray-600"
