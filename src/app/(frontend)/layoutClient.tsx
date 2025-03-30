@@ -1,15 +1,11 @@
 "use client";
 
-import { Inter } from "next/font/google";
-import "./globals.css";
-
 import { ToastProvider } from "@/hooks/useToast";
 import { ErrorBoundaryProvider } from "@/hooks/useErrorBoundary";
 import { StorageProvider } from "@/components/storage";
+import { ServiceWorkerProvider } from "@/hooks/useServiceWorker";
 
-const inter = Inter({ subsets: ["latin"] });
-
-export default function ClientLayout({
+export default function ClientProviders({
   children,
 }: {
   children: React.ReactNode;
@@ -17,17 +13,11 @@ export default function ClientLayout({
   return (
     <ToastProvider>
       <ErrorBoundaryProvider>
-      <body className={inter.className}>
         <StorageProvider>
-        {process.env.NODE_ENV === "development" && (
-          <script
-            src="https://unpkg.com/react-scan/dist/auto.global.js"
-            async
-          />
-        )}
-        {children}
+          <ServiceWorkerProvider options={{ debug: true, immediate: false }}>
+            {children}
+          </ServiceWorkerProvider>
         </StorageProvider>
-      </body>
       </ErrorBoundaryProvider>
     </ToastProvider>
   );
