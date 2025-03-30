@@ -20,6 +20,10 @@ const nextConfig = {
       ],
     },
   ],
+  allowedDevOrigins: [
+    "uno-pc.tail55100.ts.net",
+    "mac-hono.tail55100.ts.net:10000",
+  ],
 };
 
 module.exports = nextConfig;
