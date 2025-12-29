@@ -1,27 +1,21 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Carousel, CarouselItem, Modal } from "@/components/atoms";
-import { useStorage } from "@/components/storage";
-import { useImageset, type File } from "@/components/camera";
-import {
-  useCamera,
-  LoadingSpinner,
-  CloseIcon,
-  SyncIcon,
-} from "@/components/camera/_utils";
-import Image from "next/image";
-import { useSyncImageset } from "./hooks/useSyncImageset";
+import { Carousel, CarouselItem, Modal } from "@/components/atoms"
+import { useImageset, type File } from "@/components/camera"
+import { CloseIcon, LoadingSpinner, SyncIcon, useCamera } from "@/components/camera/_utils"
+import { useStorage } from "@/components/storage"
+import Image from "next/image"
+import { useCallback, useEffect, useState } from "react"
+import { useSyncImageset } from "./hooks/useSyncImageset"
 
 const CurrentImages = () => {
-  const { cameraState } = useCamera();
-  const { imageset, setImageset } = useImageset();
-  const { idb, cloud } = useStorage();
+  const { cameraState } = useCamera()
+  const { imageset, setImageset } = useImageset()
+  const { idb, cloud } = useStorage()
 
-  const [isLoading, setIsLoading] = useState<string[]>([]);
-  const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false);
-  const [carouselIndex, setCarouselIndex] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState<string[]>([])
+  const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false)
+  const [carouselIndex, setCarouselIndex] = useState<number | null>(null)
 
-  const { syncPullFiles, syncPushFile, checkUpdatedAt, isSyncing } =
-    useSyncImageset();
+  const { syncPullFiles, syncPushFile, checkUpdatedAt, isSyncing } = useSyncImageset()
 
   // const pullImages = useCallback(
   //   async ({ setName, params }: { setName: string; params: string }) => {
@@ -103,63 +97,61 @@ const CurrentImages = () => {
   // );
 
   const getImages = useCallback(async () => {
-    const currentName = imageset.name;
-    setIsLoading([...isLoading, currentName]);
+    const currentName = imageset.name
+    setIsLoading([...isLoading, currentName])
     try {
-      let params = "deletedAt_null=true&updatedAt_sort=desc"; // 削除されていないファイルを全部取得
+      let params = "deletedAt_null=true&updatedAt_sort=desc" // 削除されていないファイルを全部取得
       // IDBから降順でファイルを取得
       const idbFiles = await idb.get(imageset.name, {
         date: { key: "updatedAt", order: "desc" },
-      });
+      })
 
       // IDBファイルが存在する場合
       if (Array.isArray(idbFiles) && idbFiles.length > 0) {
         setImageset((prev) =>
           // セット名が変更されている場合は更新しない
-          prev.name === currentName ? { ...prev, files: idbFiles } : prev
-        );
+          prev.name === currentName ? { ...prev, files: idbFiles } : prev,
+        )
         // IDBのfilesから適切な日時を取得してparamsを再定義
-        params = `updatedAt_over=${checkUpdatedAt(
-          idbFiles
-        )}&updatedAt_sort=desc`;
+        params = `updatedAt_over=${checkUpdatedAt(idbFiles)}&updatedAt_sort=desc`
       }
 
       // クラウドからファイルを取得してIDBに同期
-      await syncPullFiles({ setName: imageset.name, options: { params } });
+      await syncPullFiles({ setName: imageset.name, options: { params } })
     } catch (error) {
-      console.error("Error updating media:", error);
+      console.error("Error updating media:", error)
     } finally {
-      setIsLoading((prev) => prev.filter((name) => name !== currentName));
+      setIsLoading((prev) => prev.filter((name) => name !== currentName))
     }
-  }, [idb, imageset.name, syncPullFiles, checkUpdatedAt]);
+  }, [idb, imageset.name, syncPullFiles, checkUpdatedAt])
 
   const localCleanup = useCallback(
     async (imagesetName: string) => {
       const targetFiles = imageset.files.filter(
-        (file) => file.deletedAt && file.updatedAt < file.fetchedAt // 削除済みかつ取得以降に更新されていないファイル
-      );
+        (file) => file.deletedAt && file.updatedAt < file.fetchedAt, // 削除済みかつ取得以降に更新されていないファイル
+      )
       try {
         for (const file of targetFiles) {
-          await idb.delete(imagesetName, file.idbId); // IDBの削除済みファイルを削除
+          await idb.delete(imagesetName, file.idbId) // IDBの削除済みファイルを削除
           setImageset((prev) =>
             prev.name === imagesetName
               ? {
                   ...prev,
                   files: prev.files.filter((file) => !file.deletedAt),
                 }
-              : prev
-          );
+              : prev,
+          )
         }
       } catch (error) {
-        console.error("Error cleaning up media:", error);
+        console.error("Error cleaning up media:", error)
       }
     },
-    [idb, imageset.files]
-  );
+    [idb, imageset.files],
+  )
 
   const handleLocalDelete = useCallback(
     async ({ setName, file }: { setName: string; file: File }) => {
-      if (isLoading.includes(file.idbId)) return;
+      if (isLoading.includes(file.idbId)) return
       // 1. fileのversionとdeletedAtを更新して定義
       const deleteFile = {
         ...file,
@@ -168,81 +160,74 @@ const CurrentImages = () => {
         updatedAt: Date.now(),
         version: file.version + 1,
         blob: null,
-      };
+      }
       // 2. IDBの論理削除
-      await idb.put(imageset.name, deleteFile);
+      await idb.put(imageset.name, deleteFile)
 
       // 3. imagesetの該当ファイルを論理削除
       setImageset((prev) =>
         prev.name === setName
           ? {
               ...prev,
-              files: prev.files.map((f) =>
-                f.idbId === deleteFile.idbId ? deleteFile : f
-              ),
+              files: prev.files.map((f) => (f.idbId === deleteFile.idbId ? deleteFile : f)),
             }
-          : prev
-      );
+          : prev,
+      )
     },
-    [imageset.name, idb, isLoading]
-  );
+    [imageset.name, idb, isLoading],
+  )
 
   const handleLocalUpdate = useCallback(
     async ({ setName, file }: { setName: string; file: File }) => {
-      if (isLoading.includes(file.idbId)) return;
+      if (isLoading.includes(file.idbId)) return
       const targetFile = {
         ...file,
         shouldPush: true,
         updatedAt: Date.now(),
         version: file.version + 1,
-      };
+      }
       // 1. IDBの更新
-      await idb.put(setName, targetFile);
+      await idb.put(setName, targetFile)
       // 2. imagesetの更新
       setImageset((prev) =>
         prev.name === setName
           ? {
               ...prev,
-              files: prev.files.map((f) =>
-                f.idbId === targetFile.idbId ? targetFile : f
-              ),
+              files: prev.files.map((f) => (f.idbId === targetFile.idbId ? targetFile : f)),
             }
-          : prev
-      );
+          : prev,
+      )
     },
-    [imageset.name, idb, isLoading]
-  );
+    [imageset.name, idb, isLoading],
+  )
 
   // debug ---------------------------------------------------------------------
   useEffect(() => {
-    console.log("cameraState:", cameraState);
-  }, [cameraState]);
+    console.log("cameraState:", cameraState)
+  }, [cameraState])
   useEffect(() => {
-    console.log("imageset.files:", imageset.files);
-  }, [imageset.files]);
+    console.log("imageset.files:", imageset.files)
+  }, [imageset.files])
   useEffect(() => {
-    console.log("cloud", cloud.state);
-  }, [cloud.state]);
+    console.log("cloud", cloud.state)
+  }, [cloud.state])
   useEffect(() => {
-    console.log("idbState:", idb.state);
-  }, [idb.state]);
+    console.log("idbState:", idb.state)
+  }, [idb.state])
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
     const initialize = async () => {
-      if (
-        cameraState.isAvailable !== null &&
-        !isLoading.includes(imageset.name)
-      ) {
-        await getImages();
-        localCleanup(imageset.name);
+      if (cameraState.isAvailable !== null && !isLoading.includes(imageset.name)) {
+        await getImages()
+        localCleanup(imageset.name)
       }
-    };
-    initialize();
+    }
+    initialize()
     return () => {
-      setIsLoading([]);
-    };
-  }, [imageset.name, cameraState.isAvailable]);
+      setIsLoading([])
+    }
+  }, [imageset.name, cameraState.isAvailable])
 
   useEffect(() => {
     const autoPush = async () => {
@@ -252,32 +237,31 @@ const CurrentImages = () => {
         imageset.files.length === 0 || // filesがない場合
         isLoading.includes(imageset.name) // 同期中の場合
       )
-        return; // 上記条件下では処理しない
+        return // 上記条件下では処理しない
 
-      await syncPushFile({ set: imageset });
-    };
-    autoPush();
-  }, [imageset.files, cameraState.isScanning]);
+      await syncPushFile({ set: imageset })
+    }
+    autoPush()
+  }, [imageset.files, cameraState.isScanning])
 
   const handleCarouselItemClick = (fileIndex: number) => {
-    const controller = new AbortController(); // https://qiita.com/tronicboy/items/31c1f60daf26edc9cefb
-    setIsImageModalOpen(true);
+    const controller = new AbortController() // https://qiita.com/tronicboy/items/31c1f60daf26edc9cefb
+    setIsImageModalOpen(true)
     setTimeout(() => {
       if (!controller.signal.aborted) {
-        setCarouselIndex(fileIndex);
+        setCarouselIndex(fileIndex)
       }
-    }, 100);
+    }, 100)
     return () => {
-      controller.abort();
-    };
-  };
+      controller.abort()
+    }
+  }
 
   return (
     <>
-      {(isLoading.includes(imageset.name) ||
-        cameraState.isAvailable === null) && (
+      {(isLoading.includes(imageset.name) || cameraState.isAvailable === null) && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/50">
-          <div className="w-[48px] flex items-center justify-center">
+          <div className="flex w-[48px] items-center justify-center">
             <LoadingSpinner size="48px" />
           </div>
         </div>
@@ -287,24 +271,17 @@ const CurrentImages = () => {
           .filter((file) => !file.deletedAt)
           .map((file) => (
             // 子要素自身で幅を定義
-            <CarouselItem
-              key={"small-" + file.idbId}
-              className="relative h-full w-40 pt-2 pr-2"
-            >
-              <div className="aspect-video bg-white/60 rounded-lg flex items-center justify-center">
+            <CarouselItem key={"small-" + file.idbId} className="relative h-full w-40 pt-2 pr-2">
+              <div className="flex aspect-video items-center justify-center rounded-lg bg-white/60">
                 <div
                   className="relative h-full w-full cursor-pointer shadow-xl"
                   onClick={(e) => {
-                    e.stopPropagation();
-                    handleCarouselItemClick(imageset.files.indexOf(file));
+                    e.stopPropagation()
+                    handleCarouselItemClick(imageset.files.indexOf(file))
                   }}
                 >
                   {file.contentType === "video/webm" ? (
-                    <video
-                      controls
-                      src={file.idbUrl ?? ""}
-                      className="h-full w-full object-contain"
-                    />
+                    <video controls src={file.idbUrl ?? ""} className="h-full w-full object-contain" />
                   ) : (
                     // <img
                     //   src={file.idbUrl ?? ""}
@@ -334,10 +311,10 @@ const CurrentImages = () => {
                       {/* TODO: モーダルのオープンとクローズが重複して作動してしまっている */}
                       <button
                         onClick={(e) => {
-                          e.stopPropagation(); // 親要素のクリックイベントを防ぐ
-                          handleLocalDelete({ file, setName: imageset.name });
+                          e.stopPropagation() // 親要素のクリックイベントを防ぐ
+                          handleLocalDelete({ file, setName: imageset.name })
                         }}
-                        className="absolute top-0 right-0 rounded-full bg-white/80 p-1 z-10 shadow-lg"
+                        className="absolute top-0 right-0 z-10 rounded-full bg-white/80 p-1 shadow-lg"
                       >
                         <CloseIcon />
                       </button>
@@ -357,31 +334,19 @@ const CurrentImages = () => {
       <Modal
         isOpen={isImageModalOpen}
         onClose={() => {
-          setCarouselIndex(null);
-          setIsImageModalOpen(false);
+          setCarouselIndex(null)
+          setIsImageModalOpen(false)
         }}
         className="bg-white/0"
       >
-        <Carousel
-          className="bg-black/70"
-          containerClassName="md:gap-x-1"
-          index={carouselIndex}
-        >
+        <Carousel className="bg-black/70" containerClassName="md:gap-x-1" index={carouselIndex}>
           {imageset.files.map((file) => (
             <CarouselItem key={"large-" + file.idbId}>
-              <div className="w-[100vw] h-[90vh] py-2 px-1 md:w-[93vw] md:pr-0">
+              <div className="h-[90vh] w-[100vw] px-1 py-2 md:w-[93vw] md:pr-0">
                 {file.contentType === "video/webm" ? (
-                  <video
-                    controls
-                    src={file.idbUrl ?? ""}
-                    className="h-full w-full object-contain"
-                  />
+                  <video controls src={file.idbUrl ?? ""} className="h-full w-full object-contain" />
                 ) : (
-                  <img
-                    src={file.idbUrl ?? ""}
-                    alt={`Image ${file.idbId}`}
-                    className="h-full w-full object-contain"
-                  />
+                  <img src={file.idbUrl ?? ""} alt={`Image ${file.idbId}`} className="h-full w-full object-contain" />
                 )}
               </div>
             </CarouselItem>
@@ -389,7 +354,7 @@ const CurrentImages = () => {
         </Carousel>
       </Modal>
     </>
-  );
-};
+  )
+}
 
-export { CurrentImages };
+export { CurrentImages }

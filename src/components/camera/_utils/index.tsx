@@ -1,26 +1,26 @@
-import { CameraContextProvider, useCamera } from "./useCameraContext";
 import {
-  LoadingSpinner,
+  CameraIcon,
   CloseIcon,
   EditIcon,
-  CameraIcon,
-  RecordIcon,
-  StopIcon,
+  LoadingSpinner,
   MenuIcon,
   PictureIcon,
+  RecordIcon,
+  StopIcon,
   SyncIcon,
-} from "./icons";
+} from "./icons"
+import { CameraContextProvider, useCamera } from "./useCameraContext"
 
 export {
-  LoadingSpinner,
+  CameraContextProvider,
+  CameraIcon,
   CloseIcon,
   EditIcon,
-  CameraIcon,
+  LoadingSpinner,
+  MenuIcon,
+  PictureIcon,
   RecordIcon,
   StopIcon,
   SyncIcon,
-  MenuIcon,
-  PictureIcon,
-  CameraContextProvider,
   useCamera,
-};
+}

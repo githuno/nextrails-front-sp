@@ -1,14 +1,14 @@
-import React, { useRef, useEffect } from "react";
-import { useModal } from "@/components/atoms";
-import { useImageset } from "@/components/camera";
-import { useCamera, LoadingSpinner } from "@/components/camera/_utils";
+import { useModal } from "@/components/atoms"
+import { useImageset } from "@/components/camera"
+import { LoadingSpinner, useCamera } from "@/components/camera/_utils"
+import { useEffect, useRef } from "react"
 
 const CameraPreview = () => {
-  const { imageset } = useImageset();
-  const { isOpen } = useModal();
-  const { cameraState, camera } = useCamera();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { imageset } = useImageset()
+  const { isOpen } = useModal()
+  const { cameraState, camera } = useCamera()
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   // 初期化処理
   useEffect(() => {
@@ -17,18 +17,18 @@ const CameraPreview = () => {
         await camera.setupWithVideo({
           videoElement: videoRef.current,
           canvasElement: canvasRef.current,
-        });
-        camera.startQrScan();
+        })
+        camera.startQrScan()
       } else if (!isOpen && camera) {
         // モーダルが閉じられたらクリーンアップ
-        await camera.cleanup();
+        await camera.cleanup()
       }
-    };
-    setupCamera();
+    }
+    setupCamera()
     return () => {
-      camera?.cleanup();
-    };
-  }, [videoRef.current, canvasRef.current, camera, isOpen, imageset.name]);
+      camera?.cleanup()
+    }
+  }, [camera, isOpen, imageset.name])
 
   return (
     <>
@@ -40,19 +40,17 @@ const CameraPreview = () => {
       <video
         id="preview-video"
         ref={videoRef}
-        className={`h-full w-full object-cover rounded-lg ${
-          cameraState.isCapturing ? "brightness-75" : ""
-        }`}
+        className={`h-full w-full rounded-lg object-cover ${cameraState.isCapturing ? "brightness-75" : ""}`}
         autoPlay
         playsInline
         muted
       />
       <canvas id="preview-canvas" ref={canvasRef} className="hidden" />
     </>
-  );
-};
+  )
+}
 
-export { CameraPreview };
+export { CameraPreview }
 
 // 【Barcode Detection API】
 // https://developer.mozilla.org/en-US/docs/Web/API/Barcode_Detection_API

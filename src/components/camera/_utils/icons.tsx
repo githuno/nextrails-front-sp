@@ -1,17 +1,14 @@
-import React from "react";
+import React from "react"
 
 // TODO: リファクタリング→https://react-svgr.com/playground/で変換
 // TODO: publicに置く場合とパフォーマンス比較
 
 interface IconProps {
-  size?: string;
-  color?: string;
+  size?: string
+  color?: string
 }
 
-const LoadingSpinner: React.FC<IconProps> = ({
-  size = "36px",
-  color = "#09f",
-}) => {
+const LoadingSpinner: React.FC<IconProps> = ({ size = "36px", color = "#09f" }) => {
   return (
     <div className="spinner" style={{ width: size, height: size }}>
       <style jsx>{`
@@ -28,16 +25,13 @@ const LoadingSpinner: React.FC<IconProps> = ({
         }
       `}</style>
     </div>
-  );
-};
+  )
+}
 
-const CloseIcon: React.FC<IconProps> = ({
-  size = "24px",
-  color = "#000000",
-}) => {
+const CloseIcon: React.FC<IconProps> = ({ size = "24px", color = "#000000" }) => {
   return (
     <svg
-      className="hover:w-7 hover:h-7 transition-transform"
+      className="transition-transform hover:h-7 hover:w-7"
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
@@ -50,13 +44,10 @@ const CloseIcon: React.FC<IconProps> = ({
         fill={color}
       />
     </svg>
-  );
-};
+  )
+}
 
-const EditIcon: React.FC<IconProps> = ({
-  size = "16px",
-  color = "#4B4B4B",
-}) => (
+const EditIcon: React.FC<IconProps> = ({ size = "16px", color = "#4B4B4B" }) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -88,12 +79,9 @@ const EditIcon: React.FC<IconProps> = ({
       />
     </g>
   </svg>
-);
+)
 
-const CameraIcon: React.FC<IconProps> = ({
-  size = "40px",
-  color = "#4B4B4B",
-}) => (
+const CameraIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -124,12 +112,9 @@ const CameraIcon: React.FC<IconProps> = ({
       ></path>
     </g>
   </svg>
-);
+)
 
-const RecordIcon: React.FC<IconProps> = ({
-  size = "40px",
-  color = "#4B4B4B",
-}) => (
+const RecordIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -165,12 +150,9 @@ const RecordIcon: React.FC<IconProps> = ({
       style={{ fill: color }}
     ></path>
   </svg>
-);
+)
 
-const StopIcon: React.FC<IconProps> = ({
-  size = "32px",
-  color = "#4B4B4B",
-}) => (
+const StopIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -192,12 +174,9 @@ const StopIcon: React.FC<IconProps> = ({
       style={{ fill: color }}
     ></path>
   </svg>
-);
+)
 
-const MenuIcon: React.FC<IconProps> = ({
-  size = "24px",
-  color = "#4B4B4B",
-}) => (
+const MenuIcon: React.FC<IconProps> = ({ size = "24px", color = "#4B4B4B" }) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -211,59 +190,17 @@ const MenuIcon: React.FC<IconProps> = ({
   >
     <style type="text/css">{`.st0{fill:${color};}`}</style>
     <g>
-      <circle
-        className="st0"
-        cx="48"
-        cy="64"
-        r="48"
-        style={{ fill: color }}
-      ></circle>
-      <rect
-        x="160"
-        y="16"
-        className="st0"
-        width="352"
-        height="96"
-        style={{ fill: color }}
-      ></rect>
-      <circle
-        className="st0"
-        cx="48"
-        cy="256"
-        r="48"
-        style={{ fill: color }}
-      ></circle>
-      <rect
-        x="160"
-        y="208"
-        className="st0"
-        width="352"
-        height="96"
-        style={{ fill: color }}
-      ></rect>
-      <circle
-        className="st0"
-        cx="48"
-        cy="448"
-        r="48"
-        style={{ fill: color }}
-      ></circle>
-      <rect
-        x="160"
-        y="400"
-        className="st0"
-        width="352"
-        height="96"
-        style={{ fill: color }}
-      ></rect>
+      <circle className="st0" cx="48" cy="64" r="48" style={{ fill: color }}></circle>
+      <rect x="160" y="16" className="st0" width="352" height="96" style={{ fill: color }}></rect>
+      <circle className="st0" cx="48" cy="256" r="48" style={{ fill: color }}></circle>
+      <rect x="160" y="208" className="st0" width="352" height="96" style={{ fill: color }}></rect>
+      <circle className="st0" cx="48" cy="448" r="48" style={{ fill: color }}></circle>
+      <rect x="160" y="400" className="st0" width="352" height="96" style={{ fill: color }}></rect>
     </g>
   </svg>
-);
+)
 
-const PictureIcon: React.FC<IconProps> = ({
-  size = "32px",
-  color = "#4B4B4B",
-}) => (
+const PictureIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -294,7 +231,7 @@ const PictureIcon: React.FC<IconProps> = ({
       />
     </g>
   </svg>
-);
+)
 
 const SyncIcon: React.FC<IconProps & { isSpinning?: boolean }> = ({
   size = "32px",
@@ -334,16 +271,6 @@ const SyncIcon: React.FC<IconProps & { isSpinning?: boolean }> = ({
       />
     </g>
   </svg>
-);
+)
 
-export {
-  LoadingSpinner,
-  CloseIcon,
-  EditIcon,
-  CameraIcon,
-  RecordIcon,
-  StopIcon,
-  MenuIcon,
-  PictureIcon,
-  SyncIcon,
-};
+export { CameraIcon, CloseIcon, EditIcon, LoadingSpinner, MenuIcon, PictureIcon, RecordIcon, StopIcon, SyncIcon }

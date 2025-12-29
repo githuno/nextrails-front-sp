@@ -1,37 +1,35 @@
-import React from "react";
-import { useStorage } from "@/components/storage";
-import { useImageset, File, ImagesetState } from "@/components/camera";
-import { StopIcon, RecordIcon, useCamera } from "@/components/camera/_utils";
+import { File, ImagesetState, useImageset } from "@/components/camera"
+import { RecordIcon, StopIcon, useCamera } from "@/components/camera/_utils"
+import { useStorage } from "@/components/storage"
+import React from "react"
 
 interface RecordVideoButtonProps {
-  onSaveCompleted: () => void;
+  onSaveCompleted: () => void
 }
 
-const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
-  onSaveCompleted,
-}) => {
-  const { idb } = useStorage();
-  const { camera, cameraState } = useCamera();
-  const { imageset, setImageset } = useImageset();
+const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({ onSaveCompleted }) => {
+  const { idb } = useStorage()
+  const { camera, cameraState } = useCamera()
+  const { imageset, setImageset } = useImageset()
 
   const handleStartRecording = () => {
     if (!camera) {
-      throw new Error("Camera is not initialized");
+      throw new Error("Camera is not initialized")
     }
-    camera.stopQrScan();
-    camera.startRecord();
-  };
+    camera.stopQrScan()
+    camera.startRecord()
+  }
 
   const handleStopRecording = async (blob: Blob | null) => {
     if (!blob || !camera) {
-      console.error("Recording failed: Blob is null");
-      return;
+      console.error("Recording failed: Blob is null")
+      return
     }
-    const currentImagesetName = imageset.name;
+    const currentImagesetName = imageset.name
 
     const video: File = {
       id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
-      key: null, // S3 key　=> あればアップロード済み
+      key: null, // S3 key => あればアップロード済み
       idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""),
       idbUrl: null,
       blob: blob,
@@ -47,41 +45,41 @@ const RecordVideoButton: React.FC<RecordVideoButtonProps> = ({
       metadata: {
         status: ImagesetState.DRAFT,
       },
-    };
-    const savedVideo: File = await idb.post(currentImagesetName, video);
+    }
+    const savedVideo: File = await idb.post(currentImagesetName, video)
 
     setImageset((prev) => {
       if (prev.name === currentImagesetName) {
         return {
           ...prev,
           files: [savedVideo!, ...prev.files],
-        };
+        }
       }
-      return prev;
-    });
-    camera.startQrScan();
-    onSaveCompleted();
-  };
+      return prev
+    })
+    camera.startQrScan()
+    onSaveCompleted()
+  }
 
   return (
     camera && (
-      <div className="flex items-center justify-center w-16 h-16 rounded-full shadow-md">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full shadow-md">
         <button
           onClick={async () => {
             if (cameraState.isRecording) {
-              await camera.stopRecord(handleStopRecording);
+              await camera.stopRecord(handleStopRecording)
             } else {
-              handleStartRecording();
+              handleStartRecording()
             }
           }}
           disabled={cameraState.isCapturing}
-          className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-red-200 to-white shadow-inner hover:shadow-lg transition-transform"
+          className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-r from-red-200 to-white shadow-inner transition-transform hover:shadow-lg"
         >
           {cameraState.isRecording ? <StopIcon /> : <RecordIcon />}
         </button>
       </div>
     )
-  );
-};
+  )
+}
 
-export { RecordVideoButton };
+export { RecordVideoButton }

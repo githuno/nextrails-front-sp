@@ -33,8 +33,8 @@
 // イベント名と型の関連付け - アプリケーション全体のイベント定義
 export interface EventMap {
   // 基本的なイベント
-  "app:initialized": { timestamp: number };
-  "app:error": { message: string; code?: number; stack?: string };
+  "app:initialized": { timestamp: number }
+  "app:error": { message: string; code?: number; stack?: string }
   //     // ユーザー関連
   //     "user:login": { userId: string; timestamp: number };
   //     "user:logout": { userId: string; timestamp: number };
@@ -49,42 +49,42 @@ export interface EventMap {
   //     "ui:theme:changed": { theme: "light" | "dark" | "system" };
 
   // カスタムイベント用のフォールバック型
-  [event: string]: any;
+  [event: string]: any
 }
 
 // イベントコールバックの型
-export type EventCallback<T = unknown> = (data: T) => void | Promise<void>;
+export type EventCallback<T = unknown> = (data: T) => void | Promise<void>
 
 // デバッグ関連の型
 interface PubSubDebugInfo {
-  timestamp: number;
-  event: string;
-  data: unknown;
-  subscribersCount: number;
+  timestamp: number
+  event: string
+  data: unknown
+  subscribersCount: number
 }
 
 // PubSubのオプション
 interface PubSubOptions {
-  debug?: boolean;
-  bufferSize?: number;
-  allowWildcards?: boolean;
+  debug?: boolean
+  bufferSize?: number
+  allowWildcards?: boolean
 }
 
 class PubSubManager {
-  private events: Record<string, Set<EventCallback<any>>> = {};
-  private debug: boolean;
-  private eventHistory: PubSubDebugInfo[] = [];
-  private maxBufferSize: number;
-  private allowWildcards: boolean;
-  private wildcardSubscriptions: Map<string, Set<EventCallback<any>>> =
-    new Map();
-  private subscriptionTimes: Map<string, Map<EventCallback<any>, number>> =
-    new Map();
+  // サーバー環境かどうかを判定するフラグを追加
+  private isServer = typeof window === "undefined"
+  private events: Record<string, Set<EventCallback<any>>> = {}
+  private debug: boolean
+  private eventHistory: PubSubDebugInfo[] = []
+  private maxBufferSize: number
+  private allowWildcards: boolean
+  private wildcardSubscriptions: Map<string, Set<EventCallback<any>>> = new Map()
+  private subscriptionTimes: Map<string, Map<EventCallback<any>, number>> = new Map()
   // コンストラクタ
   constructor(options: PubSubOptions = {}) {
-    this.debug = options.debug || false;
-    this.maxBufferSize = options.bufferSize || 100;
-    this.allowWildcards = options.allowWildcards || true;
+    this.debug = options.debug || false
+    this.maxBufferSize = options.bufferSize || 100
+    this.allowWildcards = options.allowWildcards || true
   }
 
   /**
@@ -109,60 +109,57 @@ class PubSubManager {
    * // 購読解除
    * unsubscribe();
    */
-  on<K extends keyof EventMap>(
-    event: K,
-    callback: EventCallback<EventMap[K]>
-  ): () => void {
-    if (!event) throw new Error("Event name is required");
-    if (!callback) throw new Error("Callback is required");
+  on<K extends keyof EventMap>(event: K, callback: EventCallback<EventMap[K]>): () => void {
+    if (!event) throw new Error("Event name is required")
+    if (!callback) throw new Error("Callback is required")
 
     // ワイルドカードパターン処理
     if (this.allowWildcards && String(event).includes("*")) {
-      const pattern = String(event);
+      const pattern = String(event)
       if (!this.wildcardSubscriptions.has(pattern)) {
-        this.wildcardSubscriptions.set(pattern, new Set());
+        this.wildcardSubscriptions.set(pattern, new Set())
       }
-      this.wildcardSubscriptions.get(pattern)!.add(callback);
+      this.wildcardSubscriptions.get(pattern)!.add(callback)
 
       if (this.debug) {
-        console.debug(`[PubSub] Subscribed to wildcard pattern: ${pattern}`);
+        console.debug(`[PubSub] Subscribed to wildcard pattern: ${pattern}`)
       }
 
       // 解除関数を返す
       return () => {
-        const subscribers = this.wildcardSubscriptions.get(pattern);
+        const subscribers = this.wildcardSubscriptions.get(pattern)
         if (subscribers) {
-          subscribers.delete(callback);
+          subscribers.delete(callback)
           if (subscribers.size === 0) {
-            this.wildcardSubscriptions.delete(pattern);
+            this.wildcardSubscriptions.delete(pattern)
           }
         }
-      };
+      }
     }
 
     // 通常のイベント購読
     if (!this.events[event as string]) {
-      this.events[event as string] = new Set();
+      this.events[event as string] = new Set()
     }
-    this.events[event as string].add(callback);
+    this.events[event as string].add(callback)
 
     if (this.debug) {
-      console.debug(`[PubSub] Subscribed to event: ${String(event)}`);
+      console.debug(`[PubSub] Subscribed to event: ${String(event)}`)
     }
 
     // 購読時間を記録
-    const eventStr = event as string;
+    const eventStr = event as string
     if (!this.subscriptionTimes.has(eventStr)) {
-      this.subscriptionTimes.set(eventStr, new Map());
+      this.subscriptionTimes.set(eventStr, new Map())
     }
-    this.subscriptionTimes.get(eventStr)!.set(callback, Date.now());
+    this.subscriptionTimes.get(eventStr)!.set(callback, Date.now())
 
     // 解除関数を拡張
     return () => {
-      this.off(event, callback);
+      this.off(event, callback)
       // 解除時に購読時間情報も削除
-      this.subscriptionTimes.get(eventStr)?.delete(callback);
-    };
+      this.subscriptionTimes.get(eventStr)?.delete(callback)
+    }
   }
 
   /**
@@ -172,42 +169,37 @@ class PubSubManager {
    * @param event - イベント名
    * @param callback - 解除するコールバック関数
    */
-  off<K extends keyof EventMap>(
-    event: K,
-    callback: EventCallback<EventMap[K]>
-  ): void {
-    const eventStr = event as string;
+  off<K extends keyof EventMap>(event: K, callback: EventCallback<EventMap[K]>): void {
+    const eventStr = event as string
 
     // ワイルドカードパターン処理
     if (this.allowWildcards && eventStr.includes("*")) {
-      const pattern = eventStr;
-      const subscribers = this.wildcardSubscriptions.get(pattern);
+      const pattern = eventStr
+      const subscribers = this.wildcardSubscriptions.get(pattern)
       if (subscribers) {
-        subscribers.delete(callback);
+        subscribers.delete(callback)
         if (subscribers.size === 0) {
-          this.wildcardSubscriptions.delete(pattern);
+          this.wildcardSubscriptions.delete(pattern)
         }
       }
-      return;
+      return
     }
 
     // 通常のイベント解除
     if (!this.events[eventStr]) {
       if (this.debug) {
-        console.warn(
-          `[PubSub] Attempted to remove callback for non-existing event: ${eventStr}`
-        );
+        console.warn(`[PubSub] Attempted to remove callback for non-existing event: ${eventStr}`)
       }
-      return;
+      return
     }
 
-    this.events[eventStr].delete(callback);
+    this.events[eventStr].delete(callback)
     if (this.events[eventStr].size === 0) {
-      delete this.events[eventStr];
+      delete this.events[eventStr]
     }
 
     if (this.debug) {
-      console.debug(`[PubSub] Unsubscribed from event: ${eventStr}`);
+      console.debug(`[PubSub] Unsubscribed from event: ${eventStr}`)
     }
   }
 
@@ -228,67 +220,61 @@ class PubSubManager {
    * await pubSub.emit('data:loaded', { source: 'api', items: [] });
    * console.log('All event handlers have completed');
    */
-  async emit<K extends keyof EventMap>(
-    event: K,
-    data: EventMap[K]
-  ): Promise<void> {
-    const eventStr = event as string;
-    const promises: Promise<void>[] = [];
-    let subscribersCount = 0;
+  async emit<K extends keyof EventMap>(event: K, data: EventMap[K]): Promise<void> {
+    // サーバー環境では何もしない
+    if (this.isServer) return
+
+    const eventStr = event as string
+    const promises: Promise<void>[] = []
+    let subscribersCount = 0
 
     // デバッグ情報の記録
     if (this.debug) {
-      this.recordEvent(eventStr, data);
+      this.recordEvent(eventStr, data)
     }
 
     // 通常のイベント処理
     if (this.events[eventStr]) {
-      subscribersCount += this.events[eventStr].size;
+      subscribersCount += this.events[eventStr].size
       this.events[eventStr].forEach((callback) => {
         try {
-          const result = callback(data);
+          const result = callback(data)
           if (result instanceof Promise) {
-            promises.push(result);
+            promises.push(result)
           }
         } catch (error) {
-          console.error(
-            `[PubSub] Error executing callback for event ${eventStr}:`,
-            error
-          );
+          console.error(`[PubSub] Error executing callback for event ${eventStr}:`, error)
         }
-      });
+      })
     }
 
     // ワイルドカードパターン処理
     if (this.allowWildcards) {
       this.wildcardSubscriptions.forEach((subscribers, pattern) => {
         if (this.matchesWildcard(eventStr, pattern)) {
-          subscribersCount += subscribers.size;
+          subscribersCount += subscribers.size
           subscribers.forEach((callback) => {
             try {
-              const result = callback(data);
+              const result = callback(data)
               if (result instanceof Promise) {
-                promises.push(result);
+                promises.push(result)
               }
             } catch (error) {
-              console.error(
-                `[PubSub] Error executing wildcard callback (${pattern}) for event ${eventStr}:`,
-                error
-              );
+              console.error(`[PubSub] Error executing wildcard callback (${pattern}) for event ${eventStr}:`, error)
             }
-          });
+          })
         }
-      });
+      })
     }
 
     // 購読者がいない場合の警告
     if (subscribersCount === 0 && this.debug) {
-      console.warn(`[PubSub] No subscribers for event: ${eventStr}`);
+      console.warn(`[PubSub] No subscribers for event: ${eventStr}`)
     }
 
     // すべての非同期コールバックが完了するのを待つ
     if (promises.length > 0) {
-      await Promise.all(promises);
+      await Promise.all(promises)
     }
   }
 
@@ -309,20 +295,17 @@ class PubSubManager {
    * // 必要に応じて手動解除も可能
    * unsubscribe();
    */
-  once<K extends keyof EventMap>(
-    event: K,
-    callback: EventCallback<EventMap[K]>
-  ): () => void {
+  once<K extends keyof EventMap>(event: K, callback: EventCallback<EventMap[K]>): () => void {
     // ワンタイム実行のラッパー関数
     const wrapper: EventCallback<EventMap[K]> = (data) => {
       // 先に購読解除してから実行（エラーが発生しても確実に解除される）
-      unsubscribe();
-      return callback(data);
-    };
+      unsubscribe()
+      return callback(data)
+    }
 
     // 購読と購読解除関数の取得
-    const unsubscribe = this.on(event, wrapper);
-    return unsubscribe;
+    const unsubscribe = this.on(event, wrapper)
+    return unsubscribe
   }
 
   /**
@@ -342,29 +325,26 @@ class PubSubManager {
    *   console.log('Timed out waiting for login');
    * }
    */
-  waitFor<K extends keyof EventMap>(
-    event: K,
-    timeout: number = 0
-  ): Promise<EventMap[K]> {
+  waitFor<K extends keyof EventMap>(event: K, timeout: number = 0): Promise<EventMap[K]> {
     return new Promise((resolve, reject) => {
-      let timeoutId: number | null = null;
+      let timeoutId: number | null = null
 
       // イベント発生時の処理
       const unsubscribe = this.once(event, (data: EventMap[K]) => {
         if (timeoutId !== null) {
-          clearTimeout(timeoutId);
+          clearTimeout(timeoutId)
         }
-        resolve(data);
-      });
+        resolve(data)
+      })
 
       // タイムアウト処理
       if (timeout > 0) {
         timeoutId = window.setTimeout(() => {
-          unsubscribe();
-          reject(new Error(`Timeout waiting for event: ${String(event)}`));
-        }, timeout);
+          unsubscribe()
+          reject(new Error(`Timeout waiting for event: ${String(event)}`))
+        }, timeout)
       }
-    });
+    })
   }
 
   /**
@@ -379,33 +359,27 @@ class PubSubManager {
     // 通常のイベント購読を解除
     Object.keys(this.events).forEach((eventName) => {
       if (eventName.startsWith(namespace)) {
-        delete this.events[eventName];
+        delete this.events[eventName]
       }
-    });
+    })
 
     // ワイルドカードイベント購読も解除
     if (this.allowWildcards) {
       this.wildcardSubscriptions.forEach((_, pattern) => {
         if (pattern.startsWith(namespace) || pattern === namespace + "*") {
-          this.wildcardSubscriptions.delete(pattern);
+          this.wildcardSubscriptions.delete(pattern)
         }
-      });
+      })
     }
     // デバッグモードが有効な場合、解除したイベントをログに記録
     if (this.debug) {
-      console.debug(
-        `[PubSub] Cleared all subscriptions for namespace: ${namespace}`
-      );
+      console.debug(`[PubSub] Cleared all subscriptions for namespace: ${namespace}`)
     }
     // イベント履歴もクリア
-    this.eventHistory = this.eventHistory.filter(
-      (eventInfo) => !eventInfo.event.startsWith(namespace)
-    );
+    this.eventHistory = this.eventHistory.filter((eventInfo) => !eventInfo.event.startsWith(namespace))
     // デバッグモードが有効な場合、クリアしたイベント履歴をログに記録
     if (this.debug) {
-      console.debug(
-        `[PubSub] Cleared all subscriptions in namespace: ${namespace}`
-      );
+      console.debug(`[PubSub] Cleared all subscriptions in namespace: ${namespace}`)
     }
   }
 
@@ -413,12 +387,12 @@ class PubSubManager {
    * PubSubの状態をリセットします（主にテスト用）
    */
   reset(): void {
-    this.events = {};
-    this.eventHistory = [];
-    this.wildcardSubscriptions.clear();
+    this.events = {}
+    this.eventHistory = []
+    this.wildcardSubscriptions.clear()
 
     if (this.debug) {
-      console.debug("[PubSub] Reset completed");
+      console.debug("[PubSub] Reset completed")
     }
   }
 
@@ -427,10 +401,10 @@ class PubSubManager {
    */
   getEventHistory(): PubSubDebugInfo[] {
     if (!this.debug) {
-      console.warn("[PubSub] Event history is only available in debug mode");
-      return [];
+      console.warn("[PubSub] Event history is only available in debug mode")
+      return []
     }
-    return [...this.eventHistory];
+    return [...this.eventHistory]
   }
 
   /**
@@ -439,114 +413,109 @@ class PubSubManager {
    */
   getRecentEvents(count: number = 10): PubSubDebugInfo[] {
     if (!this.debug) {
-      return [];
+      return []
     }
-    return this.eventHistory.slice(-count);
+    return this.eventHistory.slice(-count)
   }
 
   /**
    * メモリリークの可能性があるリスナーを検出します（デバッグモードが有効な場合のみ）
    * @param thresholdMs - リークと見なす閾値（ミリ秒）
    */
-  detectPotentialLeaks(
-    thresholdMs: number = 3600000
-  ): Array<{ event: string; duration: number }> {
-    if (!this.debug) return [];
+  detectPotentialLeaks(thresholdMs: number = 3600000): Array<{ event: string; duration: number }> {
+    if (!this.debug) return []
 
-    const now = Date.now();
-    const potentialLeaks: Array<{ event: string; duration: number }> = [];
+    const now = Date.now()
+    const potentialLeaks: Array<{ event: string; duration: number }> = []
 
     this.subscriptionTimes.forEach((callbacks, event) => {
       callbacks.forEach((timestamp, callback) => {
-        const duration = now - timestamp;
+        const duration = now - timestamp
         if (duration > thresholdMs) {
-          potentialLeaks.push({ event, duration });
-          console.warn(
-            `[PubSub] Potential memory leak: event "${event}" has been subscribed for ${duration}ms`
-          );
+          potentialLeaks.push({ event, duration })
+          console.warn(`[PubSub] Potential memory leak: event "${event}" has been subscribed for ${duration}ms`)
         }
-      });
-    });
+      })
+    })
 
-    return potentialLeaks;
+    return potentialLeaks
   }
 
   /**
    * 現在のサブスクライバー数を取得します。
    */
   getSubscribersCount(): Record<string, number> {
-    const counts: Record<string, number> = {};
+    const counts: Record<string, number> = {}
 
     // 通常のイベント
     Object.entries(this.events).forEach(([event, subscribers]) => {
-      counts[event] = subscribers.size;
-    });
+      counts[event] = subscribers.size
+    })
 
     // ワイルドカードイベント
     if (this.allowWildcards) {
       this.wildcardSubscriptions.forEach((subscribers, pattern) => {
-        counts[`[wildcard] ${pattern}`] = subscribers.size;
-      });
+        counts[`[wildcard] ${pattern}`] = subscribers.size
+      })
     }
 
-    return counts;
+    return counts
   }
 
   // ワイルドカードパターンとイベント名のマッチングを行う
   private matchesWildcard(eventName: string, pattern: string): boolean {
     if (!pattern.includes("*")) {
-      return eventName === pattern;
+      return eventName === pattern
     }
 
     const regexPattern = pattern
       .replace(/\./g, "\\.") // ドットをエスケープ
-      .replace(/\*/g, ".*"); // * を .* に置換
+      .replace(/\*/g, ".*") // * を .* に置換
 
-    const regex = new RegExp(`^${regexPattern}$`);
-    return regex.test(eventName);
+    const regex = new RegExp(`^${regexPattern}$`)
+    return regex.test(eventName)
   }
 
   // イベント履歴を記録（デバッグモード用）
   private recordEvent(event: string, data: unknown): void {
-    if (!this.debug) return;
+    if (!this.debug) return
 
-    const subscribersCount =
-      (this.events[event]?.size || 0) + this.getWildcardSubscribersCount(event);
+    const subscribersCount = (this.events[event]?.size || 0) + this.getWildcardSubscribersCount(event)
 
     this.eventHistory.push({
       timestamp: Date.now(),
       event,
       data,
       subscribersCount,
-    });
+    })
 
     // バッファサイズを制限
     if (this.eventHistory.length > this.maxBufferSize) {
-      this.eventHistory = this.eventHistory.slice(-this.maxBufferSize);
+      this.eventHistory = this.eventHistory.slice(-this.maxBufferSize)
     }
   }
 
   // 特定のイベントに一致するワイルドカードサブスクライバーの数を取得
   private getWildcardSubscribersCount(event: string): number {
-    if (!this.allowWildcards) return 0;
+    if (!this.allowWildcards) return 0
 
-    let count = 0;
+    let count = 0
     this.wildcardSubscriptions.forEach((subscribers, pattern) => {
       if (this.matchesWildcard(event, pattern)) {
-        count += subscribers.size;
+        count += subscribers.size
       }
-    });
+    })
 
-    return count;
+    return count
   }
 }
 
 // デフォルトのインスタンスをエクスポート
 export const pubSub = new PubSubManager({
   debug: process.env.NODE_ENV === "development",
-});
+})
 
 // テスト用のインスタンス生成関数
 export function createPubSub(options?: PubSubOptions): PubSubManager {
-  return new PubSubManager(options);
+  return new PubSubManager(options)
 }

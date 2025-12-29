@@ -1,36 +1,36 @@
-import React, { useEffect, useState } from "react";
-import { Modal } from "@/components/atoms";
-import { useCamera } from "@/components/camera/_utils";
+import { Modal } from "@/components/atoms"
+import { useCamera } from "@/components/camera/_utils"
+import { useEffect, useState } from "react"
 
 const ModalWebview = () => {
-  const { camera, cameraState } = useCamera();
-  const [isUrlValid, setIsUrlValid] = useState<boolean>(false);
+  const { camera, cameraState } = useCamera()
+  const [isUrlValid, setIsUrlValid] = useState<boolean>(false)
 
   useEffect(() => {
     const checkURL = () => {
-      if (!cameraState.scannedData) return;
+      if (!cameraState.scannedData) return
       try {
-        const url = new URL(cameraState.scannedData);
+        const url = new URL(cameraState.scannedData)
         if (url.protocol === "http:" || url.protocol === "https:") {
-          console.log("url.protocol", url.protocol);
-          setIsUrlValid(true);
+          console.log("url.protocol", url.protocol)
+          setIsUrlValid(true)
         } else {
-          alert(cameraState.scannedData);
-          setIsUrlValid(false);
-          camera?.clearScannedData();
+          alert(cameraState.scannedData)
+          setIsUrlValid(false)
+          camera?.clearScannedData()
         }
       } catch (e) {
-        alert(cameraState.scannedData);
-        setIsUrlValid(false);
-        camera?.clearScannedData();
+        alert(cameraState.scannedData)
+        setIsUrlValid(false)
+        camera?.clearScannedData()
       }
-    };
+    }
 
-    checkURL();
+    checkURL()
     return () => {
-      setIsUrlValid(false);
-    };
-  }, [cameraState.scannedData]);
+      setIsUrlValid(false)
+    }
+  }, [cameraState.scannedData])
 
   // IDBの連携サービスデータとサービスキーを突合 →
   // サービスキーにない場合はアラートを出す → ここでサービス連携を促すためのロジックが必要
@@ -45,18 +45,18 @@ const ModalWebview = () => {
         id="webview"
         isOpen={isUrlValid}
         onClose={() => {
-          camera?.clearScannedData();
+          camera?.clearScannedData()
         }}
-        className="bg-white w-full h-full"
+        className="h-full w-full bg-white"
       >
         <iframe
           src={`/api/proxy/qr?url=${encodeURIComponent(cameraState.scannedData)}`}
-          className="absolute inset-0 w-full h-full"
+          className="absolute inset-0 h-full w-full"
           title="Webview"
         />
       </Modal>
     )
-  );
-};
+  )
+}
 
-export { ModalWebview };
+export { ModalWebview }

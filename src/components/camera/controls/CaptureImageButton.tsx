@@ -1,49 +1,40 @@
-import React from "react";
-import { useStorage } from "@/components/storage";
-import { useImageset, File, ImagesetState } from "@/components/camera";
-import {
-  LoadingSpinner,
-  CameraIcon,
-  useCamera,
-} from "@/components/camera/_utils";
+import { File, ImagesetState, useImageset } from "@/components/camera"
+import { CameraIcon, LoadingSpinner, useCamera } from "@/components/camera/_utils"
+import { useStorage } from "@/components/storage"
+import React from "react"
 
-const base64ToBlob = (
-  base64: string,
-  contentType: string = "image/png"
-): Blob => {
-  const byteCharacters = atob(base64.split(",")[1]);
-  const byteNumbers = new Array(byteCharacters.length)
-    .fill(0)
-    .map((_, i) => byteCharacters.charCodeAt(i));
-  const byteArray = new Uint8Array(byteNumbers);
-  return new Blob([byteArray], { type: contentType });
-};
+const base64ToBlob = (base64: string, contentType: string = "image/png"): Blob => {
+  const byteCharacters = atob(base64.split(",")[1])
+  const byteNumbers = new Array(byteCharacters.length).fill(0).map((_, i) => byteCharacters.charCodeAt(i))
+  const byteArray = new Uint8Array(byteNumbers)
+  return new Blob([byteArray], { type: contentType })
+}
 // const base64ToBlob = async (base64: string): Promise<Blob> => {
 //   const response = await fetch(base64);
 //   return await response.blob();
 // };
 
 interface CaptureImageButtonProps {
-  onSaved: () => void;
+  onSaved: () => void
 }
 
 const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
-  const { idb } = useStorage();
-  const { camera, cameraState } = useCamera();
-  const { imageset, setImageset } = useImageset();
+  const { idb } = useStorage()
+  const { camera, cameraState } = useCamera()
+  const { imageset, setImageset } = useImageset()
 
   const handleCaptureImage = async (url: string | null) => {
     if (!url) {
-      console.error("Capture failed: URL is null");
-      return;
+      console.error("Capture failed: URL is null")
+      return
     }
     // 画像セット名を取得
-    const currentImagesetName = imageset.name;
+    const currentImagesetName = imageset.name
 
     // 一時的に dataUrl を idbUrl として設定
     const tempImage: File = {
       id: null, // DB用のID => あればDBに登録済み ※idbではこれは使わずidbIdを使用する
-      key: null, // S3 key　=> あればアップロード済み
+      key: null, // S3 key => あればアップロード済み
       idbId: new Date().toISOString().replace(/[-:.TZ]/g, ""), // IDB用のIDを現在時刻から生成
       idbUrl: url,
       blob: null,
@@ -59,7 +50,7 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
       metadata: {
         status: ImagesetState.DRAFT,
       },
-    };
+    }
 
     // 一時的に保存した画像を imageset に追加
     setImageset((prev) => {
@@ -67,12 +58,12 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
         return {
           ...prev,
           files: [tempImage, ...prev.files],
-        };
+        }
       }
-      return prev;
-    });
+      return prev
+    })
 
-    const blob = base64ToBlob(url);
+    const blob = base64ToBlob(url)
 
     // IDBに保存
     const savedImage: File = await idb.post(imageset.name, {
@@ -80,35 +71,33 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
       idbUrl: null, // 一時的な dataUrl は削除
       blob: blob,
       size: blob.size,
-    });
+    })
     // 戻り値でimagesetを更新
     setImageset((prev) => {
       if (prev.name === currentImagesetName) {
         return {
           ...prev,
-          files: prev.files.map((file) =>
-            file.idbId === tempImage.idbId ? savedImage : file
-          ),
-        };
+          files: prev.files.map((file) => (file.idbId === tempImage.idbId ? savedImage : file)),
+        }
       }
-      return prev;
-    });
-    onSaved();
-  };
+      return prev
+    })
+    onSaved()
+  }
 
   return (
     camera && (
-      <div className="flex items-center justify-center w-16 h-16 rounded-full shadow-md">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full shadow-md">
         <button
           onClick={async () => await camera.capture(handleCaptureImage)}
           disabled={cameraState.isCapturing}
-          className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-blue-200 to-white shadow-inner hover:shadow-lg transition-transform"
+          className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-200 to-white shadow-inner transition-transform hover:shadow-lg"
         >
           {cameraState.isCapturing ? <LoadingSpinner /> : <CameraIcon />}
         </button>
       </div>
     )
-  );
-};
+  )
+}
 
-export { CaptureImageButton };
+export { CaptureImageButton }

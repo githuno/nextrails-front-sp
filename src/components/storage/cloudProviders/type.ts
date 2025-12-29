@@ -1,21 +1,21 @@
-import { UserSession } from "@/app/(frontend)/page";
+import { UserSession } from "@/app/(frontend)/(public)/home/page"
 export interface StorageSession {
-  uuid: string;
-  type: ProviderType;
+  uuid: string
+  type: ProviderType
 }
 export interface Session {
-  user: UserSession | null;
-  storage: StorageSession | null;
+  user: UserSession | null
+  storage: StorageSession | null
 }
 
 // GITHUB | ONEDRIVE | GDRIVE | DROPBOX | BOX | NATIVE(R2)
-export type ProviderType = "NATIVE" | "GDRIVE";
+export type ProviderType = "NATIVE" | "GDRIVE"
 
 export interface CloudState {
-  isUploading: string[];
-  isDownloading: string[];
-  isDeleting: string[];
-  isChecking: boolean;
+  isUploading: string[]
+  isDownloading: string[]
+  isDeleting: string[]
+  isChecking: boolean
 }
 
 // 共通のレスポンス型を定義
@@ -26,19 +26,14 @@ export interface CloudState {
 // }
 
 export interface CloudManager {
-  state: CloudState;
-  connect(storage: { uuid: string }): Promise<void>;
-  session(): Promise<boolean>;
-  disconnect(): Promise<void>;
-  upload(params: {
-    storagePath: string;
-    fileId: string;
-    filePath: string;
-    contentType?: string;
-  }): Promise<string>;
-  download(params: { keys: string[] }): Promise<Blob[]>;
+  state: CloudState
+  connect(storage: { uuid: string }): Promise<void>
+  session(): Promise<boolean>
+  disconnect(): Promise<void>
+  upload(params: { storagePath: string; fileId: string; filePath: string; contentType?: string }): Promise<string>
+  download(params: { keys: string[] }): Promise<Blob[]>
   // delete(params: { keys: string[] }): Promise<void>;
 
   // 固有のメソッドを追加可能
-  [key: string]: any;
+  [key: string]: any
 }

@@ -1,8 +1,8 @@
-import { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import Script from "next/script";
-import ClientProviders from "./layoutClient";
+import { Metadata } from "next"
+import { Inter } from "next/font/google"
+import Script from "next/script"
+import { ReactNode } from "react"
+import "./globals.css"
 
 export const metadata: Metadata = {
   title: "Worker Demo",
@@ -10,25 +10,22 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.ico",
   },
-};
-const inter = Inter({ subsets: ["latin"] });
+}
+const inter = Inter({ subsets: ["latin"] })
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ja">
-      <body className={inter.className}>
+      <head>
         {process.env.NODE_ENV === "development" && (
-          <Script 
-            src="https://unpkg.com/react-scan/dist/auto.global.js" 
+          <Script
+            src="//unpkg.com/react-scan/dist/auto.global.js"
             strategy="afterInteractive"
+            crossOrigin="anonymous"
           />
         )}
-        <ClientProviders>{children}</ClientProviders>
-      </body>
+      </head>
+      <body className={inter.className}>{children}</body>
     </html>
-  );
+  )
 }

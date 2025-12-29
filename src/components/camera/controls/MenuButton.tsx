@@ -1,24 +1,24 @@
-import React from "react";
-import { MenuIcon, useCamera } from "@/components/camera/_utils";
+import { MenuIcon, useCamera } from "@/components/camera/_utils"
+import React from "react"
 
 interface MenuButtonProps {}
 
 const MenuButton: React.FC<MenuButtonProps> = () => {
-  const { cameraState } = useCamera();
+  const { cameraState } = useCamera()
 
   return (
-    <div className="flex items-center justify-center w-14 h-14 rounded-full shadow-md">
+    <div className="flex h-14 w-14 items-center justify-center rounded-full shadow-md">
       <button
         onClick={() => {
-          alert("Open menu");
+          alert("Open menu")
         }}
-        disabled={(!cameraState.isScanning && !!cameraState.isAvailable)}
-        className="w-full h-full flex items-center justify-center rounded-full bg-gradient-to-r from-slate-200 to-yellow-100 shadow-inner hover:shadow-lg transition-transform"
+        disabled={!cameraState.isScanning && !!cameraState.isAvailable}
+        className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-r from-slate-200 to-yellow-100 shadow-inner transition-transform hover:shadow-lg"
       >
         <MenuIcon />
       </button>
     </div>
-  );
-};
+  )
+}
 
-export { MenuButton };
+export { MenuButton }

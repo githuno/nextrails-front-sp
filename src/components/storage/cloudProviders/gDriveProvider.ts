@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
-import { apiFetch } from "@/hooks/useFetch";
-import { CloudManager, CloudState } from "./type";
+import { apiFetch } from "@/hooks/useFetch"
+import { useRef, useState } from "react"
+import { CloudManager, CloudState } from "./type"
 
 // Google関連のエンドポイント
 const ENDPOINTS = {
@@ -17,10 +17,10 @@ const ENDPOINTS = {
     FOLDER: `/storages/gdrive/folder`,
     PUBLISH: `/storages/gdrive/publish`,
   },
-} as const;
+} as const
 
 interface GDriveOptions {
-  endpoint: string;
+  endpoint: string
 }
 
 class GDriveManager implements CloudManager {
@@ -29,85 +29,80 @@ class GDriveManager implements CloudManager {
     isUploading: [],
     isDownloading: [],
     isDeleting: [],
-  };
-  private setState: React.Dispatch<React.SetStateAction<CloudState>>;
-  private endpoint: string;
-  private authWindow: Window | null = null;
+  }
+  private setState: React.Dispatch<React.SetStateAction<CloudState>>
+  private endpoint: string
+  private authWindow: Window | null = null
 
-  constructor(
-    setState: React.Dispatch<React.SetStateAction<CloudState>>,
-    options: GDriveOptions
-  ) {
-    this.setState = setState;
-    this.endpoint = options.endpoint;
-    this.setState(this.state);
+  constructor(setState: React.Dispatch<React.SetStateAction<CloudState>>, options: GDriveOptions) {
+    this.setState = setState
+    this.endpoint = options.endpoint
+    this.setState(this.state)
   }
   private updateState(newState: Partial<CloudState>) {
     this.setState((prevState) => {
-      const nextState = { ...prevState, ...newState };
-      this.state = nextState;
-      return nextState;
-    });
+      const nextState = { ...prevState, ...newState }
+      this.state = nextState
+      return nextState
+    })
   }
 
   async connect(storage: { uuid: string }): Promise<void> {
     try {
       const queryParams = new URLSearchParams({
         uuid: storage.uuid,
-      }).toString();
+      }).toString()
 
       // Google認証開始前にユーザーアクションを待つ
       await new Promise<void>((resolve) => {
         // ユーザーアクションを必要とするクリックイベントを作成
-        const button = document.createElement("button");
-        button.style.display = "none";
-        document.body.appendChild(button);
+        const button = document.createElement("button")
+        button.style.display = "none"
+        document.body.appendChild(button)
 
         button.onclick = async () => {
           try {
-            await this.openAuthWindow(queryParams);
-            resolve();
+            await this.openAuthWindow(queryParams)
+            resolve()
           } catch (error) {
-            console.error("Auth window error:", error);
+            console.error("Auth window error:", error)
           } finally {
-            button.remove();
+            button.remove()
           }
-        };
+        }
 
-        button.click();
-      });
+        button.click()
+      })
     } catch (error) {
-      console.error("GDrive connection error:", error);
-      throw error;
+      console.error("GDrive connection error:", error)
+      throw error
     }
   }
 
   async session(): Promise<boolean> {
     try {
-      this.updateState({ isChecking: true });
-      const statusResponse = await apiFetch<{ isConnected: boolean }>(
-        ENDPOINTS.AUTH.STATUS
-      );
-      return statusResponse.isConnected;
+      this.updateState({ isChecking: true })
+      const statusResponse = await apiFetch<{ isConnected: boolean }>(ENDPOINTS.AUTH.STATUS)
+      return statusResponse.isConnected
     } catch (error) {
-      console.error("Status check failed:", error);
-      return false;
+      console.error("Status check failed:", error)
+      return false
     } finally {
-      this.updateState({ isChecking: false });
+      this.updateState({ isChecking: false })
     }
   }
 
   async disconnect(): Promise<void> {
     try {
-      await apiFetch(ENDPOINTS.AUTH.OFF, { method: "POST" });
+      await apiFetch(ENDPOINTS.AUTH.OFF, { method: "POST" })
       this.updateState({
         isUploading: [],
         isDownloading: [],
         isDeleting: [],
-      });
+      })
     } catch (error) {
-      console.error("GDrive disconnection error:", error);
-      throw error;
+      console.error("GDrive disconnection error:", error)
+      throw error
     }
   }
 
@@ -116,22 +111,22 @@ class GDriveManager implements CloudManager {
     fileId,
     filePath,
   }: {
-    storagePath: string;
-    fileId: string;
-    filePath: string;
+    storagePath: string
+    fileId: string
+    filePath: string
   }): Promise<string> {
-    this.updateState({ isUploading: [...this.state.isUploading, fileId] });
+    this.updateState({ isUploading: [...this.state.isUploading, fileId] })
 
     // storagepathの末尾を除いた部分をフォルダパスとして取得
-    const folderPath = storagePath.split("/").slice(0, -1).join("/");
+    const folderPath = storagePath.split("/").slice(0, -1).join("/")
     // storagepathの末尾（拡張子除く）をファイル名として取得
     // const filename = storagePath.split("/").pop()?.split(".")[0] || "unnamed";
 
     try {
       // 1. フォルダを作成または検索
       const folderResponse = await apiFetch<{
-        folderId: string;
-        isExisting: boolean;
+        folderId: string
+        isExisting: boolean
       }>(ENDPOINTS.DRIVE.FOLDER, {
         method: "POST",
         body: JSON.stringify({
@@ -139,26 +134,26 @@ class GDriveManager implements CloudManager {
           // フォルダパスを配列として送信
           folderPath: folderPath.split("/").filter(Boolean),
         }),
-      });
+      })
 
       // 2. ファイルをアップロード
-      const formData = new FormData();
-      const response = await fetch(filePath);
-      const blob = await response.blob();
+      const formData = new FormData()
+      const response = await fetch(filePath)
+      const blob = await response.blob()
       // ファイル名はパスの最後の部分を使用
-      const fileName = storagePath.split("/").pop() || "unnamed";
-      formData.append("file", blob, fileName);
-      formData.append("folderId", folderResponse.folderId);
+      const fileName = storagePath.split("/").pop() || "unnamed"
+      formData.append("file", blob, fileName)
+      formData.append("folderId", folderResponse.folderId)
 
       const uploadResponse = await apiFetch<{
-        fileId: string;
-        webViewLink?: string; //TODO: 返ってきてない
+        fileId: string
+        webViewLink?: string //TODO: 返ってきてない
       }>(ENDPOINTS.DRIVE.UPLOAD, {
         method: "POST",
         body: formData,
-      });
+      })
       // uploadResponseにはgoogleのfileIdが格納される
-      console.log("Uploaded to GDrive:", uploadResponse);
+      console.log("Uploaded to GDrive:", uploadResponse)
 
       // TODO：IDB上のkey/id/idbidの関係整理
       // idはバックエンドのuuid、
@@ -167,16 +162,16 @@ class GDriveManager implements CloudManager {
       // つまりここで返すべきはkeyのみ
 
       // storagepathの末尾（拡張子除く）を
-      const key = `gdrive/${uploadResponse.fileId}`;
+      const key = `gdrive/${uploadResponse.fileId}`
 
-      return key;
+      return key
     } catch (error) {
-      console.error("Error uploading to GDrive:", error);
-      throw error;
+      console.error("Error uploading to GDrive:", error)
+      throw error
     } finally {
       this.updateState({
         isUploading: this.state.isUploading.filter((id) => id !== fileId),
-      });
+      })
     }
   }
 
@@ -221,17 +216,15 @@ class GDriveManager implements CloudManager {
   // }
 
   async download({ keys }: { keys: string[] }): Promise<Blob[]> {
-    this.updateState({ isDownloading: [...this.state.isDownloading, ...keys] });
+    this.updateState({ isDownloading: [...this.state.isDownloading, ...keys] })
     try {
-      const fileIds = keys.map((key) => key.replace("gdrive/", ""));
+      const fileIds = keys.map((key) => key.replace("gdrive/", ""))
 
       // まずバックエンドからアクセストークンを取得
-      const { accessToken } = await apiFetch<{ accessToken: string }>(
-        ENDPOINTS.AUTH.TOKEN
-      );
+      const { accessToken } = await apiFetch<{ accessToken: string }>(ENDPOINTS.AUTH.TOKEN)
 
       const downloadPromises = fileIds.map(async (fileId) => {
-        const downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+        const downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
 
         // 取得したアクセストークンをAuthorizationヘッダーに設定
         const response = await fetch(downloadUrl, {
@@ -239,25 +232,23 @@ class GDriveManager implements CloudManager {
             Authorization: `Bearer ${accessToken}`,
             Accept: "application/json",
           },
-        });
+        })
 
         if (!response.ok) {
-          throw new Error(`Failed to download file: ${response.statusText}`);
+          throw new Error(`Failed to download file: ${response.statusText}`)
         }
 
-        return response.blob();
-      });
+        return response.blob()
+      })
 
-      return Promise.all(downloadPromises);
+      return Promise.all(downloadPromises)
     } catch (error) {
-      console.error("Error downloading from GDrive:", error);
-      throw error;
+      console.error("Error downloading from GDrive:", error)
+      throw error
     } finally {
       this.updateState({
-        isDownloading: this.state.isDownloading.filter(
-          (key) => !keys.includes(key)
-        ),
-      });
+        isDownloading: this.state.isDownloading.filter((key) => !keys.includes(key)),
+      })
     }
   }
 
@@ -266,10 +257,10 @@ class GDriveManager implements CloudManager {
       await apiFetch<{ success: boolean }>(ENDPOINTS.DRIVE.PUBLISH, {
         method: "POST",
         body: JSON.stringify({ folderId }),
-      });
+      })
     } catch (error) {
-      console.error("Error sharing folder:", error);
-      throw error;
+      console.error("Error sharing folder:", error)
+      throw error
     }
   }
 
@@ -278,19 +269,19 @@ class GDriveManager implements CloudManager {
       await apiFetch<{ success: boolean }>(ENDPOINTS.DRIVE.PUBLISH, {
         method: "POST",
         body: JSON.stringify({ fileId }),
-      });
+      })
     } catch (error) {
-      console.error("Error sharing file:", error);
-      throw error;
+      console.error("Error sharing file:", error)
+      throw error
     }
   }
 
   private openAuthWindow(queryParams: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const width = 600;
-      const height = 600;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
+      const width = 600
+      const height = 600
+      const left = window.screen.width / 2 - width / 2
+      const top = window.screen.height / 2 - height / 2
 
       const windowFeatures = [
         `width=${width}`,
@@ -302,72 +293,62 @@ class GDriveManager implements CloudManager {
         "location=yes",
         "status=no",
         "popup=yes", // ポップアップとして明示的に指定
-      ].join(",");
+      ].join(",")
 
-      const authUrl = `${process.env.NEXT_PUBLIC_API_BASE}${ENDPOINTS.AUTH.ON}?${queryParams}`;
-      this.authWindow = window.open(
-        authUrl,
-        "google-auth-window",
-        windowFeatures
-      );
+      const authUrl = `${process.env.NEXT_PUBLIC_API_BASE}${ENDPOINTS.AUTH.ON}?${queryParams}`
+      this.authWindow = window.open(authUrl, "google-auth-window", windowFeatures)
 
       if (!this.authWindow) {
-        reject(
-          new Error(
-            "ポップアップがブロックされました。ブラウザの設定を確認してください。"
-          )
-        );
-        return;
+        reject(new Error("ポップアップがブロックされました。ブラウザの設定を確認してください。"))
+        return
       }
 
       const messageHandler = async (event: MessageEvent) => {
         if (event.data === "google-auth-success") {
-          window.removeEventListener("message", messageHandler);
-          return resolve();
+          window.removeEventListener("message", messageHandler)
+          return resolve()
         } else {
-          console.error("認証処理エラー:", event.data);
-          reject(new Error("認証に失敗しました"));
+          console.error("認証処理エラー:", event.data)
+          reject(new Error("認証に失敗しました"))
         }
-      };
+      }
 
-      window.addEventListener("message", messageHandler);
+      window.addEventListener("message", messageHandler)
 
       // タイムアウト処理
       setTimeout(() => {
-        window.removeEventListener("message", messageHandler);
-        reject(new Error("認証がタイムアウトしました"));
-      }, 300000); // 5分でタイムアウト
-    });
+        window.removeEventListener("message", messageHandler)
+        reject(new Error("認証がタイムアウトしました"))
+      }, 300000) // 5分でタイムアウト
+    })
   }
 }
 
 const useGDrive = (
-  storageOptions?: GDriveOptions
+  storageOptions?: GDriveOptions,
 ): {
-  gdrive: GDriveManager;
-  gdriveState: CloudState;
+  gdrive: GDriveManager
+  gdriveState: CloudState
 } => {
   const [gdriveState, setGDriveState] = useState<CloudState>({
     isChecking: false,
     isUploading: [],
     isDownloading: [],
     isDeleting: [],
-  });
+  })
 
-  const gdriveRef = useRef<GDriveManager | null>(null);
+  const gdriveRef = useRef<GDriveManager | null>(null)
 
   const options = storageOptions || {
     endpoint: process.env.NEXT_PUBLIC_API_BASE || "",
-  };
-
-  if (!gdriveRef.current) {
-    gdriveRef.current = new GDriveManager(setGDriveState, options);
   }
 
-  return {
-    gdrive: gdriveRef.current,
-    gdriveState,
-  };
-};
+  const [gdrive] = useState(() => new GDriveManager(setGDriveState, options))
 
-export { useGDrive };
+  return {
+    gdrive,
+    gdriveState,
+  }
+}
+
+export { useGDrive }

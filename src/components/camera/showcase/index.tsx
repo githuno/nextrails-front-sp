@@ -1,44 +1,39 @@
-import React, { useState } from "react";
-import { Modal } from "@/components/atoms";
-import { useStorage } from "@/components/storage";
-import { useImageset, ImagesetState } from "@/components/camera";
-import {
-  useCamera,
-  LoadingSpinner,
-  EditIcon,
-} from "@/components/camera/_utils";
-import { CurrentImages } from "./CurrentImages";
-import { DrawerImagesets } from "./DrawerImagesets";
-import { useNotion, NotionModal } from "@/components/services/notion";
+import { Modal } from "@/components/atoms"
+import { ImagesetState, useImageset } from "@/components/camera"
+import { EditIcon, LoadingSpinner, useCamera } from "@/components/camera/_utils"
+import { NotionModal, useNotion } from "@/components/services/notion"
+import { useStorage } from "@/components/storage"
+import { useState } from "react"
+import { CurrentImages } from "./CurrentImages"
+import { DrawerImagesets } from "./DrawerImagesets"
 
 const Showcase = () => {
-  const { cameraState } = useCamera();
-  const { idb } = useStorage();
-  const { imageset, setImageset } = useImageset();
-  const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
-  const [isNotionModalOpen, setIsNotionModalOpen] = useState<boolean>(false);
-  const { notionState, connectNotion, selectPage, uploadImagesToNotion } =
-    useNotion();
+  const { cameraState } = useCamera()
+  const { idb } = useStorage()
+  const { imageset, setImageset } = useImageset()
+  const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false)
+  const [isNotionModalOpen, setIsNotionModalOpen] = useState<boolean>(false)
+  const { notionState, connectNotion, selectPage, uploadImagesToNotion } = useNotion()
 
   const handleNotionUpload = async () => {
     try {
       if (!notionState.isConnected || !notionState.selectedPageId) {
-        setIsNotionModalOpen(true);
-        return;
+        setIsNotionModalOpen(true)
+        return
       }
 
-      const files = imageset.files.filter((file) => !file.deletedAt);
-      await uploadImagesToNotion(files);
+      const files = imageset.files.filter((file) => !file.deletedAt)
+      await uploadImagesToNotion(files)
 
       // アップロード後にステータスを更新
       setImageset((prev) => ({
         ...prev,
         status: ImagesetState.SENT,
-      }));
+      }))
     } catch (error) {
-      console.error("Failed to upload to Notion:", error);
+      console.error("Failed to upload to Notion:", error)
     }
-  };
+  }
 
   // const handleGoogleDriveUpload = async () => {
   //   try {
@@ -84,30 +79,25 @@ const Showcase = () => {
   // };
 
   return (
-    <div className="grid grid-rows-5 px-2 py-1 h-[23vh] w-vw place-content-center rounded-lg shadow-lg bg-white/80">
-      <Modal
-        id="setName"
-        isOpen={isNameModalOpen}
-        onClose={() => setIsNameModalOpen(false)}
-        className="bg-transparent"
-      >
-        <div className="rounded-lg p-4 bg-white/80 shadow-lg">
-          {/* TODO:　変更・追加（作成）・移動をわかりやすくする　セット間の転送も必要 */}
-          <h2 className="text-xl mb-4">setNameを編集</h2>
+    <div className="w-vw grid h-[23vh] grid-rows-5 place-content-center rounded-lg bg-white/80 px-2 py-1 shadow-lg">
+      <Modal id="setName" isOpen={isNameModalOpen} onClose={() => setIsNameModalOpen(false)} className="bg-transparent">
+        <div className="rounded-lg bg-white/80 p-4 shadow-lg">
+          {/* TODO: 変更・追加（作成）・移動をわかりやすくする セット間の転送も必要 */}
+          <h2 className="mb-4 text-xl">setNameを編集</h2>
           <form
             onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const newName = formData.get("storeName") as string;
+              e.preventDefault()
+              const formData = new FormData(e.currentTarget)
+              const newName = formData.get("storeName") as string
               if (newName !== imageset.name) {
                 setImageset({
                   id: BigInt(Date.now()),
                   name: newName,
                   status: ImagesetState.DRAFT,
                   files: [],
-                });
+                })
               }
-              setIsNameModalOpen(false);
+              setIsNameModalOpen(false)
             }}
             className="flex items-center gap-2"
           >
@@ -115,12 +105,9 @@ const Showcase = () => {
               type="text"
               name="storeName"
               defaultValue={imageset.name}
-              className="p-2 border border-gray-300 bg-white/80 rounded"
+              className="rounded border border-gray-300 bg-white/80 p-2"
             />
-            <button
-              type="submit"
-              className="p-2 bg-blue-500 text-white rounded"
-            >
+            <button type="submit" className="rounded bg-blue-500 p-2 text-white">
               保存
             </button>
           </form>
@@ -149,13 +136,11 @@ const Showcase = () => {
         ) : (
           <>
             <div className="row-start-1 flex items-center justify-center">
-              <h1 className="font-bold text-center break-words">
-                セット: {imageset.name}
-              </h1>
+              <h1 className="text-center font-bold break-words">セット: {imageset.name}</h1>
               {(cameraState.isScanning || !cameraState.isAvailable) && ( // 編集可能なのはSCANNING時のみ
                 <button
                   onClick={() => setIsNameModalOpen(true)}
-                  className="ml-2 p-1 bg-transparent hover:bg-gray-200 rounded-full transition-colors"
+                  className="ml-2 rounded-full bg-transparent p-1 transition-colors hover:bg-gray-200"
                 >
                   <EditIcon />
                 </button>
@@ -165,16 +150,13 @@ const Showcase = () => {
         )}
       </section>
 
-      <section className="row-span-4 relative grid w-full place-content-center gap-2">
+      <section className="relative row-span-4 grid w-full place-content-center gap-2">
         <>
           <CurrentImages />
           <DrawerImagesets />
           {imageset.files.length > 0 && (
             <div className="absolute top-2 right-2 flex gap-2">
-              <button
-                onClick={handleNotionUpload}
-                className="px-3 py-1 bg-black text-white rounded-md text-sm"
-              >
+              <button onClick={handleNotionUpload} className="rounded-md bg-black px-3 py-1 text-sm text-white">
                 Notionへ送信
               </button>
               {/* <button
@@ -197,13 +179,8 @@ const Showcase = () => {
 
       {/* 開発環境でDBの初期化ボタンを配置 */}
       {process.env.NODE_ENV === "development" && (
-        <section className="flex fixed bottom-4 right-4 text-xs p-1 m-1 gap-1">
-          <button
-            className="bg-gray-200"
-            onClick={() =>
-              idb.debugDb().then(() => console.log("debugDB done"))
-            }
-          >
+        <section className="fixed right-4 bottom-4 m-1 flex gap-1 p-1 text-xs">
+          <button className="bg-gray-200" onClick={() => idb.debugDb().then(() => console.log("debugDB done"))}>
             debugDB
           </button>
           <button
@@ -214,8 +191,8 @@ const Showcase = () => {
                 name: "1",
                 status: ImagesetState.DRAFT,
                 files: [],
-              });
-              idb.destroyDb();
+              })
+              idb.destroyDb()
             }}
           >
             destroyDB
@@ -223,7 +200,7 @@ const Showcase = () => {
         </section>
       )}
     </div>
-  );
-};
+  )
+}
 
-export { Showcase };
+export { Showcase }

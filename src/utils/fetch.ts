@@ -59,17 +59,22 @@ try {
 }
  */
 
-import { safeAsync } from './async';
+import { safeAsync } from "./async"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || ""
+
+// https://www.notion.so/20-TypeScript-DEV-22e565e97d7c816b8526fd8eb85bfe5e
+export type ApiResponse<T> = T extends { error: string }
+  ? { success: false; error: string }
+  : { success: true; data: T }
 
 export const apiFetch = async <T>(
   path: string,
   options: RequestInit = {},
   abortOptions?: {
-    signal?: AbortSignal;
-    timeoutMs?: number;
-  }
+    signal?: AbortSignal
+    timeoutMs?: number
+  },
 ): Promise<T> => {
   const baseOptions: RequestInit = {
     credentials: "include", // クッキーを送信する
@@ -78,14 +83,14 @@ export const apiFetch = async <T>(
     },
     // 外部からのシグナルがあれば設定
     signal: abortOptions?.signal,
-  };
+  }
 
   // FormDataの場合はContent-Typeを設定しない
   if (!(options.body instanceof FormData)) {
     baseOptions.headers = {
       ...baseOptions.headers,
       "Content-Type": "application/json", // JSON形式でリクエストを送信する
-    };
+    }
   }
 
   // safeAsyncを使用してリクエスト実行
@@ -98,41 +103,41 @@ export const apiFetch = async <T>(
           ...baseOptions.headers,
           ...options.headers,
         },
-      });
+      })
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text()
         // より詳細なエラー情報を提供するカスタムエラー
-        const error = new Error(errorText || response.statusText);
+        const error = new Error(errorText || response.statusText)
         // エラーオブジェクトにステータスコード情報を追加
-        Object.assign(error, { 
+        Object.assign(error, {
           status: response.status,
-          statusText: response.statusText
-        });
-        throw error;
+          statusText: response.statusText,
+        })
+        throw error
       }
 
-      return response.json();
+      return response.json()
     },
     {
       // タイムアウト設定（指定があれば）
       timeoutMs: abortOptions?.timeoutMs,
       // 外部シグナルの伝達
       signal: abortOptions?.signal,
-    }
-  );
+    },
+  )
 
   // Result型の処理
-  const result = await promise;
-  
+  const result = await promise
+
   if (result.error) {
     // エラーの場合は例外をスロー
-    throw result.error;
+    throw result.error
   } else if (result.aborted) {
     // アボートの場合は専用エラーをスロー
-    throw new DOMException("リクエストがキャンセルされました", "AbortError");
+    throw new DOMException("リクエストがキャンセルされました", "AbortError")
   }
-  
+
   // 成功時はデータを返す
-  return result.data as T;
-};
+  return result.data as T
+}

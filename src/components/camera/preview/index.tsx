@@ -1,6 +1,5 @@
-import React from "react";
-import { CameraPreview } from "./CameraPreview";
-import { ModalWebview } from "./WebView";
+import { CameraPreview } from "./CameraPreview"
+import { ModalWebview } from "./WebView"
 
 const Preview = () => {
   return (
@@ -8,7 +7,7 @@ const Preview = () => {
       <CameraPreview />
       <ModalWebview />
     </>
-  );
-};
+  )
+}
 
-export { Preview };
+export { Preview }

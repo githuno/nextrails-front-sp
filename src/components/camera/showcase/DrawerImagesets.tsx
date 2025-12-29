@@ -1,17 +1,14 @@
-import React, { useEffect, useState } from "react";
-import { Carousel, CarouselItem } from "@/components/atoms";
-import {
-  useImageset,
-  ImagesetState,
-} from "@/components/camera";
-import { LoadingSpinner } from "@/components/camera/_utils";
-import { LinesIcon } from "@/components/Icons";
-import Image from "next/image";
-import { useSyncLatests } from "./hooks/useSyncLatests";
+import { Carousel, CarouselItem } from "@/components/atoms"
+import { ImagesetState, useImageset } from "@/components/camera"
+import { LoadingSpinner } from "@/components/camera/_utils"
+import { LinesIcon } from "@/components/Icons"
+import Image from "next/image"
+import { useCallback, useEffect, useState } from "react"
+import { useSyncLatests } from "./hooks/useSyncLatests"
 
 const DrawerImagesets = () => {
-  const { imageset, setImageset } = useImageset();
-  const { isLoading, syncPullLatests, latestImagesets } = useSyncLatests();
+  const { imageset, setImageset } = useImageset()
+  const { isLoading, syncPullLatests, latestImagesets } = useSyncLatests()
 
   // const pullLatests = useCallback(async (): Promise<
   //   { storeName: string; files: File[] }[]
@@ -100,78 +97,58 @@ const DrawerImagesets = () => {
   //   }
   // }, [idb, setLatestImagesets, imageset.name]);
 
-  const handleCarouselItemClick = (name: string) => {
-    if (name !== imageset.name) {
-      setImageset({
-        id: BigInt(Date.now()),
-        name: name,
-        status: ImagesetState.DRAFT,
-        files: [],
-      });
-    }
-    // ドロワーを閉じる
-    const drawerToggle = document.getElementById(
-      "drawerToggle"
-    ) as HTMLInputElement;
-    if (drawerToggle) {
-      drawerToggle.checked = false;
-    }
-  };
+  const handleCarouselItemClick = useCallback(
+    (name: string) => {
+      if (name !== imageset.name) {
+        setImageset({
+          id: BigInt(Date.now()),
+          name: name,
+          status: ImagesetState.DRAFT,
+          files: [],
+        })
+      }
+      // ドロワーを閉じる
+      const drawerToggle = document.getElementById("drawerToggle") as HTMLInputElement
+      if (drawerToggle) {
+        drawerToggle.checked = false
+      }
+    },
+    [imageset.name, setImageset],
+  )
 
-  const [requireCloudState, setRequireCloudState] = useState<boolean>(true);
+  const [requireCloudState, setRequireCloudState] = useState<boolean>(true)
 
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout
     const fetchLatests = async () => {
       // 実行前に1秒待つ
-      timeoutId = await new Promise((resolve) => setTimeout(resolve, 1000));
+      timeoutId = await new Promise((resolve) => setTimeout(resolve, 1000))
       if (requireCloudState) {
-        syncPullLatests();
-        setRequireCloudState(false);
+        syncPullLatests()
+        setRequireCloudState(false)
       } else {
-        syncPullLatests();
+        syncPullLatests()
       }
-    };
-    fetchLatests();
+    }
+    fetchLatests()
     return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [imageset.files]);
+      clearTimeout(timeoutId)
+    }
+  }, [imageset.files])
 
   return (
     // ドロワー
     latestImagesets.length > 1 && (
       <div className="fixed z-10">
-        <input type="checkbox" id="drawerToggle" className="hidden peer" />
-        <div
-          id="bg"
-          className="fixed top-2 left-0 w-full h-[24vh] bg-black/50 hidden peer-checked:block"
-        />
-        <div
-          className="
-              fixed top-7 left-[-95vw] w-[95vw] h-[20vh] 
-              bg-white/80 shadow-lg
-              flex flex-col items-end rounded-tr-3xl
-              transition-all duration-300 peer-checked:left-0
-            "
-        >
+        <input type="checkbox" id="drawerToggle" className="peer hidden" />
+        <div id="bg" className="fixed top-2 left-0 hidden h-[24vh] w-full bg-black/50 peer-checked:block" />
+        <div className="fixed top-7 left-[-95vw] flex h-[20vh] w-[95vw] flex-col items-end rounded-tr-3xl bg-white/80 shadow-lg transition-all duration-300 peer-checked:left-0">
           <label
             htmlFor="drawerToggle"
-            className="
-                absolute bottom-0 right-[-1.2rem] transform translate-x-1/2
-                flex justify-center items-center w-8 h-8 bg-white/80 
-                shadow-[4px_4px_6px_-1px_rgba(0,0,0,0.3)]
-                rounded-tr-full rounded-br-full
-                cursor-pointer transition-transform duration-300
-                peer-checked:rotate-180
-              "
+            className="absolute right-[-1.2rem] bottom-0 flex h-8 w-8 translate-x-1/2 transform cursor-pointer items-center justify-center rounded-tr-full rounded-br-full bg-white/80 shadow-[4px_4px_6px_-1px_rgba(0,0,0,0.3)] transition-transform duration-300 peer-checked:rotate-180"
             // INFO: shadow-[X方向_Y方向_ぼかし半径_拡散半径_色] で影を調整している
           >
-            {isLoading ? (
-              <LoadingSpinner size="16px" />
-            ) : (
-              <LinesIcon className="w-4 h-4" fill="#999" />
-            )}
+            {isLoading ? <LoadingSpinner size="16px" /> : <LinesIcon className="h-4 w-4" fill="#999" />}
           </label>
 
           {/* ドロワー内の要素 */}
@@ -180,25 +157,19 @@ const DrawerImagesets = () => {
               {latestImagesets.map(({ name, files }) => (
                 <CarouselItem
                   key={name}
-                  className={`relative h-[15vh] w-32 rounded-lg bg-white hover:bg-gray-100 shadow-xl ${
+                  className={`relative h-[15vh] w-32 rounded-lg bg-white shadow-xl hover:bg-gray-100 ${
                     name === imageset.name ? "border-2 border-blue-200" : ""
                   }`}
                 >
                   <div
-                    className="grid grid-rows-5 h-full w-full cursor-pointer"
+                    className="grid h-full w-full cursor-pointer grid-rows-5"
                     onClick={() => handleCarouselItemClick(name)}
                   >
-                    <h1 className="font-bold text-center break-words">
-                      {name}
-                    </h1>
+                    <h1 className="text-center font-bold break-words">{name}</h1>
                     {files.length > 0 && (
-                      <div className="relative row-span-4 w-full h-full">
+                      <div className="relative row-span-4 h-full w-full">
                         {files[0].contentType === "video/webm" ? (
-                          <video
-                            controls
-                            src={files[0].idbUrl ?? ""}
-                            className="h-full w-full object-contain"
-                          />
+                          <video controls src={files[0].idbUrl ?? ""} className="h-full w-full object-contain" />
                         ) : (
                           // <img
                           //   src={files[0].idbUrl ?? ""}
@@ -223,7 +194,7 @@ const DrawerImagesets = () => {
         </div>
       </div>
     )
-  );
-};
+  )
+}
 
-export { DrawerImagesets };
+export { DrawerImagesets }

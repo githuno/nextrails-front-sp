@@ -1,12 +1,22 @@
-import { type ReactNode } from "react";
+import { type ReactNode } from "react"
 
 interface CarouselItemProps {
-  children: ReactNode;
-  className?: string;
+  children: ReactNode
+  className?: string
 }
 
 const CarouselItem = ({ children, className = "" }: CarouselItemProps) => {
-  return <div className={`snap-start flex-none ${className} `}>{children}</div>;
-};
+  return (
+    <div
+      className={`flex-none snap-start ${className}`}
+      style={{
+        contentVisibility: "auto", // ブラウザがコンテンツの可視性を自動的に管理
+        contain: "content", // コンテンツのサイズを制御
+      }}
+    >
+      {children}
+    </div>
+  )
+}
 
-export { CarouselItem };
+export { CarouselItem }
