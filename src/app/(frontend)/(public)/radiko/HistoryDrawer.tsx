@@ -93,7 +93,7 @@ const HistoryDrawer: React.FC<{
                           onClick={() => handlePlayProgram(program)}
                           className={`group relative cursor-pointer rounded border p-3 transition-all hover:bg-gray-50 ${
                             isCurrentPlaying ? "border-blue-500 bg-blue-50/50" : ""
-                          } ${isPlayed ? "opacity-60" : ""}`}
+                          } ${isPlayed ? "bg-gray-50 opacity-60" : "bg-white shadow-sm"}`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1 pr-16">
@@ -102,9 +102,17 @@ const HistoryDrawer: React.FC<{
                                   {station?.name || program.station_id} | {formatRadikoTime(program.startTime)} -{" "}
                                   {formatRadikoTime(program.endTime)}
                                 </div>
-                                {isCurrentPlaying && (
+                                {isCurrentPlaying ? (
                                   <span className="animate-pulse rounded bg-blue-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
                                     再生中
+                                  </span>
+                                ) : isPlayed ? (
+                                  <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                                    視聴済み
+                                  </span>
+                                ) : (
+                                  <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-bold text-green-700">
+                                    未視聴
                                   </span>
                                 )}
                               </div>
