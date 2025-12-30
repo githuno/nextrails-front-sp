@@ -24,3 +24,10 @@
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
 }
+
+/* View Transitions */
+::view-transition-old(modal-content),
+::view-transition-new(modal-content) {
+  animation-duration: 0.5s;
+  animation-timing-function: ease-in-out;
+}

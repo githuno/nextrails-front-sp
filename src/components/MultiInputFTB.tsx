@@ -2,7 +2,7 @@
 
 import { Modal } from "@/components/atoms"
 import Camera from "@/components/camera"
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useTransition } from "react"
 
 interface MultiInputFTBProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string
@@ -11,16 +11,15 @@ interface MultiInputFTBProps extends React.HTMLAttributes<HTMLDivElement> {
 // カメラが利用可能かどうかをチェックしてcameraボタンを非活性にするか判定する
 // const hasCamera = async (): Promise<boolean> => {
 //   try {
-//     const devices = await navigator.mediaDevices.enumerateDevices();
-//     return devices.some((device) => device.kind === "videoinput");
+//     const devices = await navigator.mediaDevices.enumerateDevices()
+//     return devices.some((device) => device.kind === "videoinput")
 //   } catch (error) {
-//     console.error("Error checking camera availability:", error);
-//     return false;
+//     console.error("Error checking camera availability:", error)
+//     return false
 //   }
-// };
+// }
 
 const resetZoom = () => {
-  ;(document.body.style as any).zoom = "1"
   document.body.style.transform = "scale(1)"
   document.body.style.transformOrigin = "0 0"
 }
@@ -29,6 +28,7 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className, ...props }) =>
   const [isExpanded, setIsExpanded] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedComponent, setSelectedComponent] = useState<React.ReactNode>(null)
+  const [isPending, startTransition] = useTransition()
 
   // Hydrationエラーを回避
   const [isClient, setIsClient] = useState(false)
@@ -42,17 +42,24 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className, ...props }) =>
     setIsExpanded(!isExpanded)
   }
 
-  const openModal = (component: React.ReactNode) => {
-    setSelectedComponent(component)
-    if (React.isValidElement(component) && component.type === Camera) {
-      resetZoom()
-    }
-    setIsModalOpen(true)
-    setIsExpanded(false)
+  const openModal = async (component: React.ReactNode) => {
+    startTransition(async () => {
+      if (React.isValidElement(component) && component.type === Camera) {
+        // const cameraAvailable = await hasCamera()
+        // if (!cameraAvailable) {
+        //   alert("カメラが利用できません")
+        //   return
+        // }
+        resetZoom()
+      }
+      setSelectedComponent(component)
+      setIsModalOpen(true)
+      setIsExpanded(false)
+    })
   }
 
   const buttons = [
-    { id: 1, label: "Cam", onClick: () => openModal(<Camera />) },
+    { id: 1, label: "Cam", onClick: () => openModal(<Camera />), disabled: isPending },
     {
       id: 2,
       label: "Text",
@@ -94,7 +101,8 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className, ...props }) =>
               <button
                 key={button.id}
                 onClick={button.onClick}
-                className={`absolute flex h-12 w-12 items-center justify-center rounded-full bg-slate-500 text-white shadow-lg`}
+                disabled={button.disabled}
+                className={`absolute flex h-12 w-12 items-center justify-center rounded-full bg-slate-500 text-white shadow-lg transition-transform duration-300 ${button.disabled ? "cursor-not-allowed opacity-50" : ""}`}
                 style={{
                   transform: isExpanded
                     ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`

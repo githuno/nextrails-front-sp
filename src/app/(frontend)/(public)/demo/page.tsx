@@ -97,6 +97,17 @@ export default function DemoIndex() {
         },
       ],
     },
+    {
+      category: "useTransition",
+      items: [
+        {
+          name: "useTransition デモ",
+          path: "/demo/usetransition",
+          description:
+            "React 19のuseTransitionを使った非同期操作の管理デモ。カメラチェック中のUI応答性の違いを確認できます。",
+        },
+      ],
+    },
   ]
 
   return (

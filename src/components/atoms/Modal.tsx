@@ -1,5 +1,6 @@
 // https://www.notion.so/UI-HTML-dialog-ICS-MEDIA-2a6565e97d7c812db74fe5a9ce73bc6a
 
+import { useIsClient } from "@/hooks/useIsClient"
 import {
   createContext,
   FC,
@@ -40,6 +41,7 @@ interface ModalProps extends HTMLAttributes<HTMLDialogElement> {
 const Modal: FC<ModalProps> = ({ isOpen, onClose, children, className, anchorRef, ...props }) => {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const [anchorPos, setAnchorPos] = useState({ top: 0, right: 0 })
+  const isClient = useIsClient()
 
   useEffect(() => {
     if (isOpen && anchorRef?.current) {
@@ -97,6 +99,8 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, children, className, anchorRef
       handleClose()
     }
   }, [handleClose, isOpen])
+
+  if (!isClient) return null
 
   return createPortal(
     <ModalContext.Provider value={contextValue}>

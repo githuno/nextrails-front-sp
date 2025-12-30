@@ -91,7 +91,7 @@ const CaptureImageButton: React.FC<CaptureImageButtonProps> = ({ onSaved }) => {
         <button
           onClick={async () => await camera.capture(handleCaptureImage)}
           disabled={cameraState.isCapturing}
-          className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-r from-blue-200 to-white shadow-inner transition-transform hover:shadow-lg"
+          className="flex h-full w-full items-center justify-center rounded-full bg-linear-to-r from-blue-200 to-white shadow-inner transition-transform hover:shadow-lg"
         >
           {cameraState.isCapturing ? <LoadingSpinner /> : <CameraIcon />}
         </button>
