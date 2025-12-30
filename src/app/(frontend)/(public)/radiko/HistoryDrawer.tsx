@@ -8,13 +8,15 @@ const HistoryDrawer: React.FC<{
 }> = ({ isOpen, onClose }) => {
   const state = useRadikoState()
 
-  const handlePlayProgram = (program: Program) => {
+  const handlePlayProgram = (program: Program & { isFuture?: boolean }) => {
+    if (program.isFuture) return // 未来の番組は再生しない
     RadikoClient.playProgram(program, "timefree")
     onClose()
   }
 
-  const removeFromHistory = useCallback((event: React.MouseEvent, program: Program) => {
+  const removeFromHistory = useCallback((event: React.MouseEvent, program: Program & { isFuture?: boolean }) => {
     event.stopPropagation()
+    if (program.isFuture) return // 未来の番組は履歴にない
     RadikoClient.removeFromHistory(program.station_id, program.startTime)
   }, [])
 
@@ -23,8 +25,31 @@ const HistoryDrawer: React.FC<{
       return { byDate: {}, sortedDates: [], total: 0, played: 0 }
     }
 
-    const allPrograms = state.history
-    const byDate: { [date: string]: Program[] } = {}
+    const now = new Date()
+    const oneWeekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+    // 履歴の番組
+    const historyPrograms = state.history.map((p) => ({ ...p, isFuture: false }))
+
+    // 未来のお気に入り番組
+    const futurePrograms: (Program & { isFuture: boolean })[] = []
+    Object.entries(state.programsByDate).forEach(([dateKey, programs]) => {
+      const date = new Date(
+        parseInt(dateKey.substring(0, 4)),
+        parseInt(dateKey.substring(4, 6)) - 1,
+        parseInt(dateKey.substring(6, 8)),
+      )
+      if (date >= now && date <= oneWeekLater) {
+        programs.forEach((program) => {
+          if (state.favorites.some((fav) => fav.title === program.title)) {
+            futurePrograms.push({ ...program, isFuture: true })
+          }
+        })
+      }
+    })
+
+    const allPrograms = [...historyPrograms, ...futurePrograms]
+    const byDate: { [date: string]: (Program & { isFuture: boolean })[] } = {}
 
     allPrograms.forEach((program) => {
       const dateKey = program.startTime.substring(0, 8)
@@ -32,12 +57,13 @@ const HistoryDrawer: React.FC<{
       byDate[dateKey].push(program)
     })
 
-    const sortedDates = Object.keys(byDate).sort((a, b) => parseInt(b) - parseInt(a))
+    // 昇順にソート（古い順）
+    const sortedDates = Object.keys(byDate).sort((a, b) => parseInt(a) - parseInt(b))
     sortedDates.forEach((date) => {
-      byDate[date].sort((a, b) => parseInt(b.startTime) - parseInt(a.startTime))
+      byDate[date].sort((a, b) => parseInt(a.startTime) - parseInt(b.startTime))
     })
 
-    const played = allPrograms.filter((p) => p.currentTime === -1).length
+    const played = historyPrograms.filter((p) => p.currentTime === -1).length
 
     return {
       byDate,
@@ -45,7 +71,7 @@ const HistoryDrawer: React.FC<{
       total: allPrograms.length,
       played,
     }
-  }, [isOpen, state.history])
+  }, [isOpen, state.history, state.programsByDate, state.favorites])
 
   if (!isOpen) return null
 
@@ -86,6 +112,7 @@ const HistoryDrawer: React.FC<{
                       const isCurrentPlaying =
                         state.currentProgram?.station_id === program.station_id &&
                         state.currentProgram?.startTime === program.startTime
+                      const isFuture = program.isFuture || false
 
                       return (
                         <div
@@ -93,7 +120,7 @@ const HistoryDrawer: React.FC<{
                           onClick={() => handlePlayProgram(program)}
                           className={`group relative cursor-pointer rounded border p-3 transition-all hover:bg-gray-50 ${
                             isCurrentPlaying ? "border-blue-500 bg-blue-50/50" : ""
-                          } ${isPlayed ? "bg-gray-50 opacity-60" : "bg-white shadow-sm"}`}
+                          } ${isPlayed ? "bg-gray-50 opacity-60" : "bg-white shadow-sm"} ${isFuture ? "cursor-not-allowed opacity-50" : ""}`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1 pr-16">
@@ -109,6 +136,10 @@ const HistoryDrawer: React.FC<{
                                 ) : isPlayed ? (
                                   <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
                                     視聴済み
+                                  </span>
+                                ) : isFuture ? (
+                                  <span className="rounded bg-gray-300 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                                    未視聴
                                   </span>
                                 ) : (
                                   <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-bold text-green-700">
@@ -141,20 +172,22 @@ const HistoryDrawer: React.FC<{
                               >
                                 <span className="text-lg leading-none">{isFav ? "★" : "☆"}</span>
                               </button>
-                              <button
-                                onClick={(e) => removeFromHistory(e, program)}
-                                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                                title="履歴から削除"
-                              >
-                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
+                              {!isFuture && (
+                                <button
+                                  onClick={(e) => removeFromHistory(e, program)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                                  title="履歴から削除"
+                                >
+                                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                    />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>

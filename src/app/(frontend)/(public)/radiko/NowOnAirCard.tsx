@@ -1,9 +1,8 @@
 "use client"
 
 import React from "react"
-import { sanitizeHtml } from "../../../../utils/sanitize"
 import RadikoClient from "./client"
-import { Program, formatRadikoTime } from "./constants"
+import { Program, formatRadikoTime, sanitizeHtml } from "./constants"
 
 interface NowOnAirCardProps {
   nowOnAir: Program | null

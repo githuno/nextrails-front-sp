@@ -1,9 +1,8 @@
 "use client"
 
 import React, { useLayoutEffect } from "react"
-import { sanitizeHtml } from "../../../../utils/sanitize"
 import RadikoClient, { useRadikoState } from "./client"
-import { Program, formatRadikoTime } from "./constants"
+import { Program, formatRadikoTime, sanitizeHtml } from "./constants"
 
 interface ProgramListProps {
   programs: Program[]
