@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AreaSelect } from "./AreaSelect"
 import RadikoClient, { useRadikoState } from "./client"
 import { AreaId, url } from "./constants"
-import HistoryButton from "./HistoryButton"
 import HistoryDrawer from "./HistoryDrawer"
 import { NowOnAirCard } from "./NowOnAirCard"
 import { PlayerControls } from "./PlayerControls"
@@ -272,7 +271,26 @@ export default function Page() {
     <div className="container mx-auto p-4 pb-32">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Radiko Player</h1>
-        <HistoryButton onClick={() => setHistoryDrawerOpen(true)} />
+        <button
+          onClick={() => setHistoryDrawerOpen(!isHistoryDrawerOpen)}
+          className="fixed right-4 bottom-20 z-60 rounded-full bg-blue-600 p-3 text-white shadow-lg hover:bg-blue-700"
+          aria-label="視聴履歴"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+        </button>
       </div>
 
       {state.error && !state.playingType && (
