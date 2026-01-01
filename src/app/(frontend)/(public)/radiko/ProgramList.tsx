@@ -148,10 +148,10 @@ export const ProgramList: React.FC<ProgramListProps> = ({
               return (
                 <div
                   key={index}
-                  className={`relative ${isPlaying ? "sticky top-0 bottom-0 z-30 shadow-lg" : "z-0"}`}
+                  className={`relative ${isPlaying ? "sticky top-0 bottom-0 z-20 shadow-lg" : "z-0"}`}
                   data-program-index={index}
                 >
-                  <div className="absolute top-2 right-2 z-20 flex items-center gap-3">
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-3">
                     {isPlaying && (
                       <button
                         onClick={(e) => {

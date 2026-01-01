@@ -26,7 +26,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 }) => {
   return (
     <div
-      className={`fixed right-0 bottom-0 left-0 z-20 border-t bg-slate-50/90 p-4 shadow-lg transition-transform duration-300 ${
+      className={`fixed right-0 bottom-0 left-0 z-30 border-t bg-slate-50/90 p-4 shadow-lg transition-transform duration-300 ${
         playingType ? "translate-y-0" : "translate-y-full"
       }`}
     >
