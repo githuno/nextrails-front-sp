@@ -1,45 +1,27 @@
 import js from "@eslint/js"
-import type { Linter } from "eslint"
-import nextConfig from "eslint-config-next"
-import prettierConfig from "eslint-config-prettier"
-import prettierPlugin from "eslint-plugin-prettier"
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals"
+import nextTypeScript from "eslint-config-next/typescript"
+// import pluginQuery from "@tanstack/eslint-plugin-query"
+import eslintPluginPrettierRecommended from "eslint-plugin-prettier/recommended"
+import { defineConfig, globalIgnores } from "eslint/config"
 
-// any型の警告設定のための追加import（不要になったらこのブロックを削除）
-import tsPlugin from "@typescript-eslint/eslint-plugin"
-import tsParser from "@typescript-eslint/parser"
-
-const config: Linter.Config[] = [
-  js.configs.recommended,
-  ...(Array.isArray(nextConfig) ? nextConfig : [nextConfig]),
-  prettierConfig,
+export default defineConfig([
+  js.configs.recommended, // JS ファイル用の最低限の安全網
+  ...nextCoreWebVitals, // React / Next 特有の最適化・警告
+  ...nextTypeScript, // JS ルールを TS ルールに正しく置換 - no-unused-vars などの誤検知を根絶
+  // ...pluginQuery.configs["flat/recommended"], // TanStack Query 用のルールセット
+  eslintPluginPrettierRecommended, // Prettier のルールを ESLint に統合
+  globalIgnores([
+    // eslint-config-next の既定 ignore を明示管理
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "public/label-studio/**",
+  ]),
   {
-    plugins: {
-      prettier: prettierPlugin,
-    },
     rules: {
-      "prettier/prettier": "error",
-      // TypeScriptが未定義変数のチェックを行うため、ESLint側のno-undefは無効化します。
-      // これにより、TransferableなどのTypeScriptのlib定義に含まれるグローバル型の誤検知を防ぎます。
-      "no-undef": "off",
-      // TypeScriptが再宣言のチェックを行うため、ESLint側のno-redeclareは無効化します。
-      // これにより、関数のオーバーロードが誤検知されるのを防ぎます。
-      "no-redeclare": "off",
-      // 未使用変数はエラーではなく警告として扱い、段階的に修正できるようにします。
-      "no-unused-vars": "warn",
+      "@typescript-eslint/no-explicit-any": "warn", // any 型は段階的に是正する方針
     },
   },
-  // any型の警告設定（不要になったらこのブロックを削除）
-  {
-    plugins: {
-      "@typescript-eslint": tsPlugin as any,
-    },
-    languageOptions: {
-      parser: tsParser,
-    },
-    rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
-    },
-  },
-]
-
-export default config
+])
