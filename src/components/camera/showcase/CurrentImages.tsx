@@ -1,9 +1,8 @@
 import { Carousel, CarouselItem, Modal } from "@/components/atoms"
 import { useImageset, type File } from "@/components/camera"
-import { CloseIcon, LoadingSpinner, SyncIcon, useCamera } from "@/components/camera/_utils"
+import { LoadingSpinner, SyncIcon, useCamera } from "@/components/camera/_utils"
 import { useStorage } from "@/components/storage"
-import Image from "next/image"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useSyncImageset } from "./hooks/useSyncImageset"
 
 const CurrentImages = () => {
@@ -14,6 +13,8 @@ const CurrentImages = () => {
   const [isLoading, setIsLoading] = useState<string[]>([])
   const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false)
   const [carouselIndex, setCarouselIndex] = useState<number | null>(null)
+
+  const isInitializingRef = useRef(false)
 
   const { syncPullFiles, syncPushFile, checkUpdatedAt, isSyncing } = useSyncImageset()
 
@@ -98,7 +99,7 @@ const CurrentImages = () => {
 
   const getImages = useCallback(async () => {
     const currentName = imageset.name
-    setIsLoading([...isLoading, currentName])
+    setIsLoading((prev) => [...prev, currentName])
     try {
       let params = "deletedAt_null=true&updatedAt_sort=desc" // 削除されていないファイルを全部取得
       // IDBから降順でファイルを取得
@@ -117,13 +118,15 @@ const CurrentImages = () => {
       }
 
       // クラウドからファイルを取得してIDBに同期
-      await syncPullFiles({ setName: imageset.name, options: { params } })
+      if (cloud.state.isConnected) {
+        await syncPullFiles({ setName: imageset.name, options: { params } })
+      }
     } catch (error) {
       console.error("Error updating media:", error)
     } finally {
       setIsLoading((prev) => prev.filter((name) => name !== currentName))
     }
-  }, [idb, imageset.name, syncPullFiles, checkUpdatedAt])
+  }, [imageset.name, idb, syncPullFiles, setImageset, checkUpdatedAt])
 
   const localCleanup = useCallback(
     async (imagesetName: string) => {
@@ -146,7 +149,7 @@ const CurrentImages = () => {
         console.error("Error cleaning up media:", error)
       }
     },
-    [idb, imageset.files],
+    [idb, imageset.files, setImageset],
   )
 
   const handleLocalDelete = useCallback(
@@ -174,7 +177,7 @@ const CurrentImages = () => {
           : prev,
       )
     },
-    [imageset.name, idb, isLoading],
+    [isLoading, idb, imageset.name, setImageset],
   )
 
   const handleLocalUpdate = useCallback(
@@ -198,7 +201,7 @@ const CurrentImages = () => {
           : prev,
       )
     },
-    [imageset.name, idb, isLoading],
+    [isLoading, idb, setImageset],
   )
 
   // debug ---------------------------------------------------------------------
@@ -217,22 +220,23 @@ const CurrentImages = () => {
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
+    if (isInitializingRef.current) return
+    isInitializingRef.current = true
+
     const initialize = async () => {
-      if (cameraState.isAvailable !== null && !isLoading.includes(imageset.name)) {
+      if (!isLoading.includes(imageset.name)) {
         await getImages()
         localCleanup(imageset.name)
       }
+      isInitializingRef.current = false
     }
     initialize()
-    return () => {
-      setIsLoading([])
-    }
-  }, [imageset.name, cameraState.isAvailable])
+  }, [imageset.name, getImages, localCleanup, isLoading])
 
   useEffect(() => {
     const autoPush = async () => {
       if (
-        // !cloud.state.isConnected || // オフラインの場合
+        !cloud.state.isConnected || // オフラインの場合
         (cameraState.isAvailable && !cameraState.isScanning) || // カメラが使えるのにSCANNING状態でない場合
         imageset.files.length === 0 || // filesがない場合
         isLoading.includes(imageset.name) // 同期中の場合
@@ -242,7 +246,15 @@ const CurrentImages = () => {
       await syncPushFile({ set: imageset })
     }
     autoPush()
-  }, [imageset.files, cameraState.isScanning])
+  }, [
+    imageset.files,
+    cameraState.isScanning,
+    cameraState.isAvailable,
+    imageset,
+    isLoading,
+    syncPushFile,
+    cloud.state.isConnected,
+  ])
 
   const handleCarouselItemClick = (fileIndex: number) => {
     const controller = new AbortController() // https://qiita.com/tronicboy/items/31c1f60daf26edc9cefb
@@ -261,72 +273,70 @@ const CurrentImages = () => {
     <>
       {(isLoading.includes(imageset.name) || cameraState.isAvailable === null) && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/50">
-          <div className="flex w-[48px] items-center justify-center">
+          <div className="flex w-12 items-center justify-center">
             <LoadingSpinner size="48px" />
           </div>
         </div>
       )}
-      <Carousel autoScrollTop={true} containerClassName="gap-x-3">
+      <Carousel containerClassName="gap-x-3">
         {imageset.files
           .filter((file) => !file.deletedAt)
           .map((file) => (
-            // 子要素自身で幅を定義
-            <CarouselItem key={"small-" + file.idbId} className="relative h-full w-40 pt-2 pr-2">
-              <div className="flex aspect-video items-center justify-center rounded-lg bg-white/60">
-                <div
-                  className="relative h-full w-full cursor-pointer shadow-xl"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleCarouselItemClick(imageset.files.indexOf(file))
-                  }}
-                >
-                  {file.contentType === "video/webm" ? (
-                    <video controls src={file.idbUrl ?? ""} className="h-full w-full object-contain" />
-                  ) : (
-                    // <img
-                    //   src={file.idbUrl ?? ""}
-                    //   alt={`Image ${file.idbId}`}
-                    //   className="h-full w-full object-contain p-0.5"
-                    // />
-                    <Image
-                      src={file.idbUrl ?? ""}
-                      alt={`Image ${file.idbId}`}
-                      fill
-                      style={{ objectFit: "contain" }}
-                      className="p-0.5"
-                    />
-                  )}
-                </div>
-                {
-                  // 削除操作が不可な状態
-                  idb.state.isUpdating.includes(file.idbId) ||
-                  idb.state.isDeleting.includes(file.idbId) ||
-                  cloud.state.isDeleting.includes(file.idbId) ? (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <LoadingSpinner />
-                    </div>
-                  ) : (
-                    // 削除操作が可能な状態
-                    <div>
-                      {/* TODO: モーダルのオープンとクローズが重複して作動してしまっている */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation() // 親要素のクリックイベントを防ぐ
-                          handleLocalDelete({ file, setName: imageset.name })
-                        }}
-                        className="absolute top-0 right-0 z-10 rounded-full bg-white/80 p-1 shadow-lg"
-                      >
-                        <CloseIcon />
-                      </button>
-                      {isSyncing.includes(file.idbId) && (
-                        <div className="absolute top-0 left-0">
-                          <SyncIcon size="24" />
-                        </div>
-                      )}
-                    </div>
-                  )
-                }
-              </div>
+            <CarouselItem key={"small-" + file.idbId} className="group shrink-0 p-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleCarouselItemClick(imageset.files.indexOf(file))
+                }}
+                className="h-full overflow-hidden rounded-xs shadow-2xl"
+              >
+                {file.contentType === "video/webm" ? (
+                  <video
+                    controls
+                    src={file.idbUrl ?? ""}
+                    width={96}
+                    height={54}
+                    className="rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
+                  />
+                ) : (
+                  <img
+                    src={file.idbUrl ?? ""}
+                    alt={`Image ${file.idbId}`}
+                    width={96}
+                    height={54}
+                    className="rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
+                  />
+                )}
+              </button>
+              {
+                // 削除操作が不可な状態
+                idb.state.isUpdating.includes(file.idbId) ||
+                idb.state.isDeleting.includes(file.idbId) ||
+                cloud.state.isDeleting.includes(file.idbId) ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <LoadingSpinner />
+                  </div>
+                ) : (
+                  // 削除操作が可能な状態
+                  <div>
+                    {/* TODO: モーダルのオープンとクローズが重複して作動してしまっている */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation() // 親要素のクリックイベントを防ぐ
+                        handleLocalDelete({ file, setName: imageset.name })
+                      }}
+                      className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-white/50 text-[10px] text-zinc-700/80 shadow-md backdrop-blur-md transition-opacity group-hover:opacity-100 hover:bg-red-600 sm:opacity-0"
+                    >
+                      ✕
+                    </button>
+                    {isSyncing.includes(file.idbId) && (
+                      <div className="absolute top-0 left-0">
+                        <SyncIcon size="24" />
+                      </div>
+                    )}
+                  </div>
+                )
+              }
             </CarouselItem>
           ))}
       </Carousel>
@@ -342,7 +352,7 @@ const CurrentImages = () => {
         <Carousel className="bg-black/70" containerClassName="md:gap-x-1" index={carouselIndex}>
           {imageset.files.map((file) => (
             <CarouselItem key={"large-" + file.idbId}>
-              <div className="h-[90vh] w-[100vw] px-1 py-2 md:w-[93vw] md:pr-0">
+              <div className="h-[90vh] w-screen px-1 py-2 md:w-[93vw] md:pr-0">
                 {file.contentType === "video/webm" ? (
                   <video controls src={file.idbUrl ?? ""} className="h-full w-full object-contain" />
                 ) : (

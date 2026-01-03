@@ -136,7 +136,7 @@ const Showcase = () => {
         ) : (
           <>
             <div className="row-start-1 flex items-center justify-center">
-              <h1 className="text-center font-bold break-words">セット: {imageset.name}</h1>
+              <h1 className="text-center font-bold wrap-break-word">セット: {imageset.name}</h1>
               {(cameraState.isScanning || !cameraState.isAvailable) && ( // 編集可能なのはSCANNING時のみ
                 <button
                   onClick={() => setIsNameModalOpen(true)}

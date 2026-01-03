@@ -134,7 +134,7 @@ const DrawerImagesets = () => {
     return () => {
       clearTimeout(timeoutId)
     }
-  }, [imageset.files])
+  }, [imageset.files, requireCloudState, syncPullLatests])
 
   return (
     // ドロワー
@@ -165,7 +165,7 @@ const DrawerImagesets = () => {
                     className="grid h-full w-full cursor-pointer grid-rows-5"
                     onClick={() => handleCarouselItemClick(name)}
                   >
-                    <h1 className="text-center font-bold break-words">{name}</h1>
+                    <h1 className="text-center font-bold wrap-break-word">{name}</h1>
                     {files.length > 0 && (
                       <div className="relative row-span-4 h-full w-full">
                         {files[0].contentType === "video/webm" ? (

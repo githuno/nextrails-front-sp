@@ -16,6 +16,7 @@ export interface CloudState {
   isDownloading: string[]
   isDeleting: string[]
   isChecking: boolean
+  isConnected: boolean
 }
 
 // 共通のレスポンス型を定義

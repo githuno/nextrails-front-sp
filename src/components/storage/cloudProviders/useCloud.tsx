@@ -75,6 +75,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     isUploading: [],
     isDownloading: [],
     isDeleting: [],
+    isConnected: false,
   })
   const [provider, setProvider] = useState<CloudManager | null>(null)
   const [storage, setStorage] = useState<StorageSession | null>(null)
@@ -154,14 +155,17 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         // 4. providerをセット
         setProvider(newProvider)
+        setState((prev) => ({ ...prev, isConnected: true }))
       } else {
         setProvider(null)
         setStorage(null)
+        setState((prev) => ({ ...prev, isConnected: false }))
       }
     } catch (error) {
       console.error("Session check failed:", error)
       setProvider(null)
       setStorage(null)
+      setState((prev) => ({ ...prev, isConnected: false }))
     } finally {
       setState((prev) => ({ ...prev, isChecking: false }))
     }
@@ -188,6 +192,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await disconnect() // セッションを削除
     setProvider(null)
     setStorage(null)
+    setState((prev) => ({ ...prev, isConnected: false }))
   }, [provider])
 
   return (
