@@ -6,13 +6,11 @@ import {
   FC,
   HTMLAttributes,
   ReactNode,
-  RefObject,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react"
 import { createPortal } from "react-dom"
 import { CloseIcon } from "../camera/_utils"
@@ -35,31 +33,29 @@ interface ModalProps extends HTMLAttributes<HTMLDialogElement> {
   isOpen: boolean
   onClose: () => void // TODO: オプショナルに変更し、渡されなかったらcloseアイコンは表示しない
   children: ReactNode
-  anchorRef?: RefObject<HTMLElement> // 基準位置を明示的に受け取る場合に使用
+  backdropClassName?: string
+  hideCloseButton?: boolean
 }
 
-const Modal: FC<ModalProps> = ({ isOpen, onClose, children, className, anchorRef, ...props }) => {
+const Modal: FC<ModalProps> = ({
+  isOpen,
+  onClose,
+  children,
+  className,
+  backdropClassName,
+  hideCloseButton = false,
+  ...props
+}) => {
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const [anchorPos, setAnchorPos] = useState({ top: 0, right: 0 })
   const isClient = useIsClient()
 
-  useEffect(() => {
-    if (isOpen && anchorRef?.current) {
-      setAnchorPos({
-        top: anchorRef.current.offsetTop,
-        right: anchorRef.current.offsetWidth,
-      })
-    }
-  }, [isOpen, anchorRef])
-
-  const handleOpen = async () => {
+  const handleOpen = useCallback(() => {
     if (dialogRef.current) {
-      // ダイアログを開く
-      dialogRef.current.showModal()
+      dialogRef.current.showModal() // ダイアログを開く
       // body要素にoverflow: hiddenを設定するとモーダル表示時に背景がスクロールしなくなる
       document.body.style.overflow = "hidden"
     }
-  }
+  }, [])
 
   // .contains()を使った領域外クリックで閉じるモード
   // useEffect(() => {
@@ -72,23 +68,13 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, children, className, anchorRef
   //   return () => document.removeEventListener("click", handleClickOutside);
   // }, [onClose]);
 
-  const handleClose = useCallback(
-    async (e?: React.MouseEvent<HTMLButtonElement>) => {
-      if (e) {
-        e.stopPropagation()
-      }
-      if (dialogRef.current) {
-        // ダイアログを閉じる
-        dialogRef.current?.close()
-        // body要素のoverflow: hiddenを戻す
-        document.body.style.overflow = ""
-        // ボタンのフォーカスを外す
-        // document.activeElement instanceof HTMLElement && document.activeElement.blur()
-      }
-      onClose()
-    },
-    [onClose],
-  )
+  const handleClose = useCallback(() => {
+    if (dialogRef.current) {
+      dialogRef.current.close() // ダイアログを閉じる
+      document.body.style.overflow = "" // body要素のoverflow: hiddenを戻す
+    }
+    onClose()
+  }, [onClose])
 
   const contextValue = useMemo(() => ({ isOpen }), [isOpen])
 
@@ -98,29 +84,30 @@ const Modal: FC<ModalProps> = ({ isOpen, onClose, children, className, anchorRef
     } else if (!isOpen && dialogRef.current?.open) {
       handleClose()
     }
-  }, [handleClose, isOpen])
+  }, [handleOpen, handleClose, isOpen])
 
   if (!isClient) return null
 
   return createPortal(
     <ModalContext.Provider value={contextValue}>
-      {/* モーダル外背景色の設定 */}
-      {isOpen && <div className="fixed inset-0 bg-black/50" />}
-
-      <dialog ref={dialogRef} className={`modal ${className}`} {...props}>
-        <div className="relative h-full p-2">
+      <dialog
+        ref={dialogRef}
+        className={`fixed inset-0 m-auto overflow-hidden bg-transparent p-2 backdrop:transition-opacity ${backdropClassName || "backdrop:bg-black/80 backdrop:backdrop-blur-sm"} ${className || ""}`}
+        {...props}
+      >
+        <div className="relative h-full w-full">
+          {!hideCloseButton && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleClose()
+              }}
+              className="relative -top-2 right-2 z-50 float-right -ml-8 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white/50 shadow-lg backdrop-blur-md transition-all hover:scale-110 hover:bg-white/80 active:scale-95"
+            >
+              <CloseIcon />
+            </button>
+          )}
           {children}
-
-          <button
-            onClick={handleClose}
-            className="absolute cursor-pointer rounded-full bg-white/80 shadow-lg transition-transform hover:shadow-lg"
-            style={{
-              top: anchorPos.top,
-              right: anchorPos.right,
-            }}
-          >
-            <CloseIcon />
-          </button>
         </div>
       </dialog>
     </ModalContext.Provider>,

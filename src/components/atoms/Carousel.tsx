@@ -1,172 +1,153 @@
-import React, { ReactNode, useEffect, useRef, useState } from "react"
+import React, { ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react"
 import { NextIcon, PrevIcon } from "../Icons"
+
+interface CarouselMetrics {
+  step: number
+  visibleCount: number
+  scrollMax: number
+}
 
 interface CarouselProps {
   children: ReactNode
   index?: number | null
   className?: string
   containerClassName?: string
-  navigationClassName?: string
-  autoScrollTop?: boolean
-  id?: string
 }
 
-const Carousel = ({
-  children,
-  index = null,
-  className = "",
-  containerClassName = "",
-  navigationClassName = "",
-  autoScrollTop = false,
-  id,
-}: CarouselProps) => {
+// TODO: scroll-stateで改善可能か？ https://developer.chrome.com/blog/css-scroll-state-queries?hl=ja
+
+const Carousel = ({ children, index = null, className = "", containerClassName = "" }: CarouselProps) => {
   const scrollRef = useRef<HTMLDivElement>(null)
-  // TODO: scroll-stateで改善可能か？ https://developer.chrome.com/blog/css-scroll-state-queries?hl=ja
-  const [hasOverflow, setHasOverflow] = useState(true)
-  // Counterのための状態変数-------------------------------------↓
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [visibleItems, setVisibleItems] = useState(1)
-  // Counterのための状態変数-------------------------------------↑
+  const [metrics, setMetrics] = useState<CarouselMetrics | null>(null)
+  const [currentIndex, setCurrentIndex] = useState(index ?? 0)
+  // 初期化完了フラグ（フラッシュ防止用）
+  const [isInitialized, setIsInitialized] = useState(false)
+  // プロパティ変更時の同期
+  const [prevIndex, setPrevIndex] = useState<number | null>(index)
+  if (index !== prevIndex) {
+    setPrevIndex(index)
+    setCurrentIndex(index ?? 0)
+    setIsInitialized(false) // indexが変わったら再度初期化待ちにする
+  }
 
-  // 子要素のはみだしチェック TODO: 画像拡大時に正しく効いていなさそう
-  useEffect(() => {
-    const checkOverflow = () => {
-      if (scrollRef.current) {
-        const hasHorizontalOverflow = scrollRef.current.scrollWidth > scrollRef.current.clientWidth
-        setHasOverflow(hasHorizontalOverflow)
-
-        // Counterのための計算-------------------------------------↓
-        // 可視アイテム数の計算
-        const firstChild = scrollRef.current.firstChild as HTMLElement | null
-        if (firstChild) {
-          const visibleItemsCount = Math.floor(scrollRef.current.clientWidth / firstChild.clientWidth)
-          if (visibleItemsCount > 0) {
-            setVisibleItems(visibleItemsCount)
-          } else {
-            console.warn("Carousel: visibleItemsCount is less than 1")
-            setVisibleItems(1)
-          }
-        }
-        // Counterのための計算-------------------------------------↑
-      }
+  const getMetrics = useCallback((): CarouselMetrics | null => {
+    const container = scrollRef.current
+    if (!container) return null
+    const items = Array.from(container.children) as HTMLElement[]
+    if (items.length === 0) return null
+    const first = items[0]
+    const step = items.length > 1 ? items[1].offsetLeft - first.offsetLeft : first.clientWidth
+    if (step <= 0) return null
+    return {
+      step,
+      visibleCount: Math.max(1, Math.round(container.clientWidth / step)),
+      scrollMax: container.scrollWidth - container.clientWidth,
     }
+  }, [])
 
-    checkOverflow()
-    window.addEventListener("resize", checkOverflow)
-    return () => window.removeEventListener("resize", checkOverflow)
-  }, [children])
-
-  // indexが指定されている場合はその位置へスクロール
-  useEffect(() => {
-    if (index !== null && scrollRef.current) {
-      const firstChild = scrollRef.current.firstChild as HTMLElement | null
-      if (firstChild) {
-        scrollRef.current.scrollLeft = firstChild.clientWidth * index
-      }
+  // サイズ確定検知とイベント監視
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+    const update = () => {
+      const m = getMetrics()
+      if (m) setMetrics(m)
     }
-
-    const currentRef = scrollRef.current
-
-    return () => {
-      if (currentRef) {
-        currentRef.scrollLeft = 0
-      }
-    }
-  }, [index])
-
-  // 子要素変更時に先頭にスクロール
-  useEffect(() => {
-    if (scrollRef.current && autoScrollTop) {
-      scrollRef.current.scrollLeft = 0
-    }
-  }, [autoScrollTop, children])
-
-  // Counterのためのエフェクト-------------------------------------↓
-  // スクロール位置の監視
-  useEffect(() => {
+    const observer = new ResizeObserver(update)
+    observer.observe(container)
+    Array.from(container.children).forEach((child) => observer.observe(child))
     const handleScroll = () => {
-      if (scrollRef.current) {
-        const firstChild = scrollRef.current.firstChild as HTMLElement | null
-        if (firstChild) {
-          const currentIndex = Math.round(scrollRef.current.scrollLeft / firstChild.clientWidth)
-          setCurrentIndex(currentIndex)
-        }
+      const m = getMetrics()
+      if (m) {
+        setCurrentIndex(Math.round(container.scrollLeft / m.step))
       }
     }
-
-    // 現在のscrollRef.currentの値をキャプチャ
-    const currentRef = scrollRef.current
-
-    if (currentRef) {
-      currentRef.addEventListener("scroll", handleScroll)
-    }
-
+    container.addEventListener("scroll", handleScroll, { passive: true })
+    update()
     return () => {
-      // キャプチャした値を使用
-      if (currentRef) {
-        currentRef.removeEventListener("scroll", handleScroll)
+      observer.disconnect()
+      container.removeEventListener("scroll", handleScroll)
+    }
+  }, [getMetrics, children])
+
+  // 初期位置へのジャンプ
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+    const performJump = () => {
+      if (index === null) {
+        setIsInitialized(true)
+        return
+      }
+      const items = Array.from(container.children) as HTMLElement[]
+      if (items.length === 0) return
+      const first = items[0]
+      const step = items.length > 1 ? items[1].offsetLeft - first.offsetLeft : first.clientWidth
+      if (step > 0) {
+        // 描画前に物理的に位置をセット
+        container.scrollTo({ left: step * index, behavior: "instant" as ScrollBehavior })
+        setIsInitialized(true)
+      } else {
+        // まだDOMのサイズが出ていない場合は次フレームで再試行
+        requestAnimationFrame(performJump)
       }
     }
-  }, [children])
-  // Counterのためのエフェクト-------------------------------------↑
+    performJump()
+  }, [index, children])
 
   const scroll = (direction: "left" | "right") => {
-    if (!scrollRef.current) return
-
     const container = scrollRef.current
-    const scrollMax = container.scrollWidth - container.clientWidth
-    const currentScroll = container.scrollLeft
-    const isNearStart = currentScroll <= container.clientWidth * 0.1 // 先頭から10%以内
-    const isNearEnd = currentScroll >= scrollMax - container.clientWidth * 0.1 // 末尾から10%以内
-
+    if (!container || !metrics) return
+    const pageSize = metrics.step * Math.max(1, metrics.visibleCount)
     if (direction === "left") {
-      if (isNearStart) {
-        // 先頭付近なら最後尾へジャンプ
-        container.scrollTo({ left: scrollMax, behavior: "smooth" })
+      if (container.scrollLeft <= 10) {
+        container.scrollTo({ left: metrics.scrollMax, behavior: "smooth" })
       } else {
-        // それ以外は1ページ分戻る
-        container.scrollBy({
-          left: -container.clientWidth,
-          behavior: "smooth",
-        })
+        container.scrollBy({ left: -pageSize, behavior: "smooth" })
       }
     } else {
-      if (isNearEnd) {
-        // 最後尾付近なら先頭へジャンプ
+      if (container.scrollLeft >= metrics.scrollMax - 10) {
         container.scrollTo({ left: 0, behavior: "smooth" })
       } else {
-        // それ以外は1ページ分進む
-        container.scrollBy({ left: container.clientWidth, behavior: "smooth" })
+        container.scrollBy({ left: pageSize, behavior: "smooth" })
       }
     }
   }
 
+  const childItems = React.Children.toArray(children)
+  const hasOverflow = (metrics?.scrollMax ?? 0) > 5
+  const visibleItems = metrics?.visibleCount ?? 1
+  const itemWrapperClassName =
+    index !== null
+      ? "h-full min-w-full shrink-0 snap-start snap-always"
+      : "h-full min-w-0 shrink-0 snap-start snap-always"
+
   return (
-    <div className={`group relative max-w-full min-w-0 ${className}`}>
+    <div className={`group relative flex h-full w-full max-w-full min-w-0 flex-col ${className}`}>
       <div
         ref={scrollRef}
-        className={`scrollbar-hide flex snap-x snap-mandatory overflow-x-auto scroll-smooth ${containerClassName} `}
+        // ジャンプが完了するまで opacity-0 にすることで1枚目のチラつきを排除
+        className={`scrollbar-hide flex snap-x snap-mandatory overflow-x-auto ${containerClassName} ${isInitialized ? "opacity-100" : "opacity-0"} transition-opacity duration-0`}
         style={{
           scrollbarWidth: "none",
           msOverflowStyle: "none",
         }}
       >
-        {React.Children.map(children, (child) => (
-          <div className="shrink-0 snap-start snap-always">{child}</div>
+        {childItems.map((child, idx) => (
+          <div key={idx} className={itemWrapperClassName}>
+            {child}
+          </div>
         ))}
       </div>
 
-      {hasOverflow && (
-        <div
-          className={`pointer-events-none absolute top-1/2 flex w-full -translate-y-1/2 justify-between ${navigationClassName} `}
-        >
+      {hasOverflow && isInitialized && (
+        <div className="pointer-events-none absolute top-1/2 z-30 flex w-full -translate-y-1/2 justify-between px-2">
           <button
             onClick={(e) => {
               e.stopPropagation()
               scroll("left")
             }}
-            className="pointer-events-auto rounded-full bg-black/30 p-2 opacity-0 shadow transition-colors duration-200 group-hover:opacity-100 hover:bg-black/60"
-            aria-label="Previous slide"
+            className="pointer-events-auto rounded-full bg-black/30 p-2 text-white opacity-0 shadow transition-colors duration-0 group-hover:opacity-100 hover:bg-black/60"
           >
             <PrevIcon className="h-6 w-6" />
           </button>
@@ -175,25 +156,22 @@ const Carousel = ({
               e.stopPropagation()
               scroll("right")
             }}
-            className="pointer-events-auto rounded-full bg-black/30 p-2 opacity-0 shadow transition-colors duration-200 group-hover:opacity-100 hover:bg-black/60"
-            aria-label="Next slide"
+            className="pointer-events-auto rounded-full bg-black/30 p-2 text-white opacity-0 shadow transition-colors duration-0 group-hover:opacity-100 hover:bg-black/60"
           >
             <NextIcon className="h-6 w-6" />
           </button>
         </div>
       )}
 
-      {/* Counterの表示-------------------------------------↓*/}
-      <div className="py-1">
+      <div className="absolute bottom-0 left-1/2 z-20 -translate-x-1/2 transform">
         <Counter
-          totalItems={React.Children.count(children)}
+          totalItems={childItems.length}
           visibleItems={visibleItems}
           currentIndex={currentIndex}
           containerRef={scrollRef}
-          id={id}
+          step={metrics?.step ?? 0}
         />
       </div>
-      {/* Counterの表示-------------------------------------↑*/}
     </div>
   )
 }
@@ -205,33 +183,35 @@ interface CounterProps {
   visibleItems: number
   currentIndex: number
   containerRef?: React.RefObject<HTMLDivElement | null>
-  id?: string
+  step: number
 }
 
-const Counter = ({ totalItems, visibleItems, currentIndex, containerRef, id }: CounterProps) => {
-  const circles = Array.from({ length: totalItems }, (_, index) => (
-    <div
-      key={id ? id + index : index}
-      className={`mx-1 h-2 w-2 cursor-pointer rounded-full ${
-        index >= currentIndex && index < currentIndex + visibleItems ? "bg-blue-400" : "bg-gray-400"
-      }`}
-      onClick={() => {
-        // クリックでスクロール
-        if (containerRef) {
-          const container = containerRef.current
-          if (container) {
-            const firstChild = container.firstChild as HTMLElement | null
-            if (firstChild) {
-              container.scrollTo({
-                left: firstChild.clientWidth * index,
-                behavior: "smooth",
-              })
-            }
-          }
-        }
-      }}
-    />
-  ))
+const Counter = ({ totalItems, visibleItems, currentIndex, containerRef, step }: CounterProps) => {
+  if (totalItems <= visibleItems) return null
 
-  return <div className="mt-2 flex justify-center">{circles}</div>
+  return (
+    <div className="rounded-full bg-black/50 px-3 py-2 backdrop-blur-sm">
+      <div className="flex justify-center space-x-2">
+        {Array.from({ length: totalItems }, (_, index) => (
+          <div
+            key={index}
+            onClick={() => {
+              const container = containerRef?.current
+              if (container && step > 0) {
+                container.scrollTo({
+                  left: step * index,
+                  behavior: "smooth",
+                })
+              }
+            }}
+            className={`h-1.5 w-1.5 cursor-pointer rounded-full transition-all duration-0 ${
+              index >= currentIndex && index < currentIndex + visibleItems
+                ? "scale-110 bg-white shadow-lg"
+                : "bg-white/40 hover:bg-white/60"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  )
 }

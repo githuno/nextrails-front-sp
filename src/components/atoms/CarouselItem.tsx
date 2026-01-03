@@ -6,17 +6,7 @@ interface CarouselItemProps {
 }
 
 const CarouselItem = ({ children, className = "" }: CarouselItemProps) => {
-  return (
-    <div
-      className={`flex-none snap-start ${className}`}
-      style={{
-        contentVisibility: "auto", // ブラウザがコンテンツの可視性を自動的に管理
-        contain: "content", // コンテンツのサイズを制御
-      }}
-    >
-      {children}
-    </div>
-  )
+  return <div className={`relative h-full w-full snap-start ${className}`}>{children}</div>
 }
 
 export { CarouselItem }

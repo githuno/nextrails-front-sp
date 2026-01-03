@@ -1,0 +1,360 @@
+import { Carousel, CarouselItem, Modal } from "@/components/atoms"
+import Image from "next/image"
+import React, { useEffect, useRef, useState } from "react"
+import { Tool } from "../_components/GlobalTool"
+import { EditIcon, LoadingSpinner, MenuIcon, StopIcon, SwitchCameraIcon } from "./icons"
+import { useCameraActions, useCameraState } from "./useCameraStore"
+
+interface CameraModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose }) => {
+  const cameraState = useCameraState()
+  const cameraActions = useCameraActions()
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const [showDeviceList, setShowDeviceList] = useState(false)
+  const [showSetsDrawer, setShowSetsDrawer] = useState(false)
+  const [isLongPressing, setIsLongPressing] = useState(false)
+  const [viewingIndex, setViewingIndex] = useState<number | null>(null)
+  const [setName, setSetName] = useState("1")
+  const [isEditingName, setIsEditingName] = useState(false)
+
+  // モーダル開閉時の初期化・クリーンアップ
+  useEffect(() => {
+    if (!isOpen) {
+      cameraActions.cleanup()
+      return
+    }
+    // すでに初期化済み、または初期化中なら何もしない
+    if (cameraState.isAvailable !== null) return
+    const setupCamera = async () => {
+      if (videoRef.current && canvasRef.current) {
+        await cameraActions.setup(videoRef.current, canvasRef.current)
+        cameraActions.startQrScan()
+      }
+    }
+    setupCamera()
+  }, [isOpen, cameraActions, cameraState.isAvailable])
+
+  const handleCaptureImage = async () => {
+    await cameraActions.capture()
+  }
+
+  const handleStartRecording = () => {
+    cameraActions.stopQrScan()
+    cameraActions.startRecord()
+  }
+
+  const handleStopRecording = async () => {
+    cameraActions.stopRecord((blob) => {
+      console.log("Recording finished, blob size:", blob.size)
+      cameraActions.startQrScan()
+    })
+  }
+
+  const handleSwitchDevice = async (deviceId?: string) => {
+    setShowDeviceList(false)
+    await cameraActions.switchDevice(deviceId)
+    cameraActions.startQrScan()
+  }
+
+  const handleMainActionPointerDown = () => {
+    if (cameraState.isRecording) return
+    setIsLongPressing(true)
+    longPressTimerRef.current = setTimeout(() => {
+      handleStartRecording()
+      setIsLongPressing(false)
+    }, 300) // 300ms長押しで録画開始
+  }
+
+  const handleMainActionPointerUp = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    setIsLongPressing(false)
+  }
+
+  const handleMainActionClick = async () => {
+    if (cameraState.isRecording) {
+      await handleStopRecording()
+    } else {
+      await handleCaptureImage()
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} backdropClassName="backdrop:bg-transparent" className="h-full pt-24">
+      <Tool className="bg-transparent">
+        {/* Main Viewer: プレビュー */}
+        <Tool.Main>
+          <>
+            {cameraState.isAvailable === null && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950">
+                <LoadingSpinner size="48px" color="#3b82f6" />
+                <p className="mt-4 animate-pulse text-xs tracking-widest text-zinc-500 uppercase">Initializing...</p>
+              </div>
+            )}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`${cameraState.isCapturing ? "scale-[0.98] brightness-50" : "scale-100 brightness-100"} ${cameraState.isAvailable ? "opacity-100" : "opacity-0"}`}
+            />
+            <canvas ref={canvasRef} className="hidden" />
+            {/* QR Overlay */}
+            {cameraState.isScanning && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="relative h-48 w-48 rounded-lg border-2 border-blue-500/30">
+                  <div className="absolute inset-0 animate-pulse rounded-lg bg-blue-500/5" />
+                  {/* Corner accents */}
+                  <div className="absolute -top-1 -left-1 h-6 w-6 rounded-tl-lg border-t-4 border-l-4 border-blue-500" />
+                  <div className="absolute -top-1 -right-1 h-6 w-6 rounded-tr-lg border-t-4 border-r-4 border-blue-500" />
+                  <div className="absolute -bottom-1 -left-1 h-6 w-6 rounded-bl-lg border-b-4 border-l-4 border-blue-500" />
+                  <div className="absolute -right-1 -bottom-1 h-6 w-6 rounded-br-lg border-r-4 border-b-4 border-blue-500" />
+
+                  {/* Scanning line: Tailwind v4 arbitrary animation */}
+                  <div className="@keyframes-scan:[0%{top:0}100%{top:100%}] absolute left-0 h-1 w-full animate-[scan_2s_linear_infinite] bg-linear-to-r from-transparent via-blue-400 to-transparent shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
+                </div>
+                {cameraState.scannedData && (
+                  <div className="absolute bottom-10 animate-bounce rounded-full bg-blue-600 px-6 py-2 text-sm font-bold shadow-xl">
+                    QR Detected: {cameraState.scannedData}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Recording Indicator */}
+            {cameraState.isRecording && (
+              <div className="absolute top-24 left-1/2 flex -translate-x-1/2 animate-pulse items-center gap-2 rounded-full bg-red-600/90 px-4 py-1 text-[10px] font-bold tracking-widest text-white uppercase shadow-lg">
+                <div className="h-2 w-2 rounded-full bg-white" />
+                Recording
+              </div>
+            )}
+          </>
+        </Tool.Main>
+
+        {/* Controller: 操作系 */}
+        <Tool.Controller>
+          <div className="flex items-center justify-around">
+            {/* Device Switch */}
+            <div className="relative">
+              <button
+                onClick={() => setShowDeviceList(!showDeviceList)}
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
+              >
+                <SwitchCameraIcon size="36px" color="#fff" />
+              </button>
+              {showDeviceList && (
+                <div className="absolute bottom-16 left-0 w-48 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur-xl">
+                  <div className="mb-2 px-2 py-1 text-[10px] font-bold text-zinc-500 uppercase">Select Device</div>
+                  {cameraState.availableDevices.map((device) => (
+                    <button
+                      key={device.deviceId}
+                      onClick={() => handleSwitchDevice(device.deviceId)}
+                      className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-colors ${
+                        cameraState.deviceId === device.deviceId
+                          ? "bg-blue-600 text-white"
+                          : "text-zinc-300 hover:bg-zinc-800"
+                      }`}
+                    >
+                      {device.label || `Camera ${device.deviceId.slice(0, 5)}`}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Main Action: Capture or Stop Record */}
+            <div className="relative flex items-center justify-center">
+              {cameraState.isRecording ? (
+                <button
+                  onClick={handleMainActionClick}
+                  className="hover:shadow-3xl flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 hover:ring-2 active:scale-95"
+                >
+                  <StopIcon size="32px" color="#ef4444" />
+                </button>
+              ) : (
+                <button
+                  onPointerDown={handleMainActionPointerDown}
+                  onPointerUp={handleMainActionPointerUp}
+                  onPointerLeave={handleMainActionPointerUp}
+                  onClick={handleMainActionClick}
+                  className={`group hover:shadow-3xl relative flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 hover:ring-2 active:scale-95 ${isLongPressing ? "ring-4 ring-red-500" : ""}`}
+                >
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-full border-2 border-zinc-200 transition-transform group-hover:scale-110">
+                    <div className="h-8 w-8 rounded-full border border-zinc-300/50"></div>
+                  </div>
+                </button>
+              )}
+            </div>
+          </div>
+        </Tool.Controller>
+
+        {/* Showcase: 撮影済み画像一覧 */}
+        <Tool.Showcase>
+          <div className="grid grid-rows-[auto_1fr] gap-2">
+            <div className="flex justify-between">
+              {/* showcaseメニュー */}
+              <button
+                onClick={() => setShowSetsDrawer(!showSetsDrawer)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800/80 text-white transition-all hover:bg-zinc-700 active:scale-95"
+              >
+                <MenuIcon size="16px" color="#fff" />
+              </button>
+              {/* セット名編集ボタン */}
+              <button
+                onClick={() => setIsEditingName(true)}
+                className="flex h-8 items-center gap-1 rounded-full border border-zinc-800/50 bg-zinc-900/80 px-2 py-1 transition-colors hover:bg-zinc-800"
+              >
+                <span className="text-[9px] font-black tracking-[0.15em] text-zinc-400 uppercase">Set</span>
+                <span className="text-xs font-bold text-zinc-100">{setName}</span>
+                <span className="ml-1 opacity-40 transition-opacity hover:opacity-100">
+                  <EditIcon size="10px" color="#fff" />
+                </span>
+              </button>
+            </div>
+            {/* ギャラリー */}
+            {cameraState.capturedImages.length === 0 ? (
+              <div className="flex h-16 w-full items-center justify-center text-[10px] font-bold tracking-widest text-zinc-600 uppercase italic">
+                No captures yet
+              </div>
+            ) : (
+              <Carousel containerClassName="gap-x-3 h-16">
+                {cameraState.capturedImages.map((url, index) => (
+                  <CarouselItem key={index}>
+                    <button
+                      onClick={() => {
+                        console.log("Image clicked:", index, url)
+                        setViewingIndex(index)
+                      }}
+                      className="h-full overflow-hidden rounded-xs shadow-2xl"
+                    >
+                      <Image
+                        src={url}
+                        alt={`Captured ${index}`}
+                        width={96}
+                        height={54}
+                        unoptimized
+                        className="h-full w-auto rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
+                      />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        cameraActions.removeCapturedImage(index)
+                        if (viewingIndex === index) setViewingIndex(null)
+                      }}
+                      className="absolute -top-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 hover:bg-red-600"
+                    >
+                      ✕
+                    </button>
+                  </CarouselItem>
+                ))}
+              </Carousel>
+            )}
+          </div>
+
+          {/* Sets Drawer Placeholder */}
+          {showSetsDrawer && (
+            <div className="animate-in fade-in slide-in-from-top-4 absolute top-16 right-4 left-4 z-50 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-4 shadow-2xl backdrop-blur-xl">
+              <div className="mb-3 flex items-center justify-between px-1">
+                <h4 className="text-[10px] font-black tracking-widest text-zinc-500 uppercase">Switch Image Set</h4>
+                <button
+                  onClick={() => setShowSetsDrawer(false)}
+                  className="text-[10px] text-zinc-600 hover:text-zinc-300"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[1, 2, 3].map((id) => (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      setSetName(id.toString())
+                      setShowSetsDrawer(false)
+                    }}
+                    className={`flex flex-col items-center gap-2 rounded-xl p-3 transition-all ${setName === id.toString() ? "bg-blue-600 ring-2 ring-blue-400" : "bg-zinc-800 hover:bg-zinc-700"}`}
+                  >
+                    <div className="text-xs font-bold">Set {id}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </Tool.Showcase>
+      </Tool>
+
+      {/* ImageViewer using Modal and Carousel */}
+      <Modal isOpen={viewingIndex !== null} onClose={() => setViewingIndex(null)} className="h-[90vh] w-[90vw] p-0">
+        {viewingIndex !== null && (
+          <Carousel index={viewingIndex} className="p-4" containerClassName="h-full">
+            {cameraState.capturedImages.map((url, index) => (
+              <CarouselItem key={index}>
+                <Image
+                  src={url}
+                  alt={`View ${index}`}
+                  fill
+                  unoptimized
+                  className="object-contain drop-shadow-2xl"
+                  priority={index === viewingIndex}
+                />
+              </CarouselItem>
+            ))}
+          </Carousel>
+        )}
+      </Modal>
+
+      {/* Rename Modal */}
+      <Modal isOpen={isEditingName} onClose={() => setIsEditingName(false)} className="max-w-xs p-6">
+        <h3 className="mb-4 text-lg font-bold text-white">Rename Set</h3>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            const formData = new FormData(e.currentTarget)
+            const newName = formData.get("setName") as string
+            if (newName.trim()) {
+              setSetName(newName.trim())
+              setIsEditingName(false)
+            }
+          }}
+          className="flex flex-col gap-4"
+        >
+          <input
+            type="text"
+            name="setName"
+            defaultValue={setName}
+            autoFocus
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 p-3 text-white placeholder-zinc-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+            placeholder="Enter set name"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEditingName(false)}
+              className="rounded-lg px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </Modal>
+  )
+}
+
+export default CameraModal

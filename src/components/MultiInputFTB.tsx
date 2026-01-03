@@ -83,7 +83,7 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className, ...props }) =>
 
   return (
     <div className="pointer-events-none fixed top-0 z-50 h-svh w-svw">
-      <div className={`pointer-events-auto absolute right-[5%] bottom-[5%] ${className}`} {...props}>
+      <div className={`pointer-events-auto absolute right-[5%] bottom-[15%] ${className}`} {...props}>
         <button
           onClick={toggleButtons}
           className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-700"
