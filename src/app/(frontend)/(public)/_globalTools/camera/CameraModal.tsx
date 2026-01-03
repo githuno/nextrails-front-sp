@@ -2,15 +2,28 @@ import { Carousel, CarouselItem, Modal } from "@/components/atoms"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
 import { Tool } from "../_components/GlobalTool"
-import { EditIcon, LoadingSpinner, MenuIcon, StopIcon, SwitchCameraIcon } from "./icons"
+import { EditIcon, LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "./icons"
 import { useCameraActions, useCameraState } from "./useCameraStore"
 
 interface CameraModalProps {
   isOpen: boolean
   onClose: () => void
+  onScan?: (data: string) => void
+  onSelect?: () => void
+  webViewUrl?: string
+  isWebViewOpen?: boolean
+  onWebViewClose?: () => void
 }
 
-const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose }) => {
+const CameraModal: React.FC<CameraModalProps> = ({
+  isOpen,
+  onClose,
+  onScan,
+  onSelect,
+  webViewUrl,
+  isWebViewOpen,
+  onWebViewClose,
+}) => {
   const cameraState = useCameraState()
   const cameraActions = useCameraActions()
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -23,6 +36,11 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose }) => {
   const [viewingIndex, setViewingIndex] = useState<number | null>(null)
   const [setName, setSetName] = useState("1")
   const [isEditingName, setIsEditingName] = useState(false)
+
+  // アクション（コールバック）の登録
+  useEffect(() => {
+    cameraActions.setCallbacks({ onScan, onSelect })
+  }, [onScan, onSelect, cameraActions])
 
   // モーダル開閉時の初期化・クリーンアップ
   useEffect(() => {
@@ -40,6 +58,18 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose }) => {
     }
     setupCamera()
   }, [isOpen, cameraActions, cameraState.isAvailable])
+
+  // ImageViewer表示中はスキャンを止めてUI応答性を優先
+  useEffect(() => {
+    if (!isOpen) return
+    if (viewingIndex !== null) {
+      if (cameraState.isScanning) cameraActions.stopQrScan()
+      return
+    }
+    if (cameraState.isAvailable && !cameraState.isRecording && !cameraState.isScanning) {
+      cameraActions.startQrScan()
+    }
+  }, [isOpen, viewingIndex, cameraActions, cameraState.isAvailable, cameraState.isRecording, cameraState.isScanning])
 
   const handleCaptureImage = async () => {
     await cameraActions.capture()
@@ -143,7 +173,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose }) => {
 
         {/* Controller: 操作系 */}
         <Tool.Controller>
-          <div className="flex items-center justify-around">
+          <div className="flex items-center justify-around gap-4 px-4">
             {/* Device Switch */}
             <div className="relative">
               <button
@@ -195,6 +225,14 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose }) => {
                 </button>
               )}
             </div>
+
+            {/* Select Image (Gallery) */}
+            <button
+              onClick={onSelect}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
+            >
+              <PictureIcon size="28px" color="#fff" />
+            </button>
           </div>
         </Tool.Controller>
 
@@ -246,13 +284,14 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose }) => {
                         className="h-full w-auto rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
                       />
                     </button>
+                    {/* remove */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         cameraActions.removeCapturedImage(index)
                         if (viewingIndex === index) setViewingIndex(null)
                       }}
-                      className="absolute -top-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 hover:bg-red-600"
+                      className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-white/50 text-[10px] text-zinc-700/80 shadow-md backdrop-blur-md transition-opacity group-hover:opacity-100 hover:bg-red-600 sm:opacity-0"
                     >
                       ✕
                     </button>
@@ -352,6 +391,24 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose }) => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* WebViewer Modal: UI実体をCameraModal側で保持 */}
+      <Modal
+        isOpen={!!isWebViewOpen}
+        onClose={() => onWebViewClose?.()}
+        className="h-full max-h-none w-full max-w-none p-0"
+        backdropClassName="backdrop:bg-black/90 backdrop:backdrop-blur-md"
+      >
+        <div className="relative h-full w-full overflow-hidden bg-white">
+          {webViewUrl && (
+            <iframe
+              src={`/api/proxy/qr?url=${encodeURIComponent(webViewUrl)}`}
+              className="h-full w-full border-none"
+              title="Webview"
+            />
+          )}
+        </div>
       </Modal>
     </Modal>
   )

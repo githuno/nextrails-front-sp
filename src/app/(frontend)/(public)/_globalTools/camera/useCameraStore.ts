@@ -24,6 +24,11 @@ interface CameraStateInternal extends CameraState {
   scanStopper: (() => void) | null
   recordedBlob: Blob | null
   aspectRatio: number | null
+  callbacks: {
+    onScan?: (data: string) => void
+    onCapture?: (url: string | null) => void
+    onSelect?: () => void
+  }
 }
 
 let cameraClient: ReturnType<typeof createCameraClient> | null = null
@@ -46,6 +51,7 @@ const state: CameraStateInternal = {
   scanStopper: null,
   recordedBlob: null,
   aspectRatio: null,
+  callbacks: {},
 }
 const listeners: Set<() => void> = new Set()
 
@@ -184,8 +190,18 @@ const startQrScan = (): void => {
     if (state.scannedData !== data) {
       state.scannedData = data
       notify()
+      // 外部アクションが登録されていれば実行し、データをクリアする
+      if (state.callbacks.onScan) {
+        state.callbacks.onScan(data)
+        state.scannedData = null
+        notify()
+      }
     }
   })
+}
+
+const setCallbacks = (callbacks: Partial<CameraStateInternal["callbacks"]>): void => {
+  state.callbacks = { ...state.callbacks, ...callbacks }
 }
 
 const clearScannedData = (): void => {
@@ -265,6 +281,11 @@ const removeCapturedImage = (index: number): void => {
   notify()
 }
 
+const addCapturedImage = (url: string): void => {
+  state.capturedImages = [url, ...state.capturedImages]
+  notify()
+}
+
 const cleanup = (): void => {
   stopQrScan()
 
@@ -287,6 +308,7 @@ const cleanup = (): void => {
   state.isRecording = false
   state.isCapturing = false
   state.aspectRatio = null
+  state.callbacks = {}
   notify()
 }
 
@@ -300,6 +322,8 @@ const actions = {
   startRecord,
   stopRecord,
   removeCapturedImage,
+  addCapturedImage,
+  setCallbacks,
   cleanup,
 }
 

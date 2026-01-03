@@ -316,14 +316,14 @@ const SwitchCameraIcon: React.FC<IconProps> = ({ size = "24px", color = "#4B4B4B
 )
 
 export {
-  // CameraIcon,
-  // CloseIcon,
+  CameraIcon,
+  CloseIcon,
   EditIcon,
   LoadingSpinner,
   MenuIcon,
-  // SyncIcon,
+  PictureIcon,
+  RecordIcon,
   StopIcon,
-  // PictureIcon,
-  // RecordIcon,
   SwitchCameraIcon,
+  SyncIcon,
 }

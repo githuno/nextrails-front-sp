@@ -41,6 +41,22 @@ interface CameraCallbacks {
   onError?: (error: Error) => void
 }
 
+type BarcodeDetectorDetectedBarcode = {
+  rawValue?: string
+}
+
+interface BarcodeDetectorLike {
+  detect: (image: HTMLVideoElement | HTMLCanvasElement) => Promise<BarcodeDetectorDetectedBarcode[]>
+}
+
+type BarcodeDetectorConstructorLike = new (options: { formats: string[] }) => BarcodeDetectorLike
+
+const getBarcodeDetectorConstructor = (): BarcodeDetectorConstructorLike | null => {
+  if (typeof window === "undefined") return null
+  const maybe = (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructorLike }).BarcodeDetector
+  return maybe ?? null
+}
+
 const createCameraClient = (config: CameraConfig = {}) => {
   const defaultConfig: Required<CameraConfig> = {
     QRSCAN_INTERVAL: 200,
@@ -151,24 +167,62 @@ const createCameraClient = (config: CameraConfig = {}) => {
     const context = canvasElement.getContext("2d", { willReadFrequently: true })
     if (!context) return () => {}
 
-    let isScanning = true
-    const scan = () => {
-      if (!isScanning) return
+    const BarcodeDetectorCtor = getBarcodeDetectorConstructor()
+    const detector = BarcodeDetectorCtor ? new BarcodeDetectorCtor({ formats: ["qr_code"] }) : null
 
-      if (videoElement.readyState === 4) {
-        canvasElement.width = videoElement.videoWidth
-        canvasElement.height = videoElement.videoHeight
-        context.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height)
-        const imageData = context.getImageData(0, 0, canvasElement.width, canvasElement.height)
-        const code = jsQR(imageData.data, imageData.width, imageData.height)
-        if (code?.data) {
-          onScan(code.data)
-        }
-      }
-      setTimeout(scan, finalConfig.QRSCAN_INTERVAL)
+    let isScanning = true
+    let inFlight = false
+
+    const ensureScanCanvasSize = () => {
+      const vw = videoElement.videoWidth
+      const vh = videoElement.videoHeight
+      if (vw <= 0 || vh <= 0) return
+
+      // jsQR fallback時は getImageData が支配的に重いので、必ず縮小する。
+      // QR はある程度の解像度があれば読めるので、長辺 480px 程度に抑える。
+      const maxSide = 480
+      const scale = Math.min(1, maxSide / Math.max(vw, vh))
+      const nextW = Math.max(1, Math.floor(vw * scale))
+      const nextH = Math.max(1, Math.floor(vh * scale))
+      if (canvasElement.width !== nextW) canvasElement.width = nextW
+      if (canvasElement.height !== nextH) canvasElement.height = nextH
     }
 
-    scan()
+    const scan = async () => {
+      if (!isScanning) return
+      if (inFlight) {
+        setTimeout(() => {
+          void scan()
+        }, finalConfig.QRSCAN_INTERVAL)
+        return
+      }
+      inFlight = true
+      if (videoElement.readyState === 4) {
+        try {
+          if (detector) {
+            // ネイティブ実装がある場合はそれを優先（メインスレッド負荷が大きく下がる）
+            const codes = await detector.detect(videoElement)
+            const first = codes[0]?.rawValue
+            if (first) onScan(first)
+          } else {
+            ensureScanCanvasSize()
+            context.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height)
+            const imageData = context.getImageData(0, 0, canvasElement.width, canvasElement.height)
+            const code = jsQR(imageData.data, imageData.width, imageData.height)
+            if (code?.data) onScan(code.data)
+          }
+        } catch {
+          // スキャン失敗は無視して継続
+        }
+      }
+
+      inFlight = false
+      setTimeout(() => {
+        void scan()
+      }, finalConfig.QRSCAN_INTERVAL)
+    }
+
+    void scan()
     return () => {
       isScanning = false
     }
