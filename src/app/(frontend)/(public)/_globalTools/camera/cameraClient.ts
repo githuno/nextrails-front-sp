@@ -17,9 +17,8 @@ import jsQR from "jsqr"
 // TODO: Device capability detection
 // TODO: Error recovery mechanisms
 // TODO: Performance optimizations for video processing
-// TODO: カメラデバイスの切り替え機能
 // TODO: 利用可能なカメラデバイスの列挙
-// TODO: カメラの前面・背面切り替え機能を実装したい
+// TODO: カメラの前面・背面切り替え機能が機能していない
 // TODO: ビデオ制約のカスタマイズ機能
 
 interface CameraConfig {

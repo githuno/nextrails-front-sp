@@ -4,6 +4,13 @@ import React, { useRef, useState } from "react"
 import CameraModal from "./camera/CameraModal"
 import { useCameraActions } from "./camera/useCameraStore"
 
+// TODO: FTB利用画面ではsessionID(uuidv7)を発行しurlパラメータにセットしてlocalStrageに保存する
+// そのsessionIDに紐づく画像を表示する（urlをSSOTとする。sessionSync 機能）
+// TODO: sessionIdごとにIndexedDBでdatabaseを作成して、キーバリューストア（ローカルのs3）として画像・動画のblob/urlを保存する
+// TODO: 上記キーバリューストアとは別に、pgliteでローカルDBを作成して、sessionSyncに使用するキーバリューストアのキーなどのRDB管理を行う
+// TODO: pgliteはDrizzle→TanstackDBでラップして抽象化しそのまま状態管理として利用する
+// TODO: FTB内で定義するcameraへ注入するaction関数はuseSyncExternalStoreを用いて*useToolActionStore()*にまとめてグローバル状態管理する（コンテキスト次第でactionを切り替え可能にする）
+
 const FTB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className, ...buttonProps }) => {
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const [isWebViewOpen, setIsWebViewOpen] = useState(false)
