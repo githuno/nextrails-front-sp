@@ -92,7 +92,7 @@ const Modal: FC<ModalProps> = ({
     <ModalContext.Provider value={contextValue}>
       <dialog
         ref={dialogRef}
-        className={`fixed inset-0 m-auto overflow-hidden bg-transparent p-2 backdrop:transition-opacity ${backdropClassName || "backdrop:bg-black/80 backdrop:backdrop-blur-sm"} ${className || ""}`}
+        className={`fixed inset-0 m-auto overflow-hidden bg-transparent p-2 select-none backdrop:transition-opacity ${backdropClassName || "backdrop:bg-black/80 backdrop:backdrop-blur-sm"} ${className || ""}`}
         {...props}
       >
         <div className="relative h-full w-full">

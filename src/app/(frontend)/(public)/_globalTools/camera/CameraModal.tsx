@@ -71,38 +71,25 @@ const CameraModal: React.FC<CameraModalProps> = ({
     }
   }, [isOpen, viewingIndex, cameraActions, cameraState.isAvailable, cameraState.isRecording, cameraState.isScanning])
 
-  const handleCaptureImage = async () => {
-    await cameraActions.capture()
-  }
-
-  const handleStartRecording = () => {
-    cameraActions.stopQrScan()
-    cameraActions.startRecord()
-  }
-
-  const handleStopRecording = async () => {
-    cameraActions.stopRecord((blob) => {
-      console.log("Recording finished, blob size:", blob.size)
-      cameraActions.startQrScan()
-    })
-  }
-
   const handleSwitchDevice = async (deviceId?: string) => {
     setShowDeviceList(false)
     await cameraActions.switchDevice(deviceId)
     cameraActions.startQrScan()
   }
 
-  const handleMainActionPointerDown = () => {
+  const handleMainActionPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault()
     if (cameraState.isRecording) return
     setIsLongPressing(true)
     longPressTimerRef.current = setTimeout(() => {
-      handleStartRecording()
+      cameraActions.stopQrScan()
+      cameraActions.startRecord()
       setIsLongPressing(false)
     }, 300) // 300ms長押しで録画開始
   }
 
-  const handleMainActionPointerUp = () => {
+  const handleMainActionPointerUp = (e: React.PointerEvent) => {
+    e.preventDefault()
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current)
       longPressTimerRef.current = null
@@ -112,17 +99,20 @@ const CameraModal: React.FC<CameraModalProps> = ({
 
   const handleMainActionClick = async () => {
     if (cameraState.isRecording) {
-      await handleStopRecording()
+      cameraActions.stopRecord((blob) => {
+        console.log("Recording finished, blob size:", blob.size)
+        cameraActions.startQrScan()
+      })
     } else {
-      await handleCaptureImage()
+      await cameraActions.capture()
     }
   }
 
   if (!isOpen) return null
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} backdropClassName="backdrop:bg-transparent" className="h-full pt-24">
-      <Tool className="bg-transparent">
+    <Modal isOpen={isOpen} onClose={onClose} backdropClassName="backdrop:bg-transparent">
+      <Tool className="bg-transparent" enableBackgroundTap onBackgroundTap={() => console.log("maximize")}>
         {/* Main Viewer: プレビュー */}
         <Tool.Main>
           <>
@@ -172,12 +162,15 @@ const CameraModal: React.FC<CameraModalProps> = ({
         </Tool.Main>
 
         {/* Controller: 操作系 */}
-        <Tool.Controller>
+        <Tool.Controller enableBackgroundTap>
           <div className="flex items-center justify-around gap-4 px-4">
             {/* Device Switch */}
             <div className="relative">
               <button
-                onClick={() => setShowDeviceList(!showDeviceList)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowDeviceList(!showDeviceList)
+                }}
                 className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
               >
                 <SwitchCameraIcon size="36px" color="#fff" />
@@ -188,7 +181,10 @@ const CameraModal: React.FC<CameraModalProps> = ({
                   {cameraState.availableDevices.map((device) => (
                     <button
                       key={device.deviceId}
-                      onClick={() => handleSwitchDevice(device.deviceId)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleSwitchDevice(device.deviceId)
+                      }}
                       className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-colors ${
                         cameraState.deviceId === device.deviceId
                           ? "bg-blue-600 text-white"
@@ -206,18 +202,25 @@ const CameraModal: React.FC<CameraModalProps> = ({
             <div className="relative flex items-center justify-center">
               {cameraState.isRecording ? (
                 <button
-                  onClick={handleMainActionClick}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleMainActionClick()
+                  }}
                   className="hover:shadow-3xl flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 hover:ring-2 active:scale-95"
                 >
                   <StopIcon size="32px" color="#ef4444" />
                 </button>
               ) : (
                 <button
+                  onContextMenu={(e) => e.preventDefault()}
                   onPointerDown={handleMainActionPointerDown}
                   onPointerUp={handleMainActionPointerUp}
                   onPointerLeave={handleMainActionPointerUp}
-                  onClick={handleMainActionClick}
-                  className={`group hover:shadow-3xl relative flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 hover:ring-2 active:scale-95 ${isLongPressing ? "ring-4 ring-red-500" : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleMainActionClick()
+                  }}
+                  className={`group hover:shadow-3xl relative flex h-12 w-12 touch-none items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 select-none hover:ring-2 active:scale-95 ${isLongPressing ? "ring-4 ring-red-500" : ""}`}
                 >
                   <div className="relative flex h-12 w-12 items-center justify-center rounded-full border-2 border-zinc-200 transition-transform group-hover:scale-110">
                     <div className="h-8 w-8 rounded-full border border-zinc-300/50"></div>
@@ -228,7 +231,10 @@ const CameraModal: React.FC<CameraModalProps> = ({
 
             {/* Select Image (Gallery) */}
             <button
-              onClick={onSelect}
+              onClick={(e) => {
+                e.stopPropagation()
+                onSelect?.()
+              }}
               className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
             >
               <PictureIcon size="28px" color="#fff" />
@@ -237,19 +243,25 @@ const CameraModal: React.FC<CameraModalProps> = ({
         </Tool.Controller>
 
         {/* Showcase: 撮影済み画像一覧 */}
-        <Tool.Showcase>
+        <Tool.Showcase enableBackgroundTap>
           <div className="grid grid-rows-[auto_1fr] gap-2">
             <div className="flex justify-between">
               {/* showcaseメニュー */}
               <button
-                onClick={() => setShowSetsDrawer(!showSetsDrawer)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowSetsDrawer(!showSetsDrawer)
+                }}
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800/80 text-white transition-all hover:bg-zinc-700 active:scale-95"
               >
                 <MenuIcon size="16px" color="#fff" />
               </button>
               {/* セット名編集ボタン */}
               <button
-                onClick={() => setIsEditingName(true)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsEditingName(true)
+                }}
                 className="flex h-8 items-center gap-1 rounded-full border border-zinc-800/50 bg-zinc-900/80 px-2 py-1 transition-colors hover:bg-zinc-800"
               >
                 <span className="text-[9px] font-black tracking-[0.15em] text-zinc-400 uppercase">Set</span>
@@ -269,7 +281,8 @@ const CameraModal: React.FC<CameraModalProps> = ({
                 {cameraState.capturedImages.map((url, index) => (
                   <CarouselItem key={index}>
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         console.log("Image clicked:", index, url)
                         setViewingIndex(index)
                       }}
@@ -291,7 +304,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
                         cameraActions.removeCapturedImage(index)
                         if (viewingIndex === index) setViewingIndex(null)
                       }}
-                      className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-white/50 text-[10px] text-zinc-700/80 shadow-md backdrop-blur-md transition-opacity group-hover:opacity-100 hover:bg-red-600 sm:opacity-0"
+                      className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-zinc-700/80 shadow-md backdrop-blur-md transition-opacity group-hover:opacity-100 hover:bg-red-600 sm:opacity-0"
                     >
                       ✕
                     </button>
@@ -307,7 +320,10 @@ const CameraModal: React.FC<CameraModalProps> = ({
               <div className="mb-3 flex items-center justify-between px-1">
                 <h4 className="text-[10px] font-black tracking-widest text-zinc-500 uppercase">Switch Image Set</h4>
                 <button
-                  onClick={() => setShowSetsDrawer(false)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowSetsDrawer(false)
+                  }}
                   className="text-[10px] text-zinc-600 hover:text-zinc-300"
                 >
                   Close
@@ -317,7 +333,8 @@ const CameraModal: React.FC<CameraModalProps> = ({
                 {[1, 2, 3].map((id) => (
                   <button
                     key={id}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setSetName(id.toString())
                       setShowSetsDrawer(false)
                     }}
