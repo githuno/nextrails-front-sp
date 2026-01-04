@@ -14,6 +14,7 @@ interface CameraState {
   capturedImages: string[]
   error: Error | null
   aspectRatio: number | null
+  deviceOrientation: number // デバイスの物理的な向き 0, 90, 180, 270
 }
 
 interface CameraStateInternal extends CameraState {
@@ -24,6 +25,7 @@ interface CameraStateInternal extends CameraState {
   scanStopper: (() => void) | null
   recordedBlob: Blob | null
   aspectRatio: number | null
+  orientationListener: ((e: DeviceOrientationEvent) => void) | null
   callbacks: {
     onScan?: (data: string) => void
     onCapture?: (url: string | null) => void
@@ -51,14 +53,11 @@ const state: CameraStateInternal = {
   scanStopper: null,
   recordedBlob: null,
   aspectRatio: null,
+  deviceOrientation: 0,
+  orientationListener: null,
   callbacks: {},
 }
 const listeners: Set<() => void> = new Set()
-
-// Cache for getSnapshot to avoid infinite loops
-let snapshotCache: CameraState | null = null
-let snapshotVersion = 0
-let currentVersion = 0
 
 // Server snapshot is static since server can't access camera
 const serverSnapshot: CameraState = {
@@ -74,7 +73,13 @@ const serverSnapshot: CameraState = {
   capturedImages: [],
   error: null,
   aspectRatio: null,
+  deviceOrientation: 0,
 }
+
+// Cache for getSnapshot to avoid infinite loops
+let snapshotCache: CameraState = serverSnapshot
+let snapshotVersion = 0
+let currentVersion = 0
 
 const getCameraClient = (config?: CameraConfig) => {
   if (!cameraClient) {
@@ -94,7 +99,7 @@ const subscribe = (listener: () => void) => {
 }
 
 const getSnapshot = (): CameraState => {
-  if (snapshotCache === null || currentVersion !== snapshotVersion) {
+  if (currentVersion !== snapshotVersion) {
     snapshotCache = {
       isAvailable: state.isAvailable,
       isScanning: state.isScanning,
@@ -108,6 +113,7 @@ const getSnapshot = (): CameraState => {
       capturedImages: state.capturedImages,
       error: state.error,
       aspectRatio: state.aspectRatio,
+      deviceOrientation: state.deviceOrientation,
     }
     currentVersion = snapshotVersion
   }
@@ -139,6 +145,9 @@ const setup = async (
     state.facingMode = (settings.facingMode as "user" | "environment") || targetFacingMode
     state.isMirror = state.facingMode === "user"
     state.isAvailable = true
+
+    // プレビュー補正（非ミラーのまま、フロント×横向きで上下反転する症状を抑制）
+    applyPreviewOrientationFix()
     // デバイス一覧も更新
     await getAvailableDevices()
     notify()
@@ -149,6 +158,16 @@ const setup = async (
     notify()
     throw cameraError
   }
+}
+
+const applyPreviewOrientationFix = (): void => {
+  if (!state.videoElement) return
+  // 撮影はcanvas側で補正済み。ここではプレビューのみを最小限補正する。
+  // Tailwindのscale等（transform）と干渉しないよう、CSS individual transformのrotateを使う。
+  const shouldFlipVertical =
+    state.facingMode === "user" && (state.deviceOrientation === 90 || state.deviceOrientation === 270)
+  state.videoElement.style.setProperty("transform-origin", "center")
+  state.videoElement.style.setProperty("rotate", shouldFlipVertical ? "180deg" : "0deg")
 }
 
 const getAvailableDevices = async (): Promise<MediaDeviceInfo[]> => {
@@ -179,6 +198,8 @@ const switchDevice = async (deviceId?: string): Promise<void> => {
   } else {
     await setup(state.videoElement, state.canvasElement, undefined, nextFacingMode)
   }
+  // facingModeが変わり得るため、プレビュー補正を再適用
+  applyPreviewOrientationFix()
 }
 
 const startQrScan = (): void => {
@@ -231,7 +252,7 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
   state.isCapturing = true
   notify()
   // 撮影処理と最低表示時間を並行して待機
-  const capturePromise = client.capture(state.videoElement, state.canvasElement, (url) => {
+  const capturePromise = client.capture(state.videoElement, state.canvasElement, state.deviceOrientation, (url) => {
     if (url) {
       state.capturedImages = [url, ...state.capturedImages]
     }
@@ -284,8 +305,40 @@ const addCapturedImage = (url: string): void => {
   notify()
 }
 
+const startOrientationTracking = (): void => {
+  if (state.orientationListener) return
+  const handleOrientation = (event: DeviceOrientationEvent) => {
+    const { beta, gamma } = event
+    if (beta === null || gamma === null) return
+    // フロントカメラを非ミラー表示している場合、左右(roll)の体感とgammaの符号が逆に見えることがあるため補正する
+    const gammaForUi = state.facingMode === "user" ? -gamma : gamma
+    // 微妙な角度ではセンサー値が揺れて0/180が頻繁に切り替わり、プレビューが不安定になる。
+    // 本ツールでは横持ちの補正(90/270)が主目的なので、portraitは常に0扱いに固定し、
+    // 横持ち判定のみヒステリシス付きで安定化する。
+    const absRoll = Math.abs(gammaForUi)
+    const prevIsLandscape = state.deviceOrientation === 90 || state.deviceOrientation === 270
+    const LANDSCAPE_ENTER = 50
+    const LANDSCAPE_EXIT = 40
+    const isLandscape = prevIsLandscape ? absRoll >= LANDSCAPE_EXIT : absRoll >= LANDSCAPE_ENTER
+    const nextOrientation = isLandscape ? (gammaForUi > 0 ? 90 : 270) : 0
+    state.deviceOrientation = nextOrientation
+    // プレビュー補正はここで追従させる（UIの再描画は不要）
+    applyPreviewOrientationFix()
+  }
+  window.addEventListener("deviceorientation", handleOrientation)
+  state.orientationListener = handleOrientation
+}
+
+const stopOrientationTracking = (): void => {
+  if (state.orientationListener) {
+    window.removeEventListener("deviceorientation", state.orientationListener)
+    state.orientationListener = null
+  }
+}
+
 const cleanup = (): void => {
   stopQrScan()
+  stopOrientationTracking()
   if (state.mediaRecorder?.state === "recording") {
     state.mediaRecorder.stop()
   }
@@ -318,6 +371,7 @@ const actions = {
   removeCapturedImage,
   addCapturedImage,
   setCallbacks,
+  startOrientationTracking,
   cleanup,
 }
 

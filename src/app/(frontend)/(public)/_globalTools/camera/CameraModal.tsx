@@ -52,6 +52,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
       if (videoRef.current && canvasRef.current) {
         await cameraActions.setup(videoRef.current, canvasRef.current)
         cameraActions.startQrScan()
+        cameraActions.startOrientationTracking()
       }
     }
     setupCamera()

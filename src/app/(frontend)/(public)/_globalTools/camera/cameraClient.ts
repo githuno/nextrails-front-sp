@@ -229,6 +229,7 @@ const createCameraClient = (config: CameraConfig = {}) => {
   const capture = async (
     videoElement: HTMLVideoElement,
     canvasElement: HTMLCanvasElement,
+    deviceOrientation: number, // デバイスの物理的な向き 0, 90, 180, 270
     onComplete: (url: string | null) => void,
   ): Promise<void> => {
     const context = canvasElement.getContext("2d")
@@ -236,23 +237,33 @@ const createCameraClient = (config: CameraConfig = {}) => {
       onComplete(null)
       return
     }
-
     // フレーム固定ロジック
     videoElement.pause()
     const currentTime = videoElement.currentTime
     videoElement.currentTime = currentTime
-
-    canvasElement.width = videoElement.videoWidth
-    canvasElement.height = videoElement.videoHeight
-    context.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height)
-
+    const vw = videoElement.videoWidth
+    const vh = videoElement.videoHeight
+    // 回転を考慮したキャンバスサイズの設定
+    const isLandscape = deviceOrientation === 90 || deviceOrientation === 270
+    if (isLandscape) {
+      canvasElement.width = vh
+      canvasElement.height = vw
+    } else {
+      canvasElement.width = vw
+      canvasElement.height = vh
+    }
+    context.save()
+    // 中心に移動して回転
+    context.translate(canvasElement.width / 2, canvasElement.height / 2)
+    context.rotate((deviceOrientation * Math.PI) / 180)
+    // 描画 (中心をずらして描画)
+    context.drawImage(videoElement, -vw / 2, -vh / 2, vw, vh)
+    context.restore()
     const url = canvasElement.toDataURL("image/png")
-
     // 少し待ってから再生再開（視覚的なフィードバックのため）
     setTimeout(() => {
       videoElement.play().catch(() => {})
     }, 100)
-
     onComplete(url)
   }
 
