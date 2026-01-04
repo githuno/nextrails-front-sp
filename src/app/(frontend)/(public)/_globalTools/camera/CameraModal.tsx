@@ -48,8 +48,6 @@ const CameraModal: React.FC<CameraModalProps> = ({
       cameraActions.cleanup()
       return
     }
-    // すでに初期化済み、または初期化中なら何もしない
-    if (cameraState.isAvailable !== null) return
     const setupCamera = async () => {
       if (videoRef.current && canvasRef.current) {
         await cameraActions.setup(videoRef.current, canvasRef.current)
@@ -57,7 +55,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
       }
     }
     setupCamera()
-  }, [isOpen, cameraActions, cameraState.isAvailable])
+  }, [isOpen, cameraActions])
 
   // ImageViewer表示中はスキャンを止めてUI応答性を優先
   useEffect(() => {

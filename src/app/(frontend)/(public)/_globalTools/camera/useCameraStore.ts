@@ -128,10 +128,8 @@ const setup = async (
     const client = getCameraClient()
     state.videoElement = videoElement
     state.canvasElement = canvasElement
-
     const targetFacingMode = facingMode || state.facingMode
     state.stream = await client.setupWithVideo(videoElement, deviceId, targetFacingMode)
-
     // ストリームから実際の設定を取得
     const track = state.stream.getVideoTracks()[0]
     const settings = track.getSettings()
@@ -141,10 +139,8 @@ const setup = async (
     state.facingMode = (settings.facingMode as "user" | "environment") || targetFacingMode
     state.isMirror = state.facingMode === "user"
     state.isAvailable = true
-
     // デバイス一覧も更新
     await getAvailableDevices()
-
     notify()
   } catch (error) {
     const cameraError = error instanceof Error ? error : new Error("Camera initialization failed")
@@ -165,11 +161,19 @@ const getAvailableDevices = async (): Promise<MediaDeviceInfo[]> => {
 
 const switchDevice = async (deviceId?: string): Promise<void> => {
   if (!state.videoElement || !state.canvasElement) return
-
   const nextFacingMode = state.facingMode === "user" ? "environment" : "user"
-
-  cleanup()
-
+  stopQrScan() // ストリームのみクリーンアップ（isAvailableをnullにしない）
+  if (state.mediaRecorder?.state === "recording") {
+    state.mediaRecorder.stop()
+  }
+  if (state.stream) {
+    const client = getCameraClient()
+    client.cleanupStream(state.stream)
+    state.stream = null
+  }
+  if (state.videoElement) {
+    state.videoElement.srcObject = null
+  }
   if (deviceId) {
     await setup(state.videoElement, state.canvasElement, deviceId)
   } else {
@@ -185,7 +189,6 @@ const startQrScan = (): void => {
   state.isScanning = true
   state.scannedData = null
   notify()
-
   state.scanStopper = client.startQrScan(state.videoElement, state.canvasElement, (data) => {
     if (state.scannedData !== data) {
       state.scannedData = data
@@ -227,7 +230,6 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
   const client = getCameraClient()
   state.isCapturing = true
   notify()
-
   // 撮影処理と最低表示時間を並行して待機
   const capturePromise = client.capture(state.videoElement, state.canvasElement, (url) => {
     if (url) {
@@ -236,7 +238,6 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
     onComplete?.(url)
   })
   const delayPromise = new Promise((resolve) => setTimeout(resolve, 200)) // 最低200msはシャッター状態を維持
-
   await Promise.all([capturePromise, delayPromise])
   state.isCapturing = false
   notify()
@@ -251,7 +252,6 @@ const startRecord = (): void => {
   const client = getCameraClient()
   state.isRecording = true
   notify()
-
   state.mediaRecorder = client.startRecord(state.stream, (blob) => {
     state.recordedBlob = blob
     state.isRecording = false
@@ -261,7 +261,6 @@ const startRecord = (): void => {
 
 const stopRecord = (onComplete: (blob: Blob) => void): void => {
   if (!state.mediaRecorder) return
-
   state.mediaRecorder.addEventListener(
     "stop",
     () => {
@@ -272,7 +271,6 @@ const stopRecord = (onComplete: (blob: Blob) => void): void => {
     },
     { once: true },
   )
-
   state.mediaRecorder.stop()
 }
 
@@ -288,21 +286,17 @@ const addCapturedImage = (url: string): void => {
 
 const cleanup = (): void => {
   stopQrScan()
-
   if (state.mediaRecorder?.state === "recording") {
     state.mediaRecorder.stop()
   }
-
   if (state.stream) {
     const client = getCameraClient()
     client.cleanupStream(state.stream)
     state.stream = null
   }
-
   if (state.videoElement) {
     state.videoElement.srcObject = null
   }
-
   state.isAvailable = null
   state.isScanning = false
   state.isRecording = false
