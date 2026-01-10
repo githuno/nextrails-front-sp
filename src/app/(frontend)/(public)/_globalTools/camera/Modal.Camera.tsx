@@ -2,8 +2,8 @@ import { Carousel, CarouselItem, Modal } from "@/components/atoms"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
 import { Tool } from "../_components/GlobalTool"
-import { EditIcon, LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "./icons"
-import { useCameraActions, useCameraState } from "./useCameraStore"
+import { useCameraActions, useCameraState } from "./cameraStore"
+import { EditIcon, LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "./Icons.Camera"
 
 interface CameraModalProps {
   isOpen: boolean

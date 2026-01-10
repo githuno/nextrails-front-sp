@@ -1,9 +1,10 @@
 "use client"
 
 import React, { useRef, useState } from "react"
-import CameraModal from "./camera/CameraModal"
-import { useCameraActions } from "./camera/useCameraStore"
+import CameraModal from "./camera/Modal.Camera"
+import { useCameraActions } from "./camera/cameraStore"
 
+// TODO: フリック選択
 // TODO: FTB利用画面ではsessionID(uuidv7)を発行しurlパラメータにセットしてlocalStrageに保存する
 // そのsessionIDに紐づく画像を表示する（urlをSSOTとする。sessionSync 機能）
 // TODO: sessionIdごとにIndexedDBでdatabaseを作成して、キーバリューストア（ローカルのs3）として画像・動画のblob/urlを保存する

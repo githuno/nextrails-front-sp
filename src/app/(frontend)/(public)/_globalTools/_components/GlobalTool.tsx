@@ -40,7 +40,7 @@ type ToolMainProps = React.HTMLAttributes<HTMLDivElement> & CommonProps
 
 const ToolMain = ({ children, className, isMaximized = false, ...props }: ToolMainProps) => (
   <div
-    className={`${isMaximized ? "max-h-screen" : "mt-[10svh] max-h-[70vh]"} flex justify-center ${className || ""}`}
+    className={`${isMaximized ? "max-h-screen" : "mt-[10svh] max-h-[75svh]"} flex justify-center ${className || ""}`}
     {...props}
   >
     {children}
