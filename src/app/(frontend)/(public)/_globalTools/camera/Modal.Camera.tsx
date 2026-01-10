@@ -161,7 +161,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
         </Tool.Main>
 
         {/* Controller: 操作系 */}
-        <Tool.Controller enableBackgroundTap>
+        <Tool.Controller>
           <div className="flex items-center justify-around gap-4 px-4">
             {/* Device Switch */}
             <div className="relative">
@@ -242,7 +242,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
         </Tool.Controller>
 
         {/* Showcase: 撮影済み画像一覧 */}
-        <Tool.Showcase enableBackgroundTap>
+        <Tool.Showcase>
           <div className="grid grid-rows-[auto_1fr] gap-2">
             <div className="flex justify-between">
               {/* showcaseメニュー */}

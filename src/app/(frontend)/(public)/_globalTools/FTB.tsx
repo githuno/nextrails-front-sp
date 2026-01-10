@@ -1,10 +1,11 @@
 "use client"
 
 import React, { useRef, useState } from "react"
-import CameraModal from "./camera/Modal.Camera"
+import FloatingActionButton from "./_components/FloatingActionButton"
 import { useCameraActions } from "./camera/cameraStore"
+import { CameraIcon } from "./camera/Icons.Camera"
+import CameraModal from "./camera/Modal.Camera"
 
-// TODO: フリック選択
 // TODO: FTB利用画面ではsessionID(uuidv7)を発行しurlパラメータにセットしてlocalStrageに保存する
 // そのsessionIDに紐づく画像を表示する（urlをSSOTとする。sessionSync 機能）
 // TODO: sessionIdごとにIndexedDBでdatabaseを作成して、キーバリューストア（ローカルのs3）として画像・動画のblob/urlを保存する
@@ -12,7 +13,7 @@ import { useCameraActions } from "./camera/cameraStore"
 // TODO: pgliteはDrizzle→TanstackDBでラップして抽象化しそのまま状態管理として利用する
 // TODO: FTB内で定義するcameraへ注入するaction関数はuseSyncExternalStoreを用いて*useToolActionStore()*にまとめてグローバル状態管理する（コンテキスト次第でactionを切り替え可能にする）
 
-const FTB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className, ...buttonProps }) => {
+const FTB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const [isWebViewOpen, setIsWebViewOpen] = useState(false)
   const [webUrl, setWebUrl] = useState("")
@@ -39,6 +40,13 @@ const FTB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ classNam
     fileInputRef.current?.click()
   }
 
+  const fabItems = [
+    { id: 1, label: "Camera", icon: <CameraIcon />, onClick: () => setIsCameraOpen(true) },
+    { id: 2, label: "Text", onClick: () => alert("Text Component") },
+    { id: 3, label: "Voice", onClick: () => alert("Voice Component") },
+    { id: 4, label: "File", onClick: handleSelect },
+  ]
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (!files || files.length === 0) return
@@ -55,17 +63,7 @@ const FTB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ classNam
       {/* Hidden file input for gallery selection */}
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
 
-      <div className="pointer-events-none fixed top-0 z-50 h-svh w-svw">
-        <div className={`pointer-events-auto absolute right-[5%] bottom-[5%] ${className || ""}`}>
-          <button
-            onClick={() => setIsCameraOpen(true)}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 p-4 text-white shadow-lg transition-transform active:scale-95"
-            {...buttonProps}
-          >
-            📷
-          </button>
-        </div>
-      </div>
+      <FloatingActionButton.Simple items={fabItems} className={className} />
 
       <CameraModal
         isOpen={isCameraOpen}
