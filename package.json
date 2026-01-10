@@ -17,10 +17,13 @@
   },
   "type": "module",
   "dependencies": {
+    "@electric-sql/pglite": "^0.3.14",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-toast": "^1.2.6",
     "@tailwindcss/postcss": "^4.1.18",
+    "@tanstack/react-db": "^0.1.62",
     "@types/react-router-dom": "^5.3.3",
+    "drizzle-orm": "^0.45.1",
     "gsplat": "^0.2.11",
     "hls.js": "^1.5.20",
     "idb": "^8.0.0",
@@ -70,4 +73,3 @@
     "@types/react-dom": "19.2.3"
   }
 }
-
