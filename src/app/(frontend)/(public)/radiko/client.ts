@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react"
+import { useExternalStore } from "@/hooks/useExternalStore"
 import { AreaId, Auth, Program, Station, areaIdToNameMap, url } from "./constants"
 
 const RADIKO_AUTH_KEY = "radiko_auth"
@@ -860,10 +860,10 @@ const RadikoClient = {
 export default RadikoClient
 
 // Reactフック：RadikoClientの状態を使用するためのカスタムフック
-export function useRadikoState(): RadikoState {
-  return useSyncExternalStore(
-    RadikoClient.subscribe,
-    RadikoClient.getState,
-    RadikoClient.getState, // サーバーサイド用
-  )
+export function useRadikoState() {
+  return useExternalStore<RadikoState>({
+    subscribe: RadikoClient.subscribe,
+    getSnapshot: RadikoClient.getState,
+    getServerSnapshot: RadikoClient.getState, // サーバーサイド用
+  })
 }

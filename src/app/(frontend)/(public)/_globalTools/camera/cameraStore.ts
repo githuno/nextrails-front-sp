@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react"
+import { useExternalStore } from "@/hooks/useExternalStore"
 import { createCameraClient, type CameraConfig } from "./cameraClient"
 
 interface CameraState {
@@ -376,7 +376,7 @@ const actions = {
 }
 
 export const useCameraState = () => {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  return useExternalStore<CameraState>({ subscribe, getSnapshot, getServerSnapshot })
 }
 
 export const useCameraActions = () => {
