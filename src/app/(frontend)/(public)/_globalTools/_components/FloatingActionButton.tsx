@@ -59,6 +59,12 @@ interface FloatingActionButtonItem {
 interface SimplifiedFloatingActionButtonProps {
   items: FloatingActionButtonItem[]
   triggerIcon?: React.ReactNode
+  position?: {
+    right?: string
+    bottom?: string
+    top?: string
+    left?: string
+  }
 }
 
 // --- コンテキスト ---
@@ -285,6 +291,7 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
   items,
   triggerIcon,
   className,
+  position = { right: "8%", bottom: "12%" },
 }) => {
   const defaultIcon = (
     <svg
@@ -316,7 +323,15 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
 
   return (
     <FloatingActionButton total={items.length} distance={110}>
-      <div className={`pointer-events-auto absolute right-[8%] bottom-[12%] ${className || ""}`}>
+      <div
+        className={`pointer-events-auto absolute ${className || ""}`}
+        style={{
+          right: position.right,
+          bottom: position.bottom,
+          top: position.top,
+          left: position.left,
+        }}
+      >
         <Trigger>
           {({ isExpanded, toggle, isDragging, flickIndex }) => (
             <button

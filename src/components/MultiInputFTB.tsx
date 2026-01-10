@@ -1,31 +1,20 @@
 "use client"
 
+import FloatingActionButton from "@/app/(frontend)/(public)/_globalTools/_components/FloatingActionButton"
 import { Modal } from "@/components/atoms"
 import Camera from "@/components/camera"
 import React, { useEffect, useState, useTransition } from "react"
 
-interface MultiInputFTBProps extends React.HTMLAttributes<HTMLDivElement> {
+interface MultiInputFTBProps {
   className?: string
 }
-
-// カメラが利用可能かどうかをチェックしてcameraボタンを非活性にするか判定する
-// const hasCamera = async (): Promise<boolean> => {
-//   try {
-//     const devices = await navigator.mediaDevices.enumerateDevices()
-//     return devices.some((device) => device.kind === "videoinput")
-//   } catch (error) {
-//     console.error("Error checking camera availability:", error)
-//     return false
-//   }
-// }
 
 const resetZoom = () => {
   document.body.style.transform = "scale(1)"
   document.body.style.transformOrigin = "0 0"
 }
 
-const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className, ...props }) => {
-  const [isExpanded, setIsExpanded] = useState(false)
+const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className }) => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedComponent, setSelectedComponent] = useState<React.ReactNode>(null)
   const [isPending, startTransition] = useTransition()
@@ -38,43 +27,21 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className, ...props }) =>
     })
   }, [])
 
-  const toggleButtons = () => {
-    setIsExpanded(!isExpanded)
-  }
-
   const openModal = async (component: React.ReactNode) => {
     startTransition(async () => {
       if (React.isValidElement(component) && component.type === Camera) {
-        // const cameraAvailable = await hasCamera()
-        // if (!cameraAvailable) {
-        //   alert("カメラが利用できません")
-        //   return
-        // }
         resetZoom()
       }
       setSelectedComponent(component)
       setIsModalOpen(true)
-      setIsExpanded(false)
     })
   }
 
-  const buttons = [
+  const items = [
     { id: 1, label: "Cam", onClick: () => openModal(<Camera />), disabled: isPending },
-    {
-      id: 2,
-      label: "Text",
-      onClick: () => openModal(<div>Text Component</div>),
-    },
-    {
-      id: 3,
-      label: "Voice",
-      onClick: () => openModal(<div>Voice Component</div>),
-    },
-    {
-      id: 4,
-      label: "File",
-      onClick: () => openModal(<div>File Component</div>),
-    },
+    { id: 2, label: "Text", onClick: () => openModal(<div>Text Component</div>) },
+    { id: 3, label: "Voice", onClick: () => openModal(<div>Voice Component</div>) },
+    { id: 4, label: "File", onClick: () => openModal(<div>File Component</div>) },
   ]
 
   if (!isClient) {
@@ -82,40 +49,9 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className, ...props }) =>
   }
 
   return (
-    <div className="pointer-events-none fixed top-0 z-50 h-svh w-svw">
-      <div className={`pointer-events-auto absolute right-[5%] bottom-[15%] ${className}`} {...props}>
-        <button
-          onClick={toggleButtons}
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg hover:bg-blue-700"
-        >
-          {isExpanded ? "×" : "+"}
-        </button>
-        {isExpanded &&
-          buttons.map((button, index) => {
-            const distance = 100 // 距離
-            const startAngle = -200 // 開始点角度（0度が3時の位置）
-            const angle = (startAngle * Math.PI) / 180 + (index / (buttons.length - 1)) * (2 * Math.PI * (120 / 360))
-            const x = distance * Math.cos(angle)
-            const y = distance * Math.sin(angle)
-            return (
-              <button
-                key={button.id}
-                onClick={button.onClick}
-                disabled={button.disabled}
-                className={`absolute flex h-12 w-12 items-center justify-center rounded-full bg-slate-500 text-white shadow-lg transition-transform duration-300 ${button.disabled ? "cursor-not-allowed opacity-50" : ""}`}
-                style={{
-                  transform: isExpanded
-                    ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`
-                    : "translate(calc(-50%), calc(-50%))",
-                  top: `calc(50%)`,
-                  left: `calc(50%)`,
-                }}
-              >
-                {button.label}
-              </button>
-            )
-          })}
-      </div>
+    <div className="pointer-events-none fixed top-0 z-50 h-svh w-svw overflow-hidden">
+      <FloatingActionButton.Simple items={items} className={className} position={{ right: "8%", bottom: "30%" }} />
+
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

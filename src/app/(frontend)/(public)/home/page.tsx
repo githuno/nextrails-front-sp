@@ -1,3 +1,4 @@
+import MultiInputFTB from "@/components/MultiInputFTB"
 import Image from "next/image"
 import FTB from "../_globalTools/FTB"
 
@@ -104,7 +105,7 @@ export default function Page() {
       </div>
 
       {/* ボタン↓ */}
-      {/* <MultiInputFTB className="p-2" /> */}
+      <MultiInputFTB className="p-2" />
       <FTB className="p-2" />
       {/* ボタン↑ */}
     </main>
