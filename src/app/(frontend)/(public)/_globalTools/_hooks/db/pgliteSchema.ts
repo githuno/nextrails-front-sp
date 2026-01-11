@@ -3,6 +3,7 @@ import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
 export const capturedFiles = pgTable("captured_files", {
   id: uuid("id").primaryKey().defaultRandom(),
   sessionId: text("session_id").notNull(),
+  fileSet: text("file_set").notNull(),
   fileName: text("file_name").notNull(),
   mimeType: text("mime_type").notNull(),
   size: integer("size").notNull(),

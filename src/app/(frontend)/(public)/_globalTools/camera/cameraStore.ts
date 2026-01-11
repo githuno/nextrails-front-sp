@@ -15,13 +15,13 @@ interface CameraState {
   error: Error | null
   aspectRatio: number | null
   deviceOrientation: number // デバイスの物理的な向き 0, 90, 180, 270
-  isInitialized: boolean // 初期ロード完了フラグ
 }
 
 export interface CapturedImage {
   url: string
   idbKey?: string
   dbId?: string
+  isPending?: boolean
 }
 
 interface CameraStateInternal extends CameraState {
@@ -67,7 +67,6 @@ const state: CameraStateInternal = {
   aspectRatio: null,
   deviceOrientation: 0,
   orientationListener: null,
-  isInitialized: false,
   externalActions: {},
   callbacks: {},
 }
@@ -88,7 +87,6 @@ const serverSnapshot: CameraState = {
   error: null,
   aspectRatio: null,
   deviceOrientation: 0,
-  isInitialized: false,
 }
 
 // Cache for getSnapshot to avoid infinite loops
@@ -129,7 +127,6 @@ const getSnapshot = (): CameraState => {
       error: state.error,
       aspectRatio: state.aspectRatio,
       deviceOrientation: state.deviceOrientation,
-      isInitialized: state.isInitialized,
     }
     currentVersion = snapshotVersion
   }
@@ -190,8 +187,15 @@ const getAvailableDevices = async (): Promise<MediaDeviceInfo[]> => {
   const client = getCameraClient()
   const devices = await client.getAvailableDevices()
   state.availableDevices = devices
+  state.isAvailable = devices.length > 0
   notify()
   return devices
+}
+
+const checkAvailability = async (): Promise<boolean> => {
+  if (state.isAvailable !== null) return state.isAvailable
+  const devices = await getAvailableDevices()
+  return devices.length > 0
 }
 
 const switchDevice = async (deviceId?: string): Promise<void> => {
@@ -376,11 +380,6 @@ const setCapturedImages = (images: CapturedImage[]): void => {
   notify()
 }
 
-const setInitialized = (initialized: boolean): void => {
-  state.isInitialized = initialized
-  notify()
-}
-
 const addCapturedFile = async (file: Blob | File): Promise<void> => {
   const url = URL.createObjectURL(file)
   let savedInfo: CapturedImage = { url, idbKey: undefined, dbId: undefined }
@@ -449,7 +448,7 @@ const cleanup = (): void => {
   if (state.videoElement) {
     state.videoElement.srcObject = null
   }
-  state.isAvailable = null
+  // state.isAvailable はリセットしない（ハードウェアの有無は基本変わらないため）
   state.isScanning = false
   state.isRecording = false
   state.isCapturing = false
@@ -459,6 +458,7 @@ const cleanup = (): void => {
 }
 
 const actions = {
+  checkAvailability,
   setup,
   switchDevice,
   startQrScan,
@@ -471,7 +471,6 @@ const actions = {
   addCapturedImage,
   addCapturedFile,
   setCapturedImages,
-  setInitialized,
   setCallbacks,
   setExternalActions,
   startOrientationTracking,
@@ -484,4 +483,11 @@ export const useCameraState = () => {
 
 export const useCameraActions = () => {
   return actions
+}
+
+// 自動初期化: ストア読み込み時にデバイスチェックを開始
+if (typeof window !== "undefined") {
+  getAvailableDevices().catch((err) => {
+    console.warn("[CameraStore] Auto-initialization device check failed:", err)
+  })
 }

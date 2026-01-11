@@ -2,7 +2,8 @@ import { Carousel, CarouselItem, Modal } from "@/components/atoms"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
 import { Tool } from "../_components/GlobalTool"
-import { EditIcon, LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "../_components/Icons"
+import { LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "../_components/Icons"
+import { useToolActionStore } from "../_hooks/useToolActionStore"
 import { useCameraActions, useCameraState } from "./cameraStore"
 
 interface CameraModalProps {
@@ -10,20 +11,11 @@ interface CameraModalProps {
   onClose: () => void
   onScan?: (data: string) => void
   onSelect?: () => void
-  webViewUrl?: string
-  isWebViewOpen?: boolean
-  onWebViewClose?: () => void
 }
 
-const CameraModal: React.FC<CameraModalProps> = ({
-  isOpen,
-  onClose,
-  onScan,
-  onSelect,
-  webViewUrl,
-  isWebViewOpen,
-  onWebViewClose,
-}) => {
+const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSelect }) => {
+  const { isDbReady, isWebViewOpen, webUrl, closeWebView, currentFileSet, fileSetInfo, switchFileSet } =
+    useToolActionStore()
   const cameraState = useCameraState()
   const cameraActions = useCameraActions()
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -31,11 +23,9 @@ const CameraModal: React.FC<CameraModalProps> = ({
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const [showDeviceList, setShowDeviceList] = useState(false)
-  const [showSetsDrawer, setShowSetsDrawer] = useState(false)
   const [isLongPressing, setIsLongPressing] = useState(false)
   const [viewingIndex, setViewingIndex] = useState<number | null>(null)
-  const [setName, setSetName] = useState("1")
-  const [isEditingName, setIsEditingName] = useState(false)
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false)
 
   // アクション（コールバック）の登録
   useEffect(() => {
@@ -244,43 +234,23 @@ const CameraModal: React.FC<CameraModalProps> = ({
         {/* Showcase: 撮影済み画像一覧 */}
         <Tool.Showcase>
           <div className="grid grid-rows-[auto_1fr] gap-2">
-            <div className="flex justify-between">
-              {/* showcaseメニュー */}
+            <div className="flex justify-end px-1">
+              {/* Library / Set Management button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  setShowSetsDrawer(!showSetsDrawer)
+                  setIsLibraryOpen(true)
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800/80 text-white transition-all hover:bg-zinc-700 active:scale-95"
+                className="group flex h-8 items-center gap-2 rounded-full border border-white/5 bg-zinc-800/80 px-3 shadow-lg transition-all hover:bg-zinc-700 active:scale-95"
               >
-                <MenuIcon size="16px" color="#fff" />
-              </button>
-              {/* セット名編集ボタン */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setIsEditingName(true)
-                }}
-                className="flex h-8 items-center gap-1 rounded-full border border-zinc-800/50 bg-zinc-900/80 px-2 py-1 transition-colors hover:bg-zinc-800"
-              >
-                <span className="text-[9px] font-black tracking-[0.15em] text-zinc-400 uppercase">Set</span>
-                <span className="text-xs font-bold text-zinc-100">{setName}</span>
-                <span className="ml-1 opacity-40 transition-opacity hover:opacity-100">
-                  <EditIcon size="10px" color="#fff" />
-                </span>
+                <MenuIcon size="14px" color="#fff" />
+                <div className="flex flex-col items-start leading-none">
+                  <span className="max-w-64 truncate text-[14px] font-bold text-zinc-100">{currentFileSet}</span>
+                </div>
               </button>
             </div>
             {/* ギャラリー */}
-            {!cameraState.isInitialized ? (
-              <div className="flex h-16 w-full items-center justify-center gap-2 text-[8px] font-bold tracking-[0.2em] text-zinc-600 uppercase italic">
-                <LoadingSpinner size="12px" color="rgba(255,255,255,0.2)" />
-                Loading Database...
-              </div>
-            ) : cameraState.capturedImages.length === 0 ? (
-              <div className="flex h-16 w-full items-center justify-center text-[10px] font-bold tracking-widest text-zinc-600 uppercase italic">
-                No captures yet
-              </div>
-            ) : (
+            {cameraState.capturedImages.length > 0 ? (
               <Carousel containerClassName="gap-x-3 h-16">
                 {cameraState.capturedImages.map((image, index) => (
                   <CarouselItem key={index}>
@@ -289,7 +259,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
                         e.stopPropagation()
                         setViewingIndex(index)
                       }}
-                      className="h-full overflow-hidden rounded-xs shadow-2xl"
+                      className={`h-full overflow-hidden rounded-xs shadow-2xl transition-opacity ${image.isPending ? "opacity-50" : ""}`}
                     >
                       <Image
                         src={image.url}
@@ -297,8 +267,13 @@ const CameraModal: React.FC<CameraModalProps> = ({
                         width={96}
                         height={54}
                         unoptimized
-                        className="h-full w-auto rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
+                        className={`h-full w-auto rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110 ${image.isPending ? "grayscale" : ""}`}
                       />
+                      {image.isPending && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <LoadingSpinner size="12px" color="#fff" />
+                        </div>
+                      )}
                     </button>
                     {/* remove */}
                     <button
@@ -314,41 +289,17 @@ const CameraModal: React.FC<CameraModalProps> = ({
                   </CarouselItem>
                 ))}
               </Carousel>
+            ) : !isDbReady ? (
+              <div className="flex h-16 w-full items-center justify-center gap-2 text-[8px] font-bold tracking-[0.2em] text-zinc-600 uppercase italic">
+                <LoadingSpinner size="12px" color="rgba(255,255,255,0.2)" />
+                Loading Database...
+              </div>
+            ) : (
+              <div className="flex h-16 w-full items-center justify-center text-[10px] font-bold tracking-widest text-zinc-600 uppercase italic">
+                No captures yet
+              </div>
             )}
           </div>
-
-          {/* Sets Drawer Placeholder */}
-          {showSetsDrawer && (
-            <div className="animate-in fade-in slide-in-from-top-4 absolute top-16 right-4 left-4 z-50 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-4 shadow-2xl backdrop-blur-xl">
-              <div className="mb-3 flex items-center justify-between px-1">
-                <h4 className="text-[10px] font-black tracking-widest text-zinc-500 uppercase">Switch Image Set</h4>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setShowSetsDrawer(false)
-                  }}
-                  className="text-[10px] text-zinc-600 hover:text-zinc-300"
-                >
-                  Close
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {[1, 2, 3].map((id) => (
-                  <button
-                    key={id}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSetName(id.toString())
-                      setShowSetsDrawer(false)
-                    }}
-                    className={`flex flex-col items-center gap-2 rounded-xl p-3 transition-all ${setName === id.toString() ? "bg-blue-600 ring-2 ring-blue-400" : "bg-zinc-800 hover:bg-zinc-700"}`}
-                  >
-                    <div className="text-xs font-bold">Set {id}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </Tool.Showcase>
       </Tool>
 
@@ -372,58 +323,136 @@ const CameraModal: React.FC<CameraModalProps> = ({
         )}
       </Modal>
 
-      {/* Rename Modal */}
-      <Modal isOpen={isEditingName} onClose={() => setIsEditingName(false)} className="max-w-xs p-6">
-        <h3 className="mb-4 text-lg font-bold text-white">Rename Set</h3>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            const formData = new FormData(e.currentTarget)
-            const newName = formData.get("setName") as string
-            if (newName.trim()) {
-              setSetName(newName.trim())
-              setIsEditingName(false)
-            }
-          }}
-          className="flex flex-col gap-4"
-        >
-          <input
-            type="text"
-            name="setName"
-            defaultValue={setName}
-            autoFocus
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 p-3 text-white placeholder-zinc-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
-            placeholder="Enter set name"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsEditingName(false)}
-              className="rounded-lg px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white"
+      {/* FileSet Library Modal - Integrated Management */}
+      <Modal
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        className="shadow-3xl w-[95vw] max-w-md overflow-hidden border border-white/10 p-0"
+        backdropClassName="backdrop:bg-zinc-950/80 backdrop:backdrop-blur-sm"
+      >
+        <div className="flex max-h-[85vh] flex-col bg-zinc-900">
+          {/* Header & Create Input */}
+          <div className="border-b border-zinc-800 bg-linear-to-b from-zinc-800 to-zinc-900 px-8 pt-10 pb-6">
+            <h3 className="mb-2 flex items-center gap-2 text-xl font-bold text-white">
+              <PictureIcon size="20px" color="#3b82f6" />
+              FileSet Library
+            </h3>
+            <p className="mb-8 text-[10px] leading-relaxed font-bold tracking-[0.2em] text-zinc-500 uppercase">
+              Organize your workspace into independent collections.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const formData = new FormData(e.currentTarget)
+                const newName = formData.get("setName") as string
+                if (newName.trim()) {
+                  switchFileSet(newName.trim())
+                  setIsLibraryOpen(false)
+                }
+              }}
+              className="group relative"
             >
-              Cancel
-            </button>
+              <input
+                key={isLibraryOpen ? currentFileSet : "closed"}
+                type="text"
+                name="setName"
+                defaultValue={currentFileSet}
+                autoFocus
+                className="w-full rounded-2xl border border-zinc-700 bg-zinc-950/50 px-6 py-4 text-lg font-bold text-white shadow-inner transition-all outline-none placeholder:text-zinc-700 focus:border-blue-500"
+                placeholder="Name a new collection..."
+              />
+              <button
+                type="submit"
+                className="absolute top-2 right-2 bottom-2 rounded-xl bg-blue-600 px-5 text-[10px] font-black tracking-widest text-white uppercase shadow-lg transition-all hover:bg-blue-500 active:scale-95"
+              >
+                Execute
+              </button>
+            </form>
+          </div>
+
+          {/* Library Grid */}
+          <div className="scrollbar-hide flex-1 overflow-y-auto p-6">
+            <div className="mb-4 flex items-center justify-between px-2">
+              <h4 className="text-[10px] font-black tracking-[0.25em] text-zinc-600 uppercase">Existing Collections</h4>
+              <span className="text-[10px] font-bold text-zinc-700">{fileSetInfo.length} sets</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {fileSetInfo.map((set) => (
+                <button
+                  key={set.name}
+                  onClick={() => {
+                    switchFileSet(set.name)
+                    setIsLibraryOpen(false)
+                  }}
+                  className={`group relative flex flex-col text-left transition-all active:scale-[0.98] ${
+                    currentFileSet === set.name
+                      ? "ring-2 ring-blue-500 ring-offset-4 ring-offset-zinc-900"
+                      : "hover:-translate-y-0.5"
+                  }`}
+                >
+                  {/* Thumbnail */}
+                  <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-white/5 bg-zinc-950 shadow-xl">
+                    {set.latestImageUrl ? (
+                      <Image
+                        src={set.latestImageUrl}
+                        alt={set.name}
+                        fill
+                        unoptimized
+                        className="object-cover opacity-80 transition-all group-hover:scale-110 group-hover:opacity-100"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center border-2 border-dashed border-zinc-800">
+                        <PictureIcon size="24px" color="#18181b" />
+                      </div>
+                    )}
+                    {/* Badge */}
+                    <div className="absolute top-2 right-2 rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[8px] font-black tracking-tighter text-white uppercase backdrop-blur-md">
+                      {set.count} items
+                    </div>
+                  </div>
+
+                  {/* Set Name */}
+                  <div className="mt-2 px-1">
+                    <div className="truncate text-xs font-black tracking-widest text-zinc-400 uppercase transition-colors group-hover:text-blue-400">
+                      {set.name}
+                    </div>
+                  </div>
+
+                  {/* Active Indicator */}
+                  {currentFileSet === set.name && (
+                    <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full border-2 border-zinc-900 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex justify-center bg-zinc-950/50 p-4">
             <button
-              type="submit"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+              onClick={() => setIsLibraryOpen(false)}
+              className="text-[10px] font-bold tracking-[0.2em] text-zinc-600 uppercase transition-colors hover:text-white"
             >
-              Save
+              Back to Camera
             </button>
           </div>
-        </form>
+        </div>
       </Modal>
 
       {/* WebViewer Modal: UI実体をCameraModal側で保持 */}
+
       <Modal
         isOpen={!!isWebViewOpen}
-        onClose={() => onWebViewClose?.()}
+        onClose={() => closeWebView()}
         className="h-full max-h-none w-full max-w-none p-0"
         backdropClassName="backdrop:bg-black/90 backdrop:backdrop-blur-md"
       >
         <div className="relative h-full w-full overflow-hidden bg-white">
-          {webViewUrl && (
+          {webUrl && (
             <iframe
-              src={`/api/proxy/qr?url=${encodeURIComponent(webViewUrl)}`}
+              src={`/api/proxy/qr?url=${encodeURIComponent(webUrl)}`}
               className="h-full w-full border-none"
               title="Webview"
             />

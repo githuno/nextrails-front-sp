@@ -289,6 +289,11 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
   className,
   position = { right: "8%", bottom: "12%" },
 }) => {
+  const [isMounted, setIsMounted] = useState(false)
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
   const defaultIcon = (
     <svg
       width="24"
@@ -319,6 +324,8 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
     return () => window.removeEventListener("fab-flick-execute", handleFlickExecute)
   }, [items])
 
+  // ハイドレーションが完了するまで非表示
+  if (!isMounted) return null
   return (
     <FloatingActionButton total={items.length} distance={110}>
       <div

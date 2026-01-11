@@ -57,6 +57,7 @@ export const getDb = async () => {
           CREATE TABLE captured_files (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             session_id TEXT NOT NULL,
+            file_set TEXT NOT NULL,
             file_name TEXT NOT NULL,
             mime_type TEXT NOT NULL,
             size INTEGER NOT NULL,
@@ -66,6 +67,7 @@ export const getDb = async () => {
             deleted_at TIMESTAMP
           );
           CREATE INDEX idx_captured_files_session_id ON captured_files(session_id);
+          CREATE INDEX idx_captured_files_file_set ON captured_files(file_set);
         `)
       }
 
