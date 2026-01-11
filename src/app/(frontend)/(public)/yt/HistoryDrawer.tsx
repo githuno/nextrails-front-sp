@@ -7,7 +7,7 @@ import { HistoryItem, formatDuration, formatWatchedDate, formatWatchedTime } fro
 interface HistoryDrawerProps {
   isOpen: boolean
   onClose: () => void
-  onVideoSelect: (videoId: string) => void
+  onVideoSelect: (videoId: string, currentTime?: number) => void
 }
 
 const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoSelect }) => {
@@ -27,11 +27,13 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoS
   const removeFromHistory = useCallback((event: React.MouseEvent, videoId: string) => {
     event.stopPropagation() // クリックイベントの伝播を停止
 
-    try {
-      youtubeClient.removeFromHistory(videoId)
-      setHistoryUpdateTrigger((prev) => prev + 1)
-    } catch (error) {
-      console.error("履歴からの削除に失敗しました:", error)
+    if (window.confirm("この動画を履歴から削除しますか？")) {
+      try {
+        youtubeClient.removeFromHistory(videoId)
+        setHistoryUpdateTrigger((prev) => prev + 1)
+      } catch (error) {
+        console.error("履歴からの削除に失敗しました:", error)
+      }
     }
   }, [])
 
@@ -69,8 +71,8 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoS
     }
   }, [isOpen, historyUpdateTrigger])
 
-  const handleVideoSelect = (videoId: string) => {
-    onVideoSelect(videoId)
+  const handleVideoSelect = (videoId: string, currentTime?: number) => {
+    onVideoSelect(videoId, currentTime)
     onClose() // 動画選択後にドロワーを閉じる
   }
 
@@ -117,16 +119,16 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoS
                   {historyData.byDate[date].map((item) => (
                     <div
                       key={`${item.videoId}-${item.watchedAt}`}
-                      onClick={() => handleVideoSelect(item.videoId)}
+                      onClick={() => handleVideoSelect(item.videoId, item.currentTime)}
                       className="relative flex cursor-pointer rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
                     >
                       {/* サムネイル */}
-                      <div className="mr-3 h-14 w-20 flex-shrink-0">
+                      <div className="mr-3 h-14 w-20 shrink-0">
                         <img src={item.thumbnailUrl} alt={item.title} className="h-full w-full rounded object-cover" />
                       </div>
 
                       {/* 情報 */}
-                      <div className="flex-grow pr-6">
+                      <div className="grow pr-6">
                         <div className="line-clamp-2 text-sm font-medium">{item.title}</div>
                         <div className="mt-1 flex justify-between text-xs text-gray-600">
                           <span>{item.channelTitle}</span>
@@ -145,8 +147,11 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoS
                               />
                             </div>
                             <div className="mt-0.5 text-right text-xs text-gray-500">
-                              {formatDuration(`PT${Math.floor(item.currentTime)}S`)} /{" "}
-                              {formatDuration(`PT${Math.floor(item.duration)}S`)}
+                              {(() => {
+                                const current = formatDuration(`PT${Math.floor(item.currentTime)}S`)
+                                const total = formatDuration(`PT${Math.floor(item.duration)}S`)
+                                return `${current} / ${total}`
+                              })()}
                             </div>
                           </div>
                         )}

@@ -6,15 +6,17 @@ import { SearchItem, SearchParams, SearchResponse } from "./constants"
 
 interface SearchProps {
   onVideoSelect: (video: SearchItem) => void
+  onPlaylistSelect?: (playlist: SearchItem) => void
 }
 
-export default function Search({ onVideoSelect }: SearchProps) {
+export default function Search({ onVideoSelect, onPlaylistSelect }: SearchProps) {
   const [searchTerm, setSearchTerm] = useState<string>("")
   const [searchResults, setSearchResults] = useState<SearchResponse | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [nextPageToken, setNextPageToken] = useState<string | undefined>(undefined)
   const [videoDuration, setVideoDuration] = useState<"any" | "long" | "medium" | "short">("any")
+  const [searchType, setSearchType] = useState<"video" | "playlist">("video")
 
   // 検索実行
   const handleSearch = useCallback(
@@ -28,8 +30,8 @@ export default function Search({ onVideoSelect }: SearchProps) {
         const params: SearchParams = {
           q: searchTerm,
           maxResults: 15,
-          type: "video",
-          videoDuration,
+          type: searchType,
+          ...(searchType === "video" && { videoDuration }),
           pageToken,
         }
 
@@ -57,7 +59,7 @@ export default function Search({ onVideoSelect }: SearchProps) {
         setIsLoading(false)
       }
     },
-    [searchTerm, videoDuration],
+    [searchTerm, videoDuration, searchType],
   )
 
   // もっと読み込む処理
@@ -87,20 +89,30 @@ export default function Search({ onVideoSelect }: SearchProps) {
             className="flex-1 rounded border p-2 text-sm"
             required
           />
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <select
-              value={videoDuration}
-              onChange={(e) => setVideoDuration(e.target.value as any)}
-              className="w-full flex-grow rounded border bg-white p-2 text-sm sm:w-auto"
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value as "video" | "playlist")}
+              className="w-full rounded border bg-white p-2 text-sm sm:w-auto"
             >
-              <option value="any">すべての長さ</option>
-              <option value="short">短い（4分未満）</option>
-              <option value="medium">中程度（4〜20分）</option>
-              <option value="long">長い（20分超）</option>
+              <option value="video">動画</option>
+              <option value="playlist">プレイリスト</option>
             </select>
+            {searchType === "video" && (
+              <select
+                value={videoDuration}
+                onChange={(e) => setVideoDuration(e.target.value as "any" | "long" | "medium" | "short")}
+                className="w-full rounded border bg-white p-2 text-sm sm:w-auto"
+              >
+                <option value="any">すべての長さ</option>
+                <option value="short">短い（4分未満）</option>
+                <option value="medium">中程度（4〜20分）</option>
+                <option value="long">長い（20分超）</option>
+              </select>
+            )}
             <button
               type="submit"
-              className="relative min-w-[80px] overflow-hidden rounded bg-transparent px-4 py-2 text-sm whitespace-nowrap text-white before:absolute before:inset-[-4px] before:-z-10 before:[animation:spin_4s_linear_infinite] before:rounded-[inherit] before:bg-[conic-gradient(from_0deg_at_50%_0%,#ffcc00,#00ff00,#00ffff,#fff,#fff,#fff)] before:content-[''] after:absolute after:inset-[1px] after:-z-[5] after:rounded-[inherit] after:bg-gradient-to-br after:from-red-500 after:to-purple-600 after:content-[''] hover:before:[animation:spin_1.5s_linear_infinite] disabled:before:[animation:none] disabled:after:bg-gradient-to-br disabled:after:from-gray-500 disabled:after:to-gray-600"
+              className="relative min-w-20 overflow-hidden rounded bg-transparent px-4 py-2 text-sm whitespace-nowrap text-white before:absolute before:-inset-1 before:-z-10 before:animate-[spin_4s_linear_infinite] before:rounded-[inherit] before:bg-[conic-gradient(from_0deg_at_50%_0%,#ffcc00,#00ff00,#00ffff,#fff,#fff,#fff)] before:content-[''] after:absolute after:inset-px after:-z-5 after:rounded-[inherit] after:bg-linear-to-br after:from-red-500 after:to-purple-600 after:content-[''] hover:before:animate-[spin_1.5s_linear_infinite] disabled:before:animate-none disabled:after:bg-linear-to-br disabled:after:from-gray-500 disabled:after:to-gray-600"
               disabled={isLoading}
             >
               {isLoading ? "検索中..." : "検索"}
@@ -121,22 +133,29 @@ export default function Search({ onVideoSelect }: SearchProps) {
 
           <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
             {/* <div className="columns-2 md:columns-4 gap-2 sm:gap-4"> */}
-            {searchResults.items.map((video, index) => (
+            {searchResults.items.map((item, index) => (
               <div
-                key={`${video.id.videoId}-${index}`}
-                onClick={() => onVideoSelect(video)}
+                key={`${item.id.videoId || item.id.playlistId}-${index}`}
+                onClick={() => {
+                  if (searchType === "playlist" && onPlaylistSelect) {
+                    onPlaylistSelect(item)
+                  } else {
+                    onVideoSelect(item)
+                  }
+                }}
                 className="cursor-pointer overflow-hidden rounded border bg-white shadow-sm transition-shadow [clip-path:circle(65%)] hover:shadow-md"
               >
                 <div className="relative pb-[56.25%]">
                   <img
-                    src={video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default?.url}
-                    alt={video.snippet.title}
+                    src={item.snippet.thumbnails.medium?.url || item.snippet.thumbnails.default?.url}
+                    alt={item.snippet.title}
                     className="absolute h-full w-full object-cover"
                   />
                 </div>
                 <div className="p-2 sm:p-3">
-                  <h3 className="line-clamp-2 text-xs font-medium sm:text-sm">{video.snippet.title}</h3>
-                  <p className="mt-1 text-xs text-gray-600">{video.snippet.channelTitle}</p>
+                  <h3 className="line-clamp-2 text-xs font-medium sm:text-sm">{item.snippet.title}</h3>
+                  <p className="mt-1 text-xs text-gray-600">{item.snippet.channelTitle}</p>
+                  {searchType === "playlist" && <p className="mt-1 text-xs text-purple-600">プレイリスト</p>}
                 </div>
               </div>
             ))}

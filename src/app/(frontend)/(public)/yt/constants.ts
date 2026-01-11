@@ -6,12 +6,15 @@ export const url = {
   search: "https://www.googleapis.com/youtube/v3/search",
   videos: "https://www.googleapis.com/youtube/v3/videos",
   channels: "https://www.googleapis.com/youtube/v3/channels",
+  playlists: "https://www.googleapis.com/youtube/v3/playlists",
+  playlistItems: "https://www.googleapis.com/youtube/v3/playlistItems",
 }
 
 // ローカルストレージのキー
 export const YT_HISTORY_KEY = "youtube_history"
 export const YT_FAVORITES_KEY = "youtube_favorites"
 export const YT_CHANNEL_FAVORITES_KEY = "youtube_channel_favorites"
+export const YT_PLAYLIST_FAVORITES_KEY = "youtube_playlist_favorites"
 
 // YouTubeのサムネイルサイズ
 export enum ThumbnailSize {
@@ -144,6 +147,63 @@ export interface ChannelDetail {
   }
 }
 
+// プレイリスト詳細情報の型定義
+export interface PlaylistDetail {
+  id: string
+  snippet: {
+    publishedAt: string
+    channelId: string
+    title: string
+    description: string
+    thumbnails: {
+      [key in ThumbnailSize]?: {
+        url: string
+        width: number
+        height: number
+      }
+    }
+    channelTitle: string
+  }
+  status: {
+    privacyStatus: string
+  }
+  contentDetails: {
+    itemCount: number
+  }
+}
+
+// プレイリストアイテムの型定義
+export interface PlaylistItem {
+  id: string
+  snippet: {
+    publishedAt: string
+    channelId: string
+    title: string
+    description: string
+    thumbnails: {
+      [key in ThumbnailSize]?: {
+        url: string
+        width: number
+        height: number
+      }
+    }
+    channelTitle: string
+    playlistId: string
+    position: number
+    resourceId: {
+      kind: string
+      videoId: string
+    }
+  }
+  contentDetails: {
+    videoId: string
+    startAt?: string
+    endAt?: string
+    note?: string
+    videoPublishedAt: string
+  }
+}
+
 // 視聴履歴から日付文字列を生成するヘルパー関数
 export const formatWatchedDate = (timestamp: number): string => {
   const date = new Date(timestamp)
@@ -158,10 +218,15 @@ export const formatWatchedDate = (timestamp: number): string => {
 // 視聴時間をフォーマットするヘルパー関数
 export const formatWatchedTime = (timestamp: number): string => {
   const date = new Date(timestamp)
-  return date.toLocaleTimeString("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return (
+    date.toLocaleString("ja-JP", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }) + " JST"
+  )
 }
 
 // ISO 8601形式の動画時間を分:秒形式に変換
@@ -173,10 +238,11 @@ export const formatDuration = (isoDuration: string): string => {
   const minutes = match[2] ? parseInt(match[2]) : 0
   const seconds = match[3] ? parseInt(match[3]) : 0
 
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-  }
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`
+  const totalSeconds = hours * 3600 + minutes * 60 + seconds
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  const remainingSeconds = totalSeconds % 60
+
+  return `${totalMinutes}:${remainingSeconds.toString().padStart(2, "0")}`
 }
 
 declare global {
@@ -201,8 +267,14 @@ declare global {
       getVideoUrl(): string
       getVideoEmbedCode(): string
       getOptions(): string[]
-      getOption(key: string): any
-      setOption(key: string, value: any): void
+      getOption(key: string): unknown
+      setOption(key: string, value: unknown): void
+      getVideoData(): {
+        video_id: string
+        author: string
+        title: string
+        [key: string]: unknown
+      }
       mute(): void
       unMute(): void
       isMuted(): boolean
@@ -250,10 +322,10 @@ declare global {
     interface Events {
       onReady?: (event: PlayerEvent) => void
       onStateChange?: (event: OnStateChangeEvent) => void
-      onPlaybackQualityChange?: (event: any) => void
-      onPlaybackRateChange?: (event: any) => void
-      onError?: (event: any) => void
-      onApiChange?: (event: any) => void
+      onPlaybackQualityChange?: (event: PlayerEvent & { data: string }) => void
+      onPlaybackRateChange?: (event: PlayerEvent & { data: number }) => void
+      onError?: (event: PlayerEvent & { data: number }) => void
+      onApiChange?: (event: PlayerEvent) => void
     }
 
     interface PlayerEvent {

@@ -7,7 +7,7 @@ import { formatDuration, VideoDetail } from "./constants"
 interface FavoriteDrawerProps {
   isOpen: boolean
   onClose: () => void
-  onVideoSelect: (videoId: string) => void
+  onVideoSelect: (videoId: string, currentTime?: number) => void
 }
 
 const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVideoSelect }) => {
@@ -53,11 +53,13 @@ const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVide
   const removeFromFavorites = useCallback((event: React.MouseEvent, videoId: string) => {
     event.stopPropagation() // クリックイベントの伝播を停止
 
-    try {
-      youtubeClient.toggleFavorite(videoId)
-      setFavUpdateTrigger((prev) => prev + 1)
-    } catch (error) {
-      console.error("お気に入りからの削除に失敗しました:", error)
+    if (window.confirm("この動画をお気に入りから削除しますか？")) {
+      try {
+        youtubeClient.toggleFavorite(videoId)
+        setFavUpdateTrigger((prev) => prev + 1)
+      } catch (error) {
+        console.error("お気に入りからの削除に失敗しました:", error)
+      }
     }
   }, [])
 
@@ -127,7 +129,7 @@ const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVide
                   className="relative flex cursor-pointer rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
                 >
                   {/* サムネイル */}
-                  <div className="mr-3 h-14 w-20 flex-shrink-0">
+                  <div className="mr-3 h-14 w-20 shrink-0">
                     <img
                       src={video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default?.url}
                       alt={video.snippet.title}
@@ -136,7 +138,7 @@ const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVide
                   </div>
 
                   {/* 情報 */}
-                  <div className="flex-grow pr-6">
+                  <div className="grow pr-6">
                     <div className="line-clamp-2 text-sm font-medium">{video.snippet.title}</div>
                     <div className="mt-1 flex justify-between text-xs text-gray-600">
                       <span>{video.snippet.channelTitle}</span>

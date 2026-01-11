@@ -7,7 +7,7 @@ import { ChannelDetail, SearchItem } from "./constants"
 interface ChannelFavoriteDrawerProps {
   isOpen: boolean
   onClose: () => void
-  onVideoSelect: (videoId: string) => void
+  onVideoSelect: (videoId: string, currentTime?: number) => void
 }
 
 const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, onClose, onVideoSelect }) => {
@@ -64,17 +64,19 @@ const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, o
     (event: React.MouseEvent, channelId: string) => {
       event.stopPropagation() // クリックイベントの伝播を停止
 
-      try {
-        youtubeClient.toggleFavoriteChannel(channelId)
-        setUpdateTrigger((prev) => prev + 1)
+      if (window.confirm("このチャンネルをお気に入りから削除しますか？")) {
+        try {
+          youtubeClient.toggleFavoriteChannel(channelId)
+          setUpdateTrigger((prev) => prev + 1)
 
-        // 削除したチャンネルが選択中だった場合は選択を解除
-        if (selectedChannel === channelId) {
-          setSelectedChannel(null)
-          setChannelVideos([])
+          // 削除したチャンネルが選択中だった場合は選択を解除
+          if (selectedChannel === channelId) {
+            setSelectedChannel(null)
+            setChannelVideos([])
+          }
+        } catch (error) {
+          console.error("お気に入りからの削除に失敗しました:", error)
         }
-      } catch (error) {
-        console.error("お気に入りからの削除に失敗しました:", error)
       }
     },
     [selectedChannel],
@@ -218,7 +220,7 @@ const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, o
                       }`}
                     >
                       {/* チャンネルアイコン */}
-                      <div className="mr-3 h-10 w-10 flex-shrink-0">
+                      <div className="mr-3 h-10 w-10 shrink-0">
                         <img
                           src={channel.snippet.thumbnails.default?.url || channel.snippet.thumbnails.medium?.url}
                           alt={channel.snippet.title}
@@ -227,7 +229,7 @@ const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, o
                       </div>
 
                       {/* チャンネル情報 */}
-                      <div className="flex-grow pr-8">
+                      <div className="grow">
                         <div className="text-sm font-medium">{channel.snippet.title}</div>
                         <div className="mt-1 flex items-center text-xs text-gray-500">
                           <span className="mr-2">
@@ -282,7 +284,7 @@ const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, o
                             className="flex cursor-pointer rounded-lg border border-gray-200 p-2 hover:bg-gray-50"
                           >
                             {/* サムネイル */}
-                            <div className="mr-2 h-12 w-20 flex-shrink-0">
+                            <div className="mr-2 h-12 w-20 shrink-0">
                               <img
                                 src={video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default?.url}
                                 alt={video.snippet.title}
@@ -291,7 +293,7 @@ const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, o
                             </div>
 
                             {/* 情報 */}
-                            <div className="flex-grow">
+                            <div className="grow">
                               <p className="line-clamp-2 text-xs font-medium">{video.snippet.title}</p>
                               <p className="mt-1 text-xs text-gray-500">
                                 {new Date(video.snippet.publishedAt).toLocaleDateString()}
