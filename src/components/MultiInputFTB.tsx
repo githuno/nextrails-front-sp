@@ -38,10 +38,10 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className }) => {
   }
 
   const items = [
-    { id: 1, label: "Cam", onClick: () => openModal(<Camera />), disabled: isPending },
-    { id: 2, label: "Text", onClick: () => openModal(<div>Text Component</div>) },
-    { id: 3, label: "Voice", onClick: () => openModal(<div>Voice Component</div>) },
-    { id: 4, label: "File", onClick: () => openModal(<div>File Component</div>) },
+    { id: 11, label: "Cam", onClick: () => openModal(<Camera />), disabled: isPending },
+    { id: 12, label: "Text", onClick: () => openModal(<div>Text Component</div>) },
+    { id: 13, label: "Voice", onClick: () => openModal(<div>Voice Component</div>) },
+    { id: 14, label: "File", onClick: () => openModal(<div>File Component</div>) },
   ]
 
   if (!isClient) {

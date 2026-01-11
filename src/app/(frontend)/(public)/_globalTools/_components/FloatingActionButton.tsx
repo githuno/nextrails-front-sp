@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useMemo, useState } from "react"
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react"
 
 // --- 型定義 ---
 
@@ -32,7 +32,10 @@ interface TriggerProps {
     toggle: () => void
     isDragging: boolean
     flickIndex: number | null
+    items?: FloatingActionButtonItem[]
   }) => React.ReactNode
+  // itemsを渡すことで、フリック時にindexではなく一意のidを使用し、複数のFABが共存できるようにする
+  items?: FloatingActionButtonItem[]
 }
 
 interface ActionListProps {
@@ -45,7 +48,12 @@ interface ActionListProps {
 
 interface ActionItemProps {
   index?: number
-  children: (props: { x: number; y: number; isExpanded: boolean }) => React.ReactNode
+  children: (props: {
+    x: number
+    y: number
+    isExpanded: boolean
+    setIsExpanded: React.Dispatch<React.SetStateAction<boolean>>
+  }) => React.ReactNode
 }
 
 interface FloatingActionButtonItem {
@@ -131,7 +139,7 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> & {
  * Render Propsを使用して展開状態を切り替えるトリガーコンポーネント。
  * また、上級ユーザー向けのフリックジェスチャーを処理します。
  */
-const Trigger: React.FC<TriggerProps> = ({ children }) => {
+const Trigger: React.FC<TriggerProps> = ({ children, items }) => {
   const { isExpanded, toggle, flickIndex, setFlickIndex, isDragging, setIsDragging, setIsExpanded, config } =
     useFloatingActionButton()
 
@@ -151,27 +159,20 @@ const Trigger: React.FC<TriggerProps> = ({ children }) => {
     const dx = touch.clientX - startPos.x
     const dy = touch.clientY - startPos.y
     const dist = Math.sqrt(dx * dx + dy * dy)
-
     // マイクロジッターを無視するのに十分な閾値
     if (dist > 50) {
       if (!isExpanded) setIsExpanded(true)
-
       // 角度を度数で計算
       const angle = (Math.atan2(dy, dx) * 180) / Math.PI
-
       const { total, startAngle, sweepAngle } = config
       if (total === 0) return
-
       const step = total > 1 ? sweepAngle / (total - 1) : 0
-
       let normalizedAngle = angle
       if (normalizedAngle > 0 && startAngle < 0) {
         normalizedAngle -= 360
       }
-
       let closestIndex = -1
       let minDiff = Infinity
-
       for (let i = 0; i < total; i++) {
         const itemAngle = startAngle + i * step
         const diff = Math.abs(normalizedAngle - itemAngle)
@@ -180,7 +181,6 @@ const Trigger: React.FC<TriggerProps> = ({ children }) => {
           closestIndex = i
         }
       }
-
       // 選択が意図的であることを確実にするために角度許容範囲を狭くする（30度）
       if (minDiff < 30) {
         setFlickIndex(closestIndex)
@@ -193,13 +193,15 @@ const Trigger: React.FC<TriggerProps> = ({ children }) => {
   }
 
   const handleTouchEnd = () => {
-    if (flickIndex !== null) {
-      // アクションを実行
-      const event = new CustomEvent("fab-flick-execute", { detail: { index: flickIndex } })
-      window.dispatchEvent(event)
-      setIsExpanded(false)
+    if (flickIndex !== null && items) {
+      const itemId = items[flickIndex]?.id
+      if (itemId !== undefined) {
+        // indexではなくidを使用することで、複数のFABが同じページに存在しても、意図したFABのアクションのみを実行できる
+        const event = new CustomEvent("fab-flick-execute", { detail: { id: itemId } })
+        window.dispatchEvent(event)
+        setIsExpanded(false)
+      }
     }
-
     setIsDragging(false)
     setFlickIndex(null)
   }
@@ -211,7 +213,7 @@ const Trigger: React.FC<TriggerProps> = ({ children }) => {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {children({ isExpanded, toggle, isDragging, flickIndex })}
+      {children({ isExpanded, toggle, isDragging, flickIndex, items })}
     </div>
   )
 }
@@ -221,9 +223,7 @@ const Trigger: React.FC<TriggerProps> = ({ children }) => {
  */
 const ActionList: React.FC<ActionListProps> = ({ children, className = "" }) => {
   const { isExpanded, isDragging } = useFloatingActionButton()
-
   const showOverlay = isExpanded || isDragging
-
   return (
     <>
       <div
@@ -242,11 +242,9 @@ const ActionList: React.FC<ActionListProps> = ({ children, className = "" }) => 
  * 個別のアクションアイテム。位置を計算します。
  */
 const ActionItem: React.FC<ActionItemProps> = ({ index = 0, children }) => {
-  const { isExpanded, flickIndex, isDragging, config } = useFloatingActionButton()
+  const { isExpanded, flickIndex, isDragging, config, setIsExpanded } = useFloatingActionButton()
   const { total, distance, startAngle, sweepAngle } = config
-
   const isFlicked = flickIndex === index
-
   const { x, y } = useMemo(() => {
     const angleRad =
       (startAngle * Math.PI) / 180 + (total > 1 ? index / (total - 1) : 0) * (2 * Math.PI * (sweepAngle / 360))
@@ -258,9 +256,7 @@ const ActionItem: React.FC<ActionItemProps> = ({ index = 0, children }) => {
 
   // スプリング動作のイージング
   const springEasing = "cubic-bezier(0.34, 1.56, 0.64, 1)"
-
   const visible = isExpanded || isDragging
-
   return (
     <div
       style={{
@@ -278,7 +274,7 @@ const ActionItem: React.FC<ActionItemProps> = ({ index = 0, children }) => {
         zIndex: isFlicked ? 20 : 10,
       }}
     >
-      {children({ x, y, isExpanded: visible })}
+      {children({ x, y, isExpanded: visible, setIsExpanded })}
     </div>
   )
 }
@@ -309,12 +305,14 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
   )
 
   // フリック選択をリッスン
-  React.useEffect(() => {
+  useEffect(() => {
     const handleFlickExecute = (e: Event) => {
-      const customEvent = e as CustomEvent<{ index: number }>
-      const index = customEvent.detail.index
-      if (items[index] && !items[index].disabled) {
-        items[index].onClick()
+      const customEvent = e as CustomEvent<{ id: string | number }>
+      const id = customEvent.detail.id
+      // idでアイテムを特定することで、複数のFABが同じページに存在しても正しいアクションを実行できる
+      const item = items.find((item) => item.id === id)
+      if (item && !item.disabled) {
+        item.onClick()
       }
     }
     window.addEventListener("fab-flick-execute", handleFlickExecute)
@@ -332,7 +330,8 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
           left: position.left,
         }}
       >
-        <Trigger>
+        {/* itemsを渡すことでTriggerがidベースのイベントを発火できるようにする */}
+        <Trigger items={items}>
           {({ isExpanded, toggle, isDragging, flickIndex }) => (
             <button
               onClick={toggle}
@@ -357,9 +356,12 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
         <ActionList className="absolute top-8 left-8">
           {items.map((item, index) => (
             <ActionItem key={item.id} index={index}>
-              {() => (
+              {({ setIsExpanded }) => (
                 <button
-                  onClick={item.onClick}
+                  onClick={() => {
+                    setIsExpanded(false)
+                    item.onClick()
+                  }}
                   disabled={item.disabled}
                   className={`group flex h-13 w-13 items-center justify-center rounded-full border border-white/40 bg-white/80 text-slate-700 shadow-xl backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:scale-110 hover:bg-blue-500 hover:text-white disabled:opacity-30 disabled:grayscale`}
                 >

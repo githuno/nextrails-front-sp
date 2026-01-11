@@ -307,7 +307,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
                         cameraActions.removeCapturedImage(index)
                         if (viewingIndex === index) setViewingIndex(null)
                       }}
-                      className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-zinc-700/80 shadow-md backdrop-blur-md transition-opacity group-hover:opacity-100 hover:bg-red-600 sm:opacity-0"
+                      className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-zinc-700/80 shadow-md backdrop-blur-md transition-opacity group-hover:opacity-100 hover:bg-gray-600/50 hover:text-white sm:opacity-0"
                     >
                       ✕
                     </button>
