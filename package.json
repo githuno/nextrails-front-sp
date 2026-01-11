@@ -18,6 +18,7 @@
   "type": "module",
   "dependencies": {
     "@electric-sql/pglite": "^0.3.14",
+    "@electric-sql/pglite-repl": "^0.2.32",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-toast": "^1.2.6",
     "@tailwindcss/postcss": "^4.1.18",
