@@ -1,5 +1,5 @@
-import { useExternalStore } from "@/hooks/useExternalStore"
 import { AreaId, Auth, Program, Station, areaIdToNameMap, url } from "./constants"
+import { useExternalStore } from "./useExternalStore"
 
 const RADIKO_AUTH_KEY = "radiko_auth"
 const PLAYBACK_PROGRAMS_KEY = "radiko_playback_programs"

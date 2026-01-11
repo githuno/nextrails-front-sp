@@ -1,4 +1,4 @@
-import { useExternalStore } from "@/hooks/useExternalStore"
+import { useExternalStore } from "../_hooks/atom/useExternalStore"
 import { createCameraClient, type CameraConfig } from "./cameraClient"
 
 interface CameraState {
@@ -11,10 +11,17 @@ interface CameraState {
   facingMode: "user" | "environment"
   availableDevices: MediaDeviceInfo[]
   scannedData: string | null
-  capturedImages: string[]
+  capturedImages: CapturedImage[]
   error: Error | null
   aspectRatio: number | null
   deviceOrientation: number // デバイスの物理的な向き 0, 90, 180, 270
+  isInitialized: boolean // 初期ロード完了フラグ
+}
+
+export interface CapturedImage {
+  url: string
+  idbKey?: string
+  dbId?: string
 }
 
 interface CameraStateInternal extends CameraState {
@@ -26,6 +33,11 @@ interface CameraStateInternal extends CameraState {
   recordedBlob: Blob | null
   aspectRatio: number | null
   orientationListener: ((e: DeviceOrientationEvent) => void) | null
+  externalActions: {
+    saveCapturedFile?: (file: Blob | File, options?: { fileName?: string }) => Promise<any>
+    getFileWithUrl?: (idbKey: string) => Promise<string | null>
+    deleteFile?: (idbKey: string, dbId: string) => Promise<void>
+  }
   callbacks: {
     onScan?: (data: string) => void
     onCapture?: (url: string | null) => void
@@ -55,6 +67,8 @@ const state: CameraStateInternal = {
   aspectRatio: null,
   deviceOrientation: 0,
   orientationListener: null,
+  isInitialized: false,
+  externalActions: {},
   callbacks: {},
 }
 const listeners: Set<() => void> = new Set()
@@ -74,6 +88,7 @@ const serverSnapshot: CameraState = {
   error: null,
   aspectRatio: null,
   deviceOrientation: 0,
+  isInitialized: false,
 }
 
 // Cache for getSnapshot to avoid infinite loops
@@ -114,6 +129,7 @@ const getSnapshot = (): CameraState => {
       error: state.error,
       aspectRatio: state.aspectRatio,
       deviceOrientation: state.deviceOrientation,
+      isInitialized: state.isInitialized,
     }
     currentVersion = snapshotVersion
   }
@@ -228,6 +244,10 @@ const setCallbacks = (callbacks: Partial<CameraStateInternal["callbacks"]>): voi
   state.callbacks = { ...state.callbacks, ...callbacks }
 }
 
+const setExternalActions = (actions: Partial<CameraStateInternal["externalActions"]>): void => {
+  state.externalActions = { ...state.externalActions, ...actions }
+}
+
 const clearScannedData = (): void => {
   state.scannedData = null
   notify()
@@ -252,12 +272,39 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
   state.isCapturing = true
   notify()
   // 撮影処理と最低表示時間を並行して待機
-  const capturePromise = client.capture(state.videoElement, state.canvasElement, state.deviceOrientation, (url) => {
-    if (url) {
-      state.capturedImages = [url, ...state.capturedImages]
-    }
-    onComplete?.(url)
-  })
+  const capturePromise = client.capture(
+    state.videoElement,
+    state.canvasElement,
+    state.deviceOrientation,
+    async (url, blob) => {
+      if (url && blob) {
+        let savedInfo: CapturedImage = { url, idbKey: undefined, dbId: undefined }
+        // 外部アクション（永続化）があれば実行
+        if (state.externalActions.saveCapturedFile) {
+          try {
+            const result = await state.externalActions.saveCapturedFile(blob)
+            if (result) {
+              savedInfo = {
+                url,
+                idbKey: result.idbKey,
+                dbId: result.id,
+              }
+            }
+          } catch (e) {
+            console.error("Failed to persist captured image:", e)
+          }
+          // Note: ここでstate.capturedImagesを直接更新しない!
+          // actions.saveCapturedFile(blob)の内部でsyncData()が呼ばれ、
+          // cameraActions.setCapturedImages経由で最新リストが流れてくる。
+        } else {
+          // 外部アクションがない場合、フォールバックとしてオンメモリ保存
+          state.capturedImages = [savedInfo, ...state.capturedImages]
+          notify()
+        }
+      }
+      onComplete?.(url)
+    },
+  )
   const delayPromise = new Promise((resolve) => setTimeout(resolve, 200)) // 最低200msはシャッター状態を維持
   await Promise.all([capturePromise, delayPromise])
   state.isCapturing = false
@@ -295,13 +342,65 @@ const stopRecord = (onComplete: (blob: Blob) => void): void => {
   state.mediaRecorder.stop()
 }
 
-const removeCapturedImage = (index: number): void => {
-  state.capturedImages = state.capturedImages.filter((_, i) => i !== index)
+const removeCapturedImage = async (index: number): Promise<void> => {
+  const target = state.capturedImages[index]
+  if (!target) return
+
+  // 永続化されている場合は削除アクションを実行
+  if (target.idbKey && target.dbId && state.externalActions.deleteFile) {
+    try {
+      await state.externalActions.deleteFile(target.idbKey, target.dbId)
+      // ToolActionStore側でsyncData()が走り、setCapturedImages経由で状態が更新されるため
+      // ここで手動でstate.capturedImagesを操作しない
+    } catch (e) {
+      console.error("Failed to delete persisted file:", e)
+    }
+  } else {
+    // 永続化されていない(インメモリのみの)場合は手動削除
+    if (target.url.startsWith("blob:")) {
+      URL.revokeObjectURL(target.url)
+    }
+    state.capturedImages = state.capturedImages.filter((_, i) => i !== index)
+    notify()
+  }
+}
+
+const addCapturedImage = (image: CapturedImage | string): void => {
+  const newImage = typeof image === "string" ? { url: image } : image
+  state.capturedImages = [newImage, ...state.capturedImages]
   notify()
 }
 
-const addCapturedImage = (url: string): void => {
-  state.capturedImages = [url, ...state.capturedImages]
+const setCapturedImages = (images: CapturedImage[]): void => {
+  state.capturedImages = images
+  notify()
+}
+
+const setInitialized = (initialized: boolean): void => {
+  state.isInitialized = initialized
+  notify()
+}
+
+const addCapturedFile = async (file: Blob | File): Promise<void> => {
+  const url = URL.createObjectURL(file)
+  let savedInfo: CapturedImage = { url, idbKey: undefined, dbId: undefined }
+
+  if (state.externalActions.saveCapturedFile) {
+    try {
+      const result = await state.externalActions.saveCapturedFile(file)
+      if (result) {
+        savedInfo = {
+          url,
+          idbKey: result.idbKey,
+          dbId: result.id,
+        }
+      }
+    } catch (e) {
+      console.error("Failed to persist added file:", e)
+    }
+  }
+
+  state.capturedImages = [savedInfo, ...state.capturedImages]
   notify()
 }
 
@@ -370,7 +469,11 @@ const actions = {
   stopRecord,
   removeCapturedImage,
   addCapturedImage,
+  addCapturedFile,
+  setCapturedImages,
+  setInitialized,
   setCallbacks,
+  setExternalActions,
   startOrientationTracking,
   cleanup,
 }

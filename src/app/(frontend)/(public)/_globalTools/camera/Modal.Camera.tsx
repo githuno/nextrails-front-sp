@@ -2,8 +2,8 @@ import { Carousel, CarouselItem, Modal } from "@/components/atoms"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
 import { Tool } from "../_components/GlobalTool"
+import { EditIcon, LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "../_components/Icons"
 import { useCameraActions, useCameraState } from "./cameraStore"
-import { EditIcon, LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "./Icons.Camera"
 
 interface CameraModalProps {
   isOpen: boolean
@@ -99,7 +99,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
   const handleMainActionClick = async () => {
     if (cameraState.isRecording) {
       cameraActions.stopRecord((blob) => {
-        console.log("Recording finished, blob size:", blob.size)
+        confirm(`Save recorded video (${(blob.size / 1024).toFixed(2)} KB)?`) // && cameraActions.saveCapturedFile(blob)
         cameraActions.startQrScan()
       })
     } else {
@@ -271,24 +271,28 @@ const CameraModal: React.FC<CameraModalProps> = ({
               </button>
             </div>
             {/* ギャラリー */}
-            {cameraState.capturedImages.length === 0 ? (
+            {!cameraState.isInitialized ? (
+              <div className="flex h-16 w-full items-center justify-center gap-2 text-[8px] font-bold tracking-[0.2em] text-zinc-600 uppercase italic">
+                <LoadingSpinner size="12px" color="rgba(255,255,255,0.2)" />
+                Loading Database...
+              </div>
+            ) : cameraState.capturedImages.length === 0 ? (
               <div className="flex h-16 w-full items-center justify-center text-[10px] font-bold tracking-widest text-zinc-600 uppercase italic">
                 No captures yet
               </div>
             ) : (
               <Carousel containerClassName="gap-x-3 h-16">
-                {cameraState.capturedImages.map((url, index) => (
+                {cameraState.capturedImages.map((image, index) => (
                   <CarouselItem key={index}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        console.log("Image clicked:", index, url)
                         setViewingIndex(index)
                       }}
                       className="h-full overflow-hidden rounded-xs shadow-2xl"
                     >
                       <Image
-                        src={url}
+                        src={image.url}
                         alt={`Captured ${index}`}
                         width={96}
                         height={54}
@@ -352,10 +356,10 @@ const CameraModal: React.FC<CameraModalProps> = ({
       <Modal isOpen={viewingIndex !== null} onClose={() => setViewingIndex(null)} className="h-[90vh] w-[90vw] p-0">
         {viewingIndex !== null && (
           <Carousel index={viewingIndex} className="p-4" containerClassName="h-full">
-            {cameraState.capturedImages.map((url, index) => (
+            {cameraState.capturedImages.map((image, index) => (
               <CarouselItem key={index}>
                 <Image
-                  src={url}
+                  src={image.url}
                   alt={`View ${index}`}
                   fill
                   unoptimized

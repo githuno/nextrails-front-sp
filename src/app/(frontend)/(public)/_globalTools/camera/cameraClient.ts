@@ -230,11 +230,11 @@ const createCameraClient = (config: CameraConfig = {}) => {
     videoElement: HTMLVideoElement,
     canvasElement: HTMLCanvasElement,
     deviceOrientation: number, // デバイスの物理的な向き 0, 90, 180, 270
-    onComplete: (url: string | null) => void,
+    onComplete: (url: string | null, blob: Blob | null) => void,
   ): Promise<void> => {
     const context = canvasElement.getContext("2d")
     if (!context) {
-      onComplete(null)
+      onComplete(null, null)
       return
     }
     // フレーム固定ロジック
@@ -259,12 +259,28 @@ const createCameraClient = (config: CameraConfig = {}) => {
     // 描画 (中心をずらして描画)
     context.drawImage(videoElement, -vw / 2, -vh / 2, vw, vh)
     context.restore()
-    const url = canvasElement.toDataURL("image/png")
-    // 少し待ってから再生再開（視覚的なフィードバックのため）
-    setTimeout(() => {
-      videoElement.play().catch(() => {})
-    }, 100)
-    onComplete(url)
+
+    // PNG形式のBlobとして取得 (メモリ効率のためDataURLは避ける)
+    return new Promise((resolve) => {
+      canvasElement.toBlob(
+        async (blob) => {
+          // 少し待ってから再生再開（視覚的なフィードバックのため）
+          setTimeout(() => {
+            videoElement.play().catch(() => {})
+          }, 100)
+
+          if (blob) {
+            const url = URL.createObjectURL(blob)
+            await onComplete(url, blob)
+          } else {
+            await onComplete(null, null)
+          }
+          resolve()
+        },
+        "image/png",
+        0.9,
+      )
+    })
   }
 
   const startRecord = (stream: MediaStream, onDataAvailable: (blob: Blob) => void): MediaRecorder => {

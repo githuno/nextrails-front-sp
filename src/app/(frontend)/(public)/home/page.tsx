@@ -2,11 +2,6 @@ import MultiInputFTB from "@/components/MultiInputFTB"
 import Image from "next/image"
 import FTB from "../_globalTools/FTB"
 
-export interface UserSession {
-  uuid: string
-  name: string
-}
-
 export default function Page() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-between overflow-x-hidden p-6 lg:p-24">
