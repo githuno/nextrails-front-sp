@@ -7,11 +7,10 @@ import { useSessionSync } from "./_hooks/useSessionSync"
 import { useToolActionStore } from "./_hooks/useToolActionStore"
 import CameraModal from "./camera/Modal.Camera"
 
-
-const FTB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
+const FAB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
   useSessionSync() // URLとStateのセッション同期を有効化
 
-  const { isCameraOpen, isWebViewOpen, webUrl, handleScan, addFiles, setCameraOpen, closeWebView } =
+  const { isReady, isCameraOpen, isWebViewOpen, webUrl, handleScan, addFiles, setCameraOpen, closeWebView } =
     useToolActionStore()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -35,6 +34,8 @@ const FTB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ classNam
     event.target.value = ""
   }
 
+  if (!isReady) return null
+
   return (
     <div className="pointer-events-none fixed top-0 z-50 h-svh w-svw overflow-hidden">
       {/* Hidden file input for gallery selection */}
@@ -55,4 +56,4 @@ const FTB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ classNam
   )
 }
 
-export default FTB
+export default FAB

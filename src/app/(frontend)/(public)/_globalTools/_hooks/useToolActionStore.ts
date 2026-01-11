@@ -119,29 +119,31 @@ const syncData = async () => {
   }
 }
 
-// PGliteの準備が整ったら自動で同期を開始
-subscribePglite(() => {
-  if (!state.isReady) syncData()
-})
+if (typeof window !== "undefined") {
+  // PGliteの準備が整ったら自動で同期を開始
+  subscribePglite(() => {
+    if (!state.isReady) syncData()
+  })
 
-// セッションが変更された場合も再同期する
-sessionStore.subscribe(() => {
-  syncData()
-})
+  // セッションが変更された場合も再同期する
+  sessionStore.subscribe(() => {
+    syncData()
+  })
 
-// 初期化キック: すでに準備ができている場合も同期を開始するようにする
-const initStore = async () => {
-  try {
-    const db = await getDb()
-    if (db && !state.isReady) {
-      await syncData()
+  // 初期化キック: すでに準備ができている場合も同期を開始するようにする
+  const initStore = async () => {
+    try {
+      const db = await getDb()
+      if (db && !state.isReady) {
+        await syncData()
+      }
+    } catch (err) {
+      console.error("[ToolActionStore] Initial DB kick failed:", err)
     }
-  } catch (err) {
-    console.error("[ToolActionStore] Initial DB kick failed:", err)
   }
-}
 
-initStore()
+  initStore()
+}
 
 /**
  * 外から呼び出すアクション
