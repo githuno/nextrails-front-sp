@@ -30,7 +30,7 @@ const getDB = async (): Promise<IDBPDatabase> => {
   return dbPromise
 }
 
-export const useIdbStore = () => ({
+export const idbStore = () => ({
   /**
    * S3のputObjectに相当: Blob/Fileをキーで保存
    */

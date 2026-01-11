@@ -24,6 +24,17 @@ export interface CapturedImage {
   isPending?: boolean
 }
 
+export interface SavedFileResult {
+  idbKey: string
+  id: string
+}
+
+export interface CameraExternalActions {
+  saveCapturedFile?: (file: Blob | File, options?: { fileName?: string }) => Promise<SavedFileResult>
+  getFileWithUrl?: (idbKey: string) => Promise<string | null>
+  deleteFile?: (idbKey: string, dbId: string) => Promise<void>
+}
+
 interface CameraStateInternal extends CameraState {
   stream: MediaStream | null
   videoElement: HTMLVideoElement | null
@@ -33,11 +44,7 @@ interface CameraStateInternal extends CameraState {
   recordedBlob: Blob | null
   aspectRatio: number | null
   orientationListener: ((e: DeviceOrientationEvent) => void) | null
-  externalActions: {
-    saveCapturedFile?: (file: Blob | File, options?: { fileName?: string }) => Promise<any>
-    getFileWithUrl?: (idbKey: string) => Promise<string | null>
-    deleteFile?: (idbKey: string, dbId: string) => Promise<void>
-  }
+  externalActions: CameraExternalActions
   callbacks: {
     onScan?: (data: string) => void
     onCapture?: (url: string | null) => void
@@ -457,7 +464,7 @@ const cleanup = (): void => {
   notify()
 }
 
-const actions = {
+const cameraActions = {
   checkAvailability,
   setup,
   switchDevice,
@@ -477,12 +484,9 @@ const actions = {
   cleanup,
 }
 
+export { cameraActions }
 export const useCameraState = () => {
   return useExternalStore<CameraState>({ subscribe, getSnapshot, getServerSnapshot })
-}
-
-export const useCameraActions = () => {
-  return actions
 }
 
 // 自動初期化: ストア読み込み時にデバイスチェックを開始

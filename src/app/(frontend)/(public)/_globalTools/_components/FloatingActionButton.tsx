@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { useIsClient } from "../_hooks/atom/useIsClient"
 
 // --- 型定義 ---
 
@@ -289,10 +290,7 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
   className,
   position = { right: "8%", bottom: "12%" },
 }) => {
-  const [isMounted, setIsMounted] = useState(false)
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
+  const isClient = useIsClient()
 
   const defaultIcon = (
     <svg
@@ -325,7 +323,7 @@ const Simple: React.FC<SimplifiedFloatingActionButtonProps & { className?: strin
   }, [items])
 
   // ハイドレーションが完了するまで非表示
-  if (!isMounted) return null
+  if (!isClient) return null
   return (
     <FloatingActionButton total={items.length} distance={110}>
       <div

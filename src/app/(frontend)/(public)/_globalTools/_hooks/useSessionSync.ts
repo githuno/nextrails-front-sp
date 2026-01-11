@@ -1,6 +1,7 @@
 import { usePathname, useSearchParams } from "next/navigation"
-import { useRef } from "react"
+import { useMemo } from "react"
 import { useExternalStore } from "./atom/useExternalStore"
+import { useIsClient } from "./atom/useIsClient"
 
 const STORAGE_KEY = "ftb-session-id"
 const INITIAL_STATE: SessionState = { ids: [], currentId: "" }
@@ -100,10 +101,8 @@ export const sessionStore = {
     listeners.add(callback)
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && e.newValue) {
-        try {
-          memoryState = JSON.parse(e.newValue)
-          emitChange()
-        } catch {}
+        memoryState = JSON.parse(e.newValue)
+        emitChange()
       }
     }
     if (typeof window !== "undefined") {
@@ -123,55 +122,64 @@ export const sessionStore = {
   getServerSnapshot: () => INITIAL_STATE,
 }
 
-export const useSessionSync = () => {
-  // const router = useRouter()
+export const useSessionSync = (): string => {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const urlSid = searchParams.get("sid")
-  const state = useExternalStore(sessionStore)
-  const tempSidRef = useRef<string | null>(null) // レンダリング中に生成した一時IDを保持するRef
+  const urlSid: string | null = searchParams.get("sid")
+  const state: SessionState = useExternalStore(sessionStore)
+  const isClient: boolean = useIsClient()
 
-  if (typeof window !== "undefined") {
-    // Case A: URL is VALID (UUID)
-    if (isValidUUID(urlSid)) {
-      // URLが正常なら、一時IDはクリア
-      if (tempSidRef.current) tempSidRef.current = null
-      // Store同期（必要な場合のみ）
-      if (state.currentId !== urlSid) {
-        // ここでのState更新は許容される（条件付きであり、収束するため）
-        actions.syncFromUrl(urlSid!)
-      }
-      return urlSid!
-    } else {
-      // Case B: URL is INVALID or MISSING
-      let targetSid = ""
-      if (!urlSid && state.currentId) {
-        // URLが空で、かつStoreに有効なIDがある場合のみフォールバック
-        targetSid = state.currentId
+  /**
+   * ループ防止と安定性のための、このクライアントセッションでの「新規発行用」ID。
+   * URLやlocalStorageの両方に有効なIDがない場合、または未知のIDが入力された場合のみ使用される。
+   */
+  const fallbackId = useMemo(() => globalThis.crypto.randomUUID(), [])
+
+  // サーバーサイドおよびクライアント初期化前は、現在のStoreの値をベースにする
+  // (SSR時は INITIAL_STATE.currentId = "" が返る)
+  let activeSid: string = state.currentId || ""
+
+  if (isClient) {
+    let finalSid = ""
+
+    if (urlSid) {
+      // URLにsidが指定されている場合
+      if (isValidUUID(urlSid) && state.ids.includes(urlSid)) {
+        // 既知のUUIDであればそれを採用（セッション切り替え）
+        finalSid = urlSid
       } else {
-        // Create NEW ID
-        // レンダリング毎に再生成しないようRefを使う
-        if (!tempSidRef.current) {
-          tempSidRef.current = globalThis.crypto.randomUUID()
-          // ここでState更新（emitChange）を含む actions.createNew() を呼ぶと無限ループする
-          // なので、静かに永続化だけしておく
-          actions.persistNewId(tempSidRef.current)
+        // 無効な形式、または未知のセッションIDが入力された場合
+        // 要件：localStorageに保存されていない値が入力されたら新規生成したUUIDで置き換える
+        finalSid = fallbackId
+      }
+    } else {
+      // URLにsidがない場合
+      if (state.currentId) {
+        // 既存のセッションがあれば継続
+        finalSid = state.currentId
+      } else {
+        // localStorageに値が存在しない場合 -> 新規発行
+        finalSid = fallbackId
+      }
+    }
+
+    activeSid = finalSid
+
+    // クライアントサイドでの同期（非同期）
+    if (urlSid !== activeSid || state.currentId !== activeSid) {
+      Promise.resolve().then(() => {
+        // 1. Storeの同期（persistNewId 相当の処理も含めて syncFromUrl で行う）
+        actions.syncFromUrl(activeSid)
+
+        // 2. URLの同期
+        const currentParams = new URLSearchParams(window.location.search)
+        if (currentParams.get("sid") !== activeSid) {
+          currentParams.set("sid", activeSid)
+          window.history.replaceState(null, "", `${pathname}?${currentParams.toString()}`)
         }
-        targetSid = tempSidRef.current!
-      }
-      // URL書き換え（非同期）
-      if (urlSid !== targetSid) {
-        Promise.resolve().then(() => {
-          const params = new URLSearchParams(window.location.search)
-          params.set("sid", targetSid)
-          window.history.replaceState(null, "", `${pathname}?${params.toString()}`)
-          // URL書き換え完了後、念のためState同期（まだなら）
-          // このタイミングなら再レンダリング誘発してもOK（次のサイクルになるため）
-          actions.syncFromUrl(targetSid)
-        })
-      }
-      return targetSid
+      })
     }
   }
-  return state.currentId || ""
+
+  return activeSid
 }

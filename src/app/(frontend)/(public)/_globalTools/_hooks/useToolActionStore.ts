@@ -1,14 +1,21 @@
-import { and, desc, eq } from "drizzle-orm"
-import { useCameraActions } from "../camera/cameraStore"
+import { and, desc, eq, sql } from "drizzle-orm"
+import { z } from "zod"
+import { cameraActions, type CameraExternalActions, SavedFileResult } from "../camera/cameraStore"
 import { useExternalStore } from "./atom/useExternalStore"
 import { capturedFiles } from "./db/pgliteSchema"
-import { useIdbStore } from "./db/useIdbStore"
+import { idbStore } from "./db/useIdbStore"
 import { getDb, subscribe as subscribePglite } from "./db/usePgliteStore"
 import { getSessionState, sessionStore } from "./useSessionSync"
 
 /**
  * 型定義
  */
+const RawSetInfoSchema = z.object({
+  name: z.string(),
+  count: z.number(),
+  latest_idb_key: z.string().nullable(),
+})
+
 export interface ToolFile {
   id: string
   sessionId: string
@@ -27,12 +34,31 @@ export interface FileSetInfo {
   count: number
 }
 
+interface RawSetInfo {
+  name: string
+  count: number
+  latest_idb_key: string | null
+}
+
 interface PendingSave {
   id: string
   file: Blob | File
   options?: { fileName?: string }
-  resolve: (value: any) => void
-  reject: (reason?: any) => void
+  resolve: (value: SavedFileResult) => void
+  reject: (reason?: unknown) => void
+}
+
+/**
+ * アクションの型定義
+ */
+export interface ToolActions extends Required<CameraExternalActions> {
+  handleScan: (data: string) => void
+  switchFileSet: (fileSet: string) => void
+  closeWebView: () => void
+  setCameraOpen: (isOpen: boolean) => void
+  addFiles: (files: FileList | File[]) => void
+  handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>) => void
+  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
 }
 
 interface ToolActionState {
@@ -83,7 +109,6 @@ const notify = () => {
  */
 const updateCameraStoreImages = () => {
   if (typeof window === "undefined") return
-  const cameraActions = useCameraActions()
   cameraActions.setCapturedImages(
     state.files
       .filter((f) => !!f.url)
@@ -120,7 +145,7 @@ async function syncData() {
   isSyncing = true
   try {
     const db = await getDb()
-    const idb = useIdbStore()
+    const idb = idbStore()
 
     // 蓄積された保存や最新状態の取得を、キューがなくなるまで繰り返す
     let hasProcessedQueue = true
@@ -131,16 +156,17 @@ async function syncData() {
       // 1. セッション内の全ファイルセット情報を取得 (メタデータ: カウントと最新プレビュー)
       // PGlite (Postgres) の ARRAY_AGG を使用して最新の idbKey を取得
       const res = await db.execute(
-        `SELECT 
+        sql`SELECT 
            file_set as name, 
            COUNT(*)::int as count, 
            (ARRAY_AGG(idb_key ORDER BY created_at DESC))[1] as latest_idb_key 
-         FROM captured_files 
-         WHERE session_id = '${sessionID}'
+         FROM ${capturedFiles} 
+         WHERE ${capturedFiles.sessionId} = ${sessionID}
          GROUP BY file_set`,
       )
 
-      const rawSetInfos = res.rows as any[]
+      // Zodにより実行時型安全性を確保。不正なデータは例外をスローして早期終了させる（AGENTS.md方針）
+      const rawSetInfos: RawSetInfo[] = z.array(RawSetInfoSchema).parse(res.rows)
       const fileSetNameList = Array.from(new Set([...rawSetInfos.map((s) => s.name), state.currentFileSet])).sort()
 
       const fileSetInfo: FileSetInfo[] = await Promise.all(
@@ -253,12 +279,12 @@ async function syncData() {
 /**
  * 外から呼び出すアクション
  */
-export const actions = {
+export const actions: ToolActions = {
   /**
    * 撮影・選択されたファイルを保存する
    */
-  saveCapturedFile: async (file: Blob | File, options?: { fileName?: string }) => {
-    const idb = useIdbStore()
+  saveCapturedFile: async (file: Blob | File, options?: { fileName?: string }): Promise<SavedFileResult> => {
+    const idb = idbStore()
     const idbKey = crypto.randomUUID()
 
     // バッファサイズ制限
@@ -289,7 +315,12 @@ export const actions = {
 
         // 状態を再同期（または部分更新）
         await syncData()
-        return inserted
+
+        const result: SavedFileResult = {
+          id: inserted.id,
+          idbKey: inserted.idbKey,
+        }
+        return result
       } else {
         // バッファに追加
         // 即座にUIに反映させるための一時的なエントリを作成
@@ -315,7 +346,7 @@ export const actions = {
         notify()
         updateCameraStoreImages() // バッファ追加時もカメラストアを更新
 
-        return new Promise((resolve, reject) => {
+        return new Promise<SavedFileResult>((resolve, reject) => {
           state.pendingSaves.push({
             id: idbKey,
             file,
@@ -335,12 +366,14 @@ export const actions = {
   /**
    * ファイルを削除する
    */
-  deleteFile: async (idbKey: string, dbId: string) => {
+  deleteFile: async (idbKey: string, dbId: string): Promise<void> => {
     const db = await getDb()
-    const idb = useIdbStore()
+    const idb = idbStore()
     try {
+      if (dbId) {
+        await db.delete(capturedFiles).where(eq(capturedFiles.id, dbId))
+      }
       await idb.remove(idbKey)
-      await db.delete(capturedFiles).where(eq(capturedFiles.id, dbId))
       await syncData()
     } catch (error) {
       throw new Error("Failed to delete file", { cause: error })
@@ -350,8 +383,8 @@ export const actions = {
   /**
    * IDBからBlobのURLを取得するのみ
    */
-  getFileWithUrl: async (idbKey: string) => {
-    const idb = useIdbStore()
+  getFileWithUrl: async (idbKey: string): Promise<string | null> => {
+    const idb = idbStore()
     const blob = await idb.get(idbKey)
     return blob ? URL.createObjectURL(blob) : null
   },
@@ -359,7 +392,7 @@ export const actions = {
   /**
    * スキャンの処理
    */
-  handleScan: (data: string) => {
+  handleScan: (data: string): void => {
     try {
       const url = new URL(data)
       if (url.protocol === "http:" || url.protocol === "https:") {
@@ -380,7 +413,7 @@ export const actions = {
   /**
    * ファイルセットを切り替える
    */
-  switchFileSet: (fileSet: string) => {
+  switchFileSet: (fileSet: string): void => {
     state = {
       ...state,
       currentFileSet: fileSet,
@@ -392,7 +425,7 @@ export const actions = {
   /**
    * UI状態のリセット
    */
-  closeWebView: () => {
+  closeWebView: (): void => {
     state = {
       ...state,
       isWebViewOpen: false,
@@ -401,7 +434,7 @@ export const actions = {
     notify()
   },
 
-  setCameraOpen: (isOpen: boolean) => {
+  setCameraOpen: (isOpen: boolean): void => {
     state = {
       ...state,
       isCameraOpen: isOpen,
@@ -412,7 +445,7 @@ export const actions = {
   /**
    * ファイル選択時の処理（UIから渡されたFile集を直接保存）
    */
-  addFiles: (files: FileList | File[]) => {
+  addFiles: (files: FileList | File[]): void => {
     Array.from(files).forEach((file) => {
       actions.saveCapturedFile(file)
     })
@@ -421,14 +454,14 @@ export const actions = {
   /**
    * ファイル選択ダイアログを開く
    */
-  handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>) => {
+  handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>): void => {
     fileInputRef?.current?.click()
   },
 
   /**
    * ファイル変更時の処理
    */
-  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>): void => {
     const files = event.target.files
     if (!files || files.length === 0) return
     actions.addFiles(files)
@@ -439,7 +472,6 @@ export const actions = {
 
 if (typeof window !== "undefined") {
   // PGliteの準備が整う前でも、基本的なアクションは登録しておく
-  const cameraActions = useCameraActions()
   cameraActions.setExternalActions({
     saveCapturedFile: actions.saveCapturedFile,
     getFileWithUrl: actions.getFileWithUrl,

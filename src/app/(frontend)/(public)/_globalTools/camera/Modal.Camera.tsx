@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react"
 import { Tool } from "../_components/GlobalTool"
 import { LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "../_components/Icons"
 import { useToolActionStore } from "../_hooks/useToolActionStore"
-import { useCameraActions, useCameraState } from "./cameraStore"
+import { cameraActions, useCameraState } from "./cameraStore"
 
 interface CameraModalProps {
   isOpen: boolean
@@ -17,7 +17,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
   const { isDbReady, isWebViewOpen, webUrl, closeWebView, currentFileSet, fileSetInfo, switchFileSet } =
     useToolActionStore()
   const cameraState = useCameraState()
-  const cameraActions = useCameraActions()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -30,7 +29,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
   // アクション（コールバック）の登録
   useEffect(() => {
     cameraActions.setCallbacks({ onScan, onSelect })
-  }, [onScan, onSelect, cameraActions])
+  }, [onScan, onSelect])
 
   // モーダル開閉時の初期化・クリーンアップ
   useEffect(() => {
@@ -46,7 +45,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
       }
     }
     setupCamera()
-  }, [isOpen, cameraActions])
+  }, [isOpen])
 
   // ImageViewer表示中はスキャンを止めてUI応答性を優先
   useEffect(() => {
@@ -58,7 +57,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
     if (cameraState.isAvailable && !cameraState.isRecording && !cameraState.isScanning) {
       cameraActions.startQrScan()
     }
-  }, [isOpen, viewingIndex, cameraActions, cameraState.isAvailable, cameraState.isRecording, cameraState.isScanning])
+  }, [isOpen, viewingIndex, cameraState.isAvailable, cameraState.isRecording, cameraState.isScanning])
 
   const handleSwitchDevice = async (deviceId?: string) => {
     setShowDeviceList(false)
