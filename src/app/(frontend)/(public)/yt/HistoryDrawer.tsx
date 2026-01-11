@@ -12,7 +12,7 @@ interface HistoryDrawerProps {
 
 const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoSelect }) => {
   // 履歴更新のトリガー用state
-  const [historyUpdateTrigger, setHistoryUpdateTrigger] = useState<number>(0)
+  const [, setHistoryUpdateTrigger] = useState<number>(0)
 
   // ドロワーが開かれたときにデータを再読み込み
   useEffect(() => {
@@ -69,7 +69,7 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoS
       sortedDates,
       total: history.length,
     }
-  }, [isOpen, historyUpdateTrigger])
+  }, [isOpen])
 
   const handleVideoSelect = (videoId: string, currentTime?: number) => {
     onVideoSelect(videoId, currentTime)

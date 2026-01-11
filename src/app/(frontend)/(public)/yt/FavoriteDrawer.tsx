@@ -20,13 +20,6 @@ const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVide
   // エラー状態
   const [error, setError] = useState<string | null>(null)
 
-  // ドロワーが開かれたときにデータを再読み込み
-  useEffect(() => {
-    if (isOpen) {
-      loadFavoriteDetails()
-    }
-  }, [isOpen, favUpdateTrigger])
-
   // お気に入りの詳細情報を読み込む
   const loadFavoriteDetails = useCallback(async () => {
     try {
@@ -48,6 +41,13 @@ const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVide
       setIsLoading(false)
     }
   }, [])
+
+  // ドロワーが開かれたときにデータを再読み込み
+  useEffect(() => {
+    if (isOpen) {
+      loadFavoriteDetails()
+    }
+  }, [isOpen, favUpdateTrigger, loadFavoriteDetails])
 
   // お気に入りを削除する関数
   const removeFromFavorites = useCallback((event: React.MouseEvent, videoId: string) => {

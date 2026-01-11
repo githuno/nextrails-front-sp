@@ -82,9 +82,6 @@ const SpeedController: React.FC<SpeedControllerProps> = ({ player, onChange, cur
                 <button
                   key={speed}
                   onClick={() => {
-                    // まずプレーヤーの現在時間を保存
-                    const currentTime = player?.getCurrentTime() || 0
-
                     // 再生速度を設定
                     if (player) {
                       player.setPlaybackRate(speed)

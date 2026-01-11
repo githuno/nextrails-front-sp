@@ -307,6 +307,50 @@ export default function YoutubePage() {
     }
   }, [])
 
+  // 再生位置を保存する関数
+  const saveCurrentPosition = useCallback(() => {
+    // refを使用して最新の状態を確認
+    const currentVideo = selectedVideoRef.current
+    if (!playerRef.current || !isPlayerReadyRef.current || !currentVideo) return
+    if (typeof playerRef.current.getCurrentTime !== "function") return
+
+    try {
+      // プレーヤーが実際に再生している動画IDを取得
+      const playerVideoData = playerRef.current.getVideoData?.()
+      const playerVideoId = playerVideoData?.video_id
+      const stateVideoId = currentVideo.id.videoId
+
+      // IDが一致しない場合は保存しない（切り替え時の不整合防止）
+      if (playerVideoId && stateVideoId && playerVideoId !== stateVideoId) {
+        return
+      }
+
+      const videoId = stateVideoId!
+      const currentTime = playerRef.current.getCurrentTime()
+      const duration = playerRef.current.getDuration()
+
+      if (currentTime >= 0 && duration > 0) {
+        console.log(`再生位置を保存: ${currentTime}/${duration}秒`)
+
+        // HistoryItemのcurrentTimeとdurationを更新
+        const historyItem: HistoryItem = {
+          videoId,
+          title: currentVideo.snippet.title,
+          channelTitle: currentVideo.snippet.channelTitle,
+          thumbnailUrl:
+            currentVideo.snippet.thumbnails.medium?.url || currentVideo.snippet.thumbnails.default?.url || "",
+          watchedAt: Date.now(),
+          currentTime,
+          duration,
+          channelId: currentVideo.snippet.channelId, // チャンネルIDを追加
+        }
+        youtubeClient.addToHistory(historyItem)
+      }
+    } catch (error) {
+      console.error("再生位置の保存に失敗しました:", error)
+    }
+  }, [])
+
   // プレイヤーの初期化
   const initializePlayer = useCallback(
     (videoId: string, startTime?: number) => {
@@ -405,7 +449,7 @@ export default function YoutubePage() {
         })
       }
     },
-    [isYouTubeApiReady, isPlayerReady, selectedVideo],
+    [isYouTubeApiReady, isPlayerReady, saveCurrentPosition],
   )
 
   // 動画IDから再生する処理（先に宣言）
@@ -488,7 +532,7 @@ export default function YoutubePage() {
         dispatch({ type: "SET_LOADING", payload: false })
       }
     },
-    [loadChannelPlaylists, loadVideoPlaylists, router, initializePlayer],
+    [loadChannelPlaylists, loadVideoPlaylists, router, isYouTubeApiReady, initializePlayer],
   )
 
   // ページロード時にクエリパラメータから動画IDを取得して自動再生
@@ -578,50 +622,6 @@ export default function YoutubePage() {
 
   // 再生位置保存用のタイマー参照
   const savePositionTimerRef = useRef<NodeJS.Timeout | null>(null)
-
-  // 再生位置を保存する関数
-  const saveCurrentPosition = useCallback(() => {
-    // refを使用して最新の状態を確認
-    const currentVideo = selectedVideoRef.current
-    if (!playerRef.current || !isPlayerReadyRef.current || !currentVideo) return
-    if (typeof playerRef.current.getCurrentTime !== "function") return
-
-    try {
-      // プレーヤーが実際に再生している動画IDを取得
-      const playerVideoData = playerRef.current.getVideoData?.()
-      const playerVideoId = playerVideoData?.video_id
-      const stateVideoId = currentVideo.id.videoId
-
-      // IDが一致しない場合は保存しない（切り替え時の不整合防止）
-      if (playerVideoId && stateVideoId && playerVideoId !== stateVideoId) {
-        return
-      }
-
-      const videoId = stateVideoId!
-      const currentTime = playerRef.current.getCurrentTime()
-      const duration = playerRef.current.getDuration()
-
-      if (currentTime >= 0 && duration > 0) {
-        console.log(`再生位置を保存: ${currentTime}/${duration}秒`)
-
-        // HistoryItemのcurrentTimeとdurationを更新
-        const historyItem: HistoryItem = {
-          videoId,
-          title: currentVideo.snippet.title,
-          channelTitle: currentVideo.snippet.channelTitle,
-          thumbnailUrl:
-            currentVideo.snippet.thumbnails.medium?.url || currentVideo.snippet.thumbnails.default?.url || "",
-          watchedAt: Date.now(),
-          currentTime,
-          duration,
-          channelId: currentVideo.snippet.channelId, // チャンネルIDを追加
-        }
-        youtubeClient.addToHistory(historyItem)
-      }
-    } catch (error) {
-      console.error("再生位置の保存に失敗しました:", error)
-    }
-  }, [])
 
   // 定期的に再生位置を保存するタイマーを設定
   useEffect(() => {

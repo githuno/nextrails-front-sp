@@ -24,17 +24,6 @@ const PlaylistDrawer: React.FC<PlaylistDrawerProps> = ({ isOpen, onClose, onVide
   // エラー状態
   const [error, setError] = useState<string | null>(null)
 
-  // ドロワーが開かれたときにデータを再読み込み
-  useEffect(() => {
-    if (isOpen) {
-      loadPlaylistDetails()
-    } else {
-      // ドロワーが閉じられたら選択をリセット
-      setSelectedPlaylist(null)
-      setPlaylistVideos([])
-    }
-  }, [isOpen, playlistUpdateTrigger])
-
   // お気に入りプレイリストの詳細情報を読み込む
   const loadPlaylistDetails = useCallback(async () => {
     try {
@@ -57,22 +46,30 @@ const PlaylistDrawer: React.FC<PlaylistDrawerProps> = ({ isOpen, onClose, onVide
     }
   }, [])
 
-  // プレイリストのお気に入りを削除する関数
-  const removeFromFavorites = useCallback(
-    (event: React.MouseEvent, playlistId: string) => {
-      event.stopPropagation() // クリックイベントの伝播を停止
+  // ドロワーが開かれたときにデータを再読み込み
+  useEffect(() => {
+    if (isOpen) {
+      loadPlaylistDetails()
+    } else {
+      // ドロワーが閉じられたら選択をリセット
+      setSelectedPlaylist(null)
+      setPlaylistVideos([])
+    }
+  }, [isOpen, loadPlaylistDetails, playlistUpdateTrigger])
 
-      if (window.confirm("このプレイリストをお気に入りから削除しますか？")) {
-        try {
-          youtubeClient.toggleFavoritePlaylist(playlistId)
-          setPlaylistUpdateTrigger((prev) => prev + 1)
-        } catch (error) {
-          console.error("お気に入りからの削除に失敗しました:", error)
-        }
+  // プレイリストのお気に入りを削除する関数
+  const removeFromFavorites = useCallback((event: React.MouseEvent, playlistId: string) => {
+    event.stopPropagation() // クリックイベントの伝播を停止
+
+    if (window.confirm("このプレイリストをお気に入りから削除しますか？")) {
+      try {
+        youtubeClient.toggleFavoritePlaylist(playlistId)
+        setPlaylistUpdateTrigger((prev) => prev + 1)
+      } catch (error) {
+        console.error("お気に入りからの削除に失敗しました:", error)
       }
-    },
-    [selectedPlaylist],
-  )
+    }
+  }, [])
 
   // すべてのお気に入りを削除
   const clearAllFavorites = useCallback(() => {
