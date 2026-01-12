@@ -1,4 +1,4 @@
-import { Carousel, CarouselItem, Modal } from "@/components/atoms"
+import { Carousel, Modal } from "@/components/atoms"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
 import { Tool } from "../_components/GlobalTool"
@@ -252,7 +252,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
             {cameraState.capturedImages.length > 0 ? (
               <Carousel containerClassName="gap-x-3 h-16">
                 {cameraState.capturedImages.map((image, index) => (
-                  <CarouselItem key={index}>
+                  <Carousel.Item key={index} className="group">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -285,7 +285,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                     >
                       ✕
                     </button>
-                  </CarouselItem>
+                  </Carousel.Item>
                 ))}
               </Carousel>
             ) : !isDbReady ? (
@@ -305,9 +305,9 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
       {/* ImageViewer using Modal and Carousel */}
       <Modal isOpen={viewingIndex !== null} onClose={() => setViewingIndex(null)} className="h-[90vh] w-[90vw] p-0">
         {viewingIndex !== null && (
-          <Carousel index={viewingIndex} className="p-4" containerClassName="h-full">
+          <Carousel index={viewingIndex} className="h-full p-4" containerClassName="h-full">
             {cameraState.capturedImages.map((image, index) => (
-              <CarouselItem key={index}>
+              <Carousel.Item key={index} className="relative h-full w-full">
                 <Image
                   src={image.url}
                   alt={`View ${index}`}
@@ -316,7 +316,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                   className="object-contain drop-shadow-2xl"
                   priority={index === viewingIndex}
                 />
-              </CarouselItem>
+              </Carousel.Item>
             ))}
           </Carousel>
         )}

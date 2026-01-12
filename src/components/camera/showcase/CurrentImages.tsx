@@ -1,4 +1,4 @@
-import { Carousel, CarouselItem, Modal } from "@/components/atoms"
+import { Carousel, Modal } from "@/components/atoms"
 import { useImageset, type File } from "@/components/camera"
 import { LoadingSpinner, SyncIcon, useCamera } from "@/components/camera/_utils"
 import { useStorage } from "@/components/storage"
@@ -278,11 +278,11 @@ const CurrentImages = () => {
           </div>
         </div>
       )}
-      <Carousel containerClassName="gap-x-3">
+      <Carousel className="h-16" containerClassName="gap-x-3">
         {imageset.files
           .filter((file) => !file.deletedAt)
           .map((file) => (
-            <CarouselItem key={"small-" + file.idbId} className="group shrink-0 p-2">
+            <Carousel.Item key={"small-" + file.idbId} className="group h-full shrink-0">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -296,7 +296,7 @@ const CurrentImages = () => {
                     src={file.idbUrl ?? ""}
                     width={96}
                     height={54}
-                    className="rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
+                    className="h-full w-auto rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
                   />
                 ) : (
                   <img
@@ -304,7 +304,7 @@ const CurrentImages = () => {
                     alt={`Image ${file.idbId}`}
                     width={96}
                     height={54}
-                    className="rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
+                    className="h-full w-auto rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110"
                   />
                 )}
               </button>
@@ -337,7 +337,7 @@ const CurrentImages = () => {
                   </div>
                 )
               }
-            </CarouselItem>
+            </Carousel.Item>
           ))}
       </Carousel>
 
@@ -351,7 +351,7 @@ const CurrentImages = () => {
       >
         <Carousel className="bg-black/70" containerClassName="md:gap-x-1" index={carouselIndex}>
           {imageset.files.map((file) => (
-            <CarouselItem key={"large-" + file.idbId}>
+            <Carousel.Item key={"large-" + file.idbId} className="w-full">
               <div className="h-[90vh] w-screen px-1 py-2 md:w-[93vw] md:pr-0">
                 {file.contentType === "video/webm" ? (
                   <video controls src={file.idbUrl ?? ""} className="h-full w-full object-contain" />
@@ -359,7 +359,7 @@ const CurrentImages = () => {
                   <img src={file.idbUrl ?? ""} alt={`Image ${file.idbId}`} className="h-full w-full object-contain" />
                 )}
               </div>
-            </CarouselItem>
+            </Carousel.Item>
           ))}
         </Carousel>
       </Modal>

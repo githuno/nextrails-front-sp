@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 
+// inspired by: https://emilkowal.ski/ui/building-a-toast-component
+
 /**
  * ==========================================
  * ICONS (Self-contained)

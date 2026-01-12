@@ -1,4 +1,4 @@
-import { Carousel, CarouselItem } from "@/components/atoms"
+import { Carousel } from "@/components/atoms"
 import { ImagesetState, useImageset } from "@/components/camera"
 import { LoadingSpinner } from "@/components/camera/_utils"
 import Image from "next/image"
@@ -160,7 +160,7 @@ const DrawerImagesets = () => {
           <div className="grid w-full justify-end px-4 py-2">
             <Carousel containerClassName="gap-x-2">
               {latestImagesets.map(({ name, files }) => (
-                <CarouselItem
+                <Carousel.Item
                   key={name}
                   className={`relative h-[15vh] w-32 rounded-lg bg-white shadow-xl hover:bg-gray-100 ${
                     name === imageset.name ? "border-2 border-blue-200" : ""
@@ -192,7 +192,7 @@ const DrawerImagesets = () => {
                       </div>
                     )}
                   </div>
-                </CarouselItem>
+                </Carousel.Item>
               ))}
             </Carousel>
           </div>
