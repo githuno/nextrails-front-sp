@@ -118,8 +118,8 @@ const CarouselRoot = ({ children, index = null, className = "", containerClassNa
       >
         {/* Layer 1: Items */}
         <div
-          className={`col-start-1 row-start-1 flex ${index !== null ? "w-full" : "w-fit"} ${containerClassName} transition-opacity duration-300`}
-          style={{ opacity }}
+          className={`col-start-1 row-start-1 flex justify-center-safe ${index !== null ? "w-full" : "w-fit justify-self-center"} ${containerClassName} transition-opacity duration-300`}
+          style={{ opacity } as React.CSSProperties}
         >
           {React.Children.map(children, (child, idx) => {
             if (!child || !React.isValidElement(child)) return null
