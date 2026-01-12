@@ -14,30 +14,24 @@ import {
   url,
 } from "./constants"
 
-// YouTube APIクライアントオプション
-type YouTubeClientOptions = {
-  apiKey: string
-}
+// YouTube APIクライアント
+class YouTubeClient {
+  private listeners: Set<() => void> = new Set()
 
-// YouTube APIクライアントファクトリ関数
-function createYouTubeClient(opts: YouTubeClientOptions) {
-  // クロージャで状態を閉じ込める
-  const listeners: Set<() => void> = new Set()
-
-  const subscribe = (listener: () => void): (() => void) => {
-    listeners.add(listener)
-    return () => listeners.delete(listener)
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
   }
 
-  const notify = (): void => {
-    listeners.forEach((l) => l())
+  private notify(): void {
+    this.listeners.forEach((l) => l())
   }
 
   // 検索API呼び出し
-  const search = async (params: SearchParams): Promise<SearchResponse> => {
+  async search(params: SearchParams): Promise<SearchResponse> {
     try {
       const queryParams = new URLSearchParams({
-        key: opts.apiKey,
+        key: YOUTUBE_API_KEY,
         part: params.part || "snippet",
         maxResults: params.maxResults?.toString() || "25",
         q: params.q,
@@ -71,12 +65,12 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
   }
 
   // 動画詳細情報の取得
-  const getVideoDetails = async (videoIds: string[]): Promise<VideoDetail[]> => {
+  async getVideoDetails(videoIds: string[]): Promise<VideoDetail[]> {
     try {
       if (!videoIds.length) return []
 
       const queryParams = new URLSearchParams({
-        key: opts.apiKey,
+        key: YOUTUBE_API_KEY,
         part: "snippet,contentDetails,statistics",
         id: videoIds.join(","),
       })
@@ -96,7 +90,7 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
   }
 
   // 視聴履歴の管理
-  const getHistory = (): HistoryItem[] => {
+  getHistory(): HistoryItem[] {
     try {
       const storedHistory = localStorage.getItem(YT_HISTORY_KEY)
       if (!storedHistory) return []
@@ -108,9 +102,9 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const addToHistory = (item: HistoryItem): void => {
+  addToHistory(item: HistoryItem): void {
     try {
-      const history = getHistory()
+      const history = this.getHistory()
       const existingItem = history.find((h) => h.videoId === item.videoId)
 
       // 既存の再生位置などのデータを保持しつつ更新
@@ -132,34 +126,34 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
       const trimmedHistory = filteredHistory.slice(0, 100)
 
       localStorage.setItem(YT_HISTORY_KEY, JSON.stringify(trimmedHistory))
-      notify()
+      this.notify()
     } catch (error) {
       console.error("履歴の保存に失敗しました:", error)
     }
   }
 
-  const clearHistory = (): void => {
+  clearHistory(): void {
     try {
       localStorage.removeItem(YT_HISTORY_KEY)
-      notify()
+      this.notify()
     } catch (error) {
       console.error("履歴のクリアに失敗しました:", error)
     }
   }
 
-  const removeFromHistory = (videoId: string): void => {
+  removeFromHistory(videoId: string): void {
     try {
-      const history = getHistory()
+      const history = this.getHistory()
       const filteredHistory = history.filter((h) => h.videoId !== videoId)
       localStorage.setItem(YT_HISTORY_KEY, JSON.stringify(filteredHistory))
-      notify()
+      this.notify()
     } catch (error) {
       console.error("履歴からの削除に失敗しました:", error)
     }
   }
 
   // お気に入りの管理
-  const getFavorites = (): string[] => {
+  getFavorites(): string[] {
     try {
       const storedFavorites = localStorage.getItem(YT_FAVORITES_KEY)
       if (!storedFavorites) return []
@@ -171,22 +165,22 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const toggleFavorite = (videoId: string): boolean => {
+  toggleFavorite(videoId: string): boolean {
     try {
-      const favorites = getFavorites()
+      const favorites = this.getFavorites()
       const index = favorites.indexOf(videoId)
 
       if (index >= 0) {
         // お気に入りから削除
         favorites.splice(index, 1)
         localStorage.setItem(YT_FAVORITES_KEY, JSON.stringify(favorites))
-        notify()
+        this.notify()
         return false
       } else {
         // お気に入りに追加
         favorites.push(videoId)
         localStorage.setItem(YT_FAVORITES_KEY, JSON.stringify(favorites))
-        notify()
+        this.notify()
         return true
       }
     } catch (error) {
@@ -195,9 +189,9 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const isFavorite = (videoId: string): boolean => {
+  isFavorite(videoId: string): boolean {
     try {
-      const favorites = getFavorites()
+      const favorites = this.getFavorites()
       return favorites.includes(videoId)
     } catch (error) {
       console.error("お気に入りの確認に失敗しました:", error)
@@ -205,22 +199,22 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const clearFavorites = (): void => {
+  clearFavorites(): void {
     try {
       localStorage.removeItem(YT_FAVORITES_KEY)
-      notify()
+      this.notify()
     } catch (error) {
       console.error("お気に入りのクリアに失敗しました:", error)
     }
   }
 
   // チャンネル詳細情報の取得
-  const getChannelDetails = async (channelIds: string[]): Promise<ChannelDetail[]> => {
+  async getChannelDetails(channelIds: string[]): Promise<ChannelDetail[]> {
     try {
       if (!channelIds.length) return []
 
       const queryParams = new URLSearchParams({
-        key: opts.apiKey,
+        key: YOUTUBE_API_KEY,
         part: "snippet,statistics",
         id: channelIds.join(","),
       })
@@ -240,7 +234,7 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
   }
 
   // チャンネルのお気に入り機能
-  const getFavoriteChannels = (): string[] => {
+  getFavoriteChannels(): string[] {
     try {
       const storedFavorites = localStorage.getItem(YT_CHANNEL_FAVORITES_KEY)
       if (!storedFavorites) return []
@@ -252,22 +246,22 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const toggleFavoriteChannel = (channelId: string): boolean => {
+  toggleFavoriteChannel(channelId: string): boolean {
     try {
-      const favorites = getFavoriteChannels()
+      const favorites = this.getFavoriteChannels()
       const index = favorites.indexOf(channelId)
 
       if (index >= 0) {
         // お気に入りから削除
         favorites.splice(index, 1)
         localStorage.setItem(YT_CHANNEL_FAVORITES_KEY, JSON.stringify(favorites))
-        notify()
+        this.notify()
         return false
       } else {
         // お気に入りに追加
         favorites.push(channelId)
         localStorage.setItem(YT_CHANNEL_FAVORITES_KEY, JSON.stringify(favorites))
-        notify()
+        this.notify()
         return true
       }
     } catch (error) {
@@ -276,9 +270,9 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const isFavoriteChannel = (channelId: string): boolean => {
+  isFavoriteChannel(channelId: string): boolean {
     try {
-      const favorites = getFavoriteChannels()
+      const favorites = this.getFavoriteChannels()
       return favorites.includes(channelId)
     } catch (error) {
       console.error("お気に入りチャンネルの確認に失敗しました:", error)
@@ -286,20 +280,20 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const clearFavoriteChannels = (): void => {
+  clearFavoriteChannels(): void {
     try {
       localStorage.removeItem(YT_CHANNEL_FAVORITES_KEY)
-      notify()
+      this.notify()
     } catch (error) {
       console.error("お気に入りチャンネルのクリアに失敗しました:", error)
     }
   }
 
   // チャンネルの動画を検索
-  const searchChannelVideos = async (channelId: string, pageToken?: string): Promise<SearchResponse> => {
+  async searchChannelVideos(channelId: string, pageToken?: string): Promise<SearchResponse> {
     try {
       const queryParams = new URLSearchParams({
-        key: opts.apiKey,
+        key: YOUTUBE_API_KEY,
         part: "snippet",
         maxResults: "10",
         channelId: channelId,
@@ -325,12 +319,12 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
   }
 
   // プレイリスト詳細情報の取得
-  const getPlaylistDetails = async (playlistIds: string[]): Promise<PlaylistDetail[]> => {
+  async getPlaylistDetails(playlistIds: string[]): Promise<PlaylistDetail[]> {
     try {
       if (!playlistIds.length) return []
 
       const queryParams = new URLSearchParams({
-        key: opts.apiKey,
+        key: YOUTUBE_API_KEY,
         part: "snippet,status,contentDetails",
         id: playlistIds.join(","),
       })
@@ -350,13 +344,13 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
   }
 
   // プレイリストアイテムの取得
-  const getPlaylistItems = async (
+  async getPlaylistItems(
     playlistId: string,
     pageToken?: string,
-  ): Promise<{ items: PlaylistItem[]; nextPageToken?: string }> => {
+  ): Promise<{ items: PlaylistItem[]; nextPageToken?: string }> {
     try {
       const queryParams = new URLSearchParams({
-        key: opts.apiKey,
+        key: YOUTUBE_API_KEY,
         part: "snippet,contentDetails",
         playlistId: playlistId,
         maxResults: "50",
@@ -381,7 +375,7 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
   }
 
   // お気に入りプレイリストの管理
-  const getFavoritePlaylists = (): string[] => {
+  getFavoritePlaylists(): string[] {
     try {
       const storedPlaylists = localStorage.getItem(YT_PLAYLIST_FAVORITES_KEY)
       if (!storedPlaylists) return []
@@ -393,22 +387,22 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const toggleFavoritePlaylist = (playlistId: string): boolean => {
+  toggleFavoritePlaylist(playlistId: string): boolean {
     try {
-      const favorites = getFavoritePlaylists()
+      const favorites = this.getFavoritePlaylists()
       const isFavorite = favorites.includes(playlistId)
 
       if (isFavorite) {
         // お気に入りから削除
         const updatedFavorites = favorites.filter((id) => id !== playlistId)
         localStorage.setItem(YT_PLAYLIST_FAVORITES_KEY, JSON.stringify(updatedFavorites))
-        notify()
+        this.notify()
         return false
       } else {
         // お気に入りに追加
         favorites.push(playlistId)
         localStorage.setItem(YT_PLAYLIST_FAVORITES_KEY, JSON.stringify(favorites))
-        notify()
+        this.notify()
         return true
       }
     } catch (error) {
@@ -417,9 +411,9 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const isFavoritePlaylist = (playlistId: string): boolean => {
+  isFavoritePlaylist(playlistId: string): boolean {
     try {
-      const favorites = getFavoritePlaylists()
+      const favorites = this.getFavoritePlaylists()
       return favorites.includes(playlistId)
     } catch (error) {
       console.error("お気に入りプレイリストのチェックに失敗しました:", error)
@@ -427,20 +421,20 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
     }
   }
 
-  const clearFavoritePlaylists = (): void => {
+  clearFavoritePlaylists(): void {
     try {
       localStorage.removeItem(YT_PLAYLIST_FAVORITES_KEY)
-      notify()
+      this.notify()
     } catch (error) {
       console.error("お気に入りプレイリストのクリアに失敗しました:", error)
     }
   }
 
   // 動画が属しているプレイリストを検索
-  const findPlaylistsContainingVideo = async (videoId: string): Promise<PlaylistDetail[]> => {
+  async findPlaylistsContainingVideo(videoId: string): Promise<PlaylistDetail[]> {
     try {
       // まず、この動画のチャンネルを取得
-      const videoDetails = await getVideoDetails([videoId])
+      const videoDetails = await this.getVideoDetails([videoId])
       if (!videoDetails.length) {
         return []
       }
@@ -448,12 +442,12 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
       const channelId = videoDetails[0].snippet.channelId
 
       // チャンネルのプレイリストを取得
-      const { items: playlists } = await getChannelPlaylists(channelId)
+      const { items: playlists } = await this.getChannelPlaylists(channelId)
 
       // 各プレイリストについて、この動画が含まれているかをチェック（並行処理）
       const checkPromises = playlists.map(async (playlist) => {
         try {
-          const { items: playlistItems } = await getPlaylistItems(playlist.id)
+          const { items: playlistItems } = await this.getPlaylistItems(playlist.id)
           const containsVideo = playlistItems.some((item) => item.contentDetails.videoId === videoId)
           if (containsVideo) {
             return playlist
@@ -478,13 +472,13 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
   }
 
   // チャンネルのプレイリストを取得
-  const getChannelPlaylists = async (
+  async getChannelPlaylists(
     channelId: string,
     pageToken?: string,
-  ): Promise<{ items: PlaylistDetail[]; nextPageToken?: string }> => {
+  ): Promise<{ items: PlaylistDetail[]; nextPageToken?: string }> {
     try {
       const queryParams = new URLSearchParams({
-        key: opts.apiKey,
+        key: YOUTUBE_API_KEY,
         part: "snippet,status,contentDetails",
         channelId: channelId,
         maxResults: "50",
@@ -507,37 +501,7 @@ function createYouTubeClient(opts: YouTubeClientOptions) {
       throw error
     }
   }
-
-  // インターフェイスとして返す
-  return {
-    subscribe,
-    search,
-    getVideoDetails,
-    getHistory,
-    addToHistory,
-    clearHistory,
-    removeFromHistory,
-    getFavorites,
-    toggleFavorite,
-    isFavorite,
-    clearFavorites,
-    getChannelDetails,
-    getFavoriteChannels,
-    toggleFavoriteChannel,
-    isFavoriteChannel,
-    clearFavoriteChannels,
-    searchChannelVideos,
-    getPlaylistDetails,
-    getPlaylistItems,
-    getFavoritePlaylists,
-    toggleFavoritePlaylist,
-    isFavoritePlaylist,
-    clearFavoritePlaylists,
-    findPlaylistsContainingVideo,
-    getChannelPlaylists,
-  }
 }
 
-// デフォルトインスタンスを作成
-const youtubeClient = createYouTubeClient({ apiKey: YOUTUBE_API_KEY })
+const youtubeClient = new YouTubeClient()
 export default youtubeClient
