@@ -14,7 +14,21 @@ import PlaylistDrawer from "./PlaylistDrawer"
 import Search from "./Search"
 import SpeedController from "./SpeedController"
 import youtubeClient from "./client"
-import { formatDuration, HistoryItem, PlaylistDetail, SearchItem, VideoDetail } from "./constants"
+import type { YTPlayer, YTPlayerConstructor, YTPlayerEvent, YTPlayerOnStateChangeEvent } from "./constants"
+import { formatDuration, HistoryItem, PlaylistDetail, SearchItem, VideoDetail, YTPlayerState } from "./constants"
+
+// YouTube APIの型安全なアクセサー（2026年スタイル）
+type YTAPI = {
+  Player: YTPlayerConstructor
+  PlayerState: typeof YTPlayerState
+}
+
+const getYT = () => (globalThis as unknown as { YT?: YTAPI }).YT
+const setYTReadyCallback = (fn: () => void) => {
+  if (typeof window !== "undefined") {
+    ;(window as unknown as { onYouTubeIframeAPIReady: () => void }).onYouTubeIframeAPIReady = fn
+  }
+}
 
 // 再生速度保存用のキー
 const YT_SPEED_KEY = "youtube_playback_speed"
@@ -264,7 +278,7 @@ export default function YoutubePage() {
   }, [isPlayerReady])
 
   // 他の状態（useRef）
-  const playerRef = useRef<YT.Player | null>(null)
+  const playerRef = useRef<YTPlayer | null>(null)
   const playerContainerRef = useRef<HTMLDivElement>(null)
 
   // Router
@@ -279,6 +293,21 @@ export default function YoutubePage() {
       playlist.snippet.title.toLowerCase().includes(channelPlaylistFilter.toLowerCase()),
     )
   }, [channelPlaylists, channelPlaylistFilter])
+
+  // youtubeClient の変更を監視して、現在表示中の動画のお気に入り状態などを同期する
+  useEffect(() => {
+    return youtubeClient.subscribe(() => {
+      if (selectedVideo) {
+        // お気に入り状態を更新
+        const isFav = youtubeClient.isFavorite(selectedVideo.id.videoId!)
+        dispatch({ type: "SET_VIDEO_FAVORITE", payload: isFav })
+
+        // チャンネルのお気に入り状態を更新
+        const isChannelFav = youtubeClient.isFavoriteChannel(selectedVideo.snippet.channelId)
+        dispatch({ type: "SET_CHANNEL_FAVORITE", payload: isChannelFav })
+      }
+    })
+  }, [selectedVideo])
 
   // ユーティリティ関数（先に宣言）
   const loadChannelPlaylists = useCallback(async (channelId: string) => {
@@ -385,8 +414,11 @@ export default function YoutubePage() {
       }
 
       if (!playerRef.current) {
+        const YT = getYT()
+        if (!YT) return
+
         // 新しいプレイヤーを作成
-        playerRef.current = new window.YT.Player(playerContainerRef.current, {
+        playerRef.current = new YT.Player(playerContainerRef.current, {
           height: "100%",
           width: "100%",
           videoId: videoId,
@@ -396,7 +428,7 @@ export default function YoutubePage() {
             rel: 0,
           },
           events: {
-            onReady: (event) => {
+            onReady: (event: YTPlayerEvent) => {
               dispatch({ type: "SET_PLAYER_READY", payload: true })
 
               // 再生位置を復元
@@ -419,15 +451,16 @@ export default function YoutubePage() {
                 console.error("再生位置の復元に失敗しました:", error)
               }
             },
-            onStateChange: (event: YT.OnStateChangeEvent) => {
+            onStateChange: (event: YTPlayerOnStateChangeEvent) => {
               // プレーヤーの状態変更時（再生、一時停止、バッファリング、終了など）
-              if (event.data === YT.PlayerState.PAUSED) {
+              if (event.data === YTPlayerState.PAUSED) {
                 // 一時停止時に再生位置を保存
                 saveCurrentPosition()
               }
               // 動画再生開始時に履歴に追加
               const currentVideo = selectedVideoRef.current
-              if (event.data === window.YT.PlayerState.PLAYING && currentVideo) {
+              const YT = getYT()
+              if (YT && event.data === YT.PlayerState.PLAYING && currentVideo) {
                 const historyItem: HistoryItem = {
                   videoId: currentVideo.id.videoId!,
                   title: currentVideo.snippet.title,
@@ -561,11 +594,11 @@ export default function YoutubePage() {
 
   // YouTube APIの読み込み
   useEffect(() => {
-    if (!window.YT) {
+    if (!getYT()) {
       // グローバルコールバック関数を定義
-      window.onYouTubeIframeAPIReady = () => {
+      setYTReadyCallback(() => {
         dispatch({ type: "SET_YOUTUBE_API_READY", payload: true })
-      }
+      })
 
       // スクリプトタグを作成してYouTube IFrame APIを読み込む
       const tag = document.createElement("script")

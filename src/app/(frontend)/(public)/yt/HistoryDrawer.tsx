@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect } from "react"
 import youtubeClient from "./client"
 import { HistoryItem, formatDuration, formatWatchedDate, formatWatchedTime } from "./constants"
 
@@ -11,17 +11,12 @@ interface HistoryDrawerProps {
 }
 
 const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoSelect }) => {
-  // 履歴更新のトリガー用state
-  const [, setHistoryUpdateTrigger] = useState<number>(0)
-
-  // ドロワーが開かれたときにデータを再読み込み
+  // youtubeClient の変更を監視
   useEffect(() => {
-    if (isOpen) {
-      queueMicrotask(() => {
-        setHistoryUpdateTrigger((prev) => prev + 1)
-      })
-    }
-  }, [isOpen])
+    return youtubeClient.subscribe(() => {
+      // 強制再レンダリング（必要に応じて）
+    })
+  }, [])
 
   // 履歴を削除する関数
   const removeFromHistory = useCallback((event: React.MouseEvent, videoId: string) => {
@@ -30,7 +25,6 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoS
     if (window.confirm("この動画を履歴から削除しますか？")) {
       try {
         youtubeClient.removeFromHistory(videoId)
-        setHistoryUpdateTrigger((prev) => prev + 1)
       } catch (error) {
         console.error("履歴からの削除に失敗しました:", error)
       }
@@ -38,38 +32,32 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoS
   }, [])
 
   // 履歴データを取得して日付ごとに整理
-  const historyData = useMemo(() => {
-    if (!isOpen) {
-      return { byDate: {}, sortedDates: [], total: 0 }
+  const history = youtubeClient.getHistory()
+
+  // 日付ごとにグループ化
+  const byDate = history.reduce((acc: { [date: string]: HistoryItem[] }, item) => {
+    const dateKey = formatWatchedDate(item.watchedAt)
+
+    if (!acc[dateKey]) {
+      acc[dateKey] = []
     }
 
-    const history = youtubeClient.getHistory()
+    acc[dateKey].push(item)
+    return acc
+  }, {})
 
-    // 日付ごとにグループ化
-    const byDate = history.reduce((acc: { [date: string]: HistoryItem[] }, item) => {
-      const dateKey = formatWatchedDate(item.watchedAt)
+  // 日付を新しい順にソート
+  const sortedDates = Object.keys(byDate).sort((a, b) => {
+    const dateA = new Date(byDate[a][0].watchedAt)
+    const dateB = new Date(byDate[b][0].watchedAt)
+    return dateB.getTime() - dateA.getTime()
+  })
 
-      if (!acc[dateKey]) {
-        acc[dateKey] = []
-      }
-
-      acc[dateKey].push(item)
-      return acc
-    }, {})
-
-    // 日付を新しい順にソート
-    const sortedDates = Object.keys(byDate).sort((a, b) => {
-      const dateA = new Date(byDate[a][0].watchedAt)
-      const dateB = new Date(byDate[b][0].watchedAt)
-      return dateB.getTime() - dateA.getTime()
-    })
-
-    return {
-      byDate,
-      sortedDates,
-      total: history.length,
-    }
-  }, [isOpen])
+  const historyData = {
+    byDate,
+    sortedDates,
+    total: history.length,
+  }
 
   const handleVideoSelect = (videoId: string, currentTime?: number) => {
     onVideoSelect(videoId, currentTime)
@@ -97,7 +85,6 @@ const HistoryDrawer: React.FC<HistoryDrawerProps> = ({ isOpen, onClose, onVideoS
             onClick={() => {
               if (window.confirm("すべての視聴履歴を削除しますか？")) {
                 youtubeClient.clearHistory()
-                setHistoryUpdateTrigger((prev) => prev + 1)
               }
             }}
             className="rounded bg-red-500 px-3 py-1 text-sm text-white hover:bg-red-600"

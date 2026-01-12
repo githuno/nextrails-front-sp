@@ -13,6 +13,14 @@ interface PlaylistDrawerProps {
 const PlaylistDrawer: React.FC<PlaylistDrawerProps> = ({ isOpen, onClose, onVideoSelect }) => {
   // お気に入りプレイリスト更新のトリガー用state
   const [playlistUpdateTrigger, setPlaylistUpdateTrigger] = useState<number>(0)
+
+  // youtubeClient の変更を監視
+  useEffect(() => {
+    return youtubeClient.subscribe(() => {
+      setPlaylistUpdateTrigger((prev) => prev + 1)
+    })
+  }, [])
+
   // プレイリスト詳細情報
   const [playlistDetails, setPlaylistDetails] = useState<PlaylistDetail[]>([])
   // 選択中のプレイリスト
@@ -64,7 +72,6 @@ const PlaylistDrawer: React.FC<PlaylistDrawerProps> = ({ isOpen, onClose, onVide
     if (window.confirm("このプレイリストをお気に入りから削除しますか？")) {
       try {
         youtubeClient.toggleFavoritePlaylist(playlistId)
-        setPlaylistUpdateTrigger((prev) => prev + 1)
       } catch (error) {
         console.error("お気に入りからの削除に失敗しました:", error)
       }
@@ -74,15 +81,7 @@ const PlaylistDrawer: React.FC<PlaylistDrawerProps> = ({ isOpen, onClose, onVide
   // すべてのお気に入りを削除
   const clearAllFavorites = useCallback(() => {
     if (window.confirm("すべてのお気に入りプレイリストを削除しますか？")) {
-      try {
-        const favorites = youtubeClient.getFavoritePlaylists()
-        favorites.forEach((playlistId) => {
-          youtubeClient.toggleFavoritePlaylist(playlistId)
-        })
-        setPlaylistUpdateTrigger((prev) => prev + 1)
-      } catch (error) {
-        console.error("お気に入リのクリアに失敗しました:", error)
-      }
+      youtubeClient.clearFavoritePlaylists()
     }
   }, [])
 

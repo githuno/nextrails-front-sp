@@ -13,6 +13,14 @@ interface ChannelFavoriteDrawerProps {
 const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, onClose, onVideoSelect }) => {
   // お気に入りチャンネル更新のトリガー用state
   const [updateTrigger, setUpdateTrigger] = useState<number>(0)
+
+  // youtubeClient の変更を監視
+  useEffect(() => {
+    return youtubeClient.subscribe(() => {
+      setUpdateTrigger((prev) => prev + 1)
+    })
+  }, [])
+
   // チャンネル詳細情報
   const [channelDetails, setChannelDetails] = useState<ChannelDetail[]>([])
   // 選択中のチャンネル
@@ -67,7 +75,6 @@ const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, o
       if (window.confirm("このチャンネルをお気に入りから削除しますか？")) {
         try {
           youtubeClient.toggleFavoriteChannel(channelId)
-          setUpdateTrigger((prev) => prev + 1)
 
           // 削除したチャンネルが選択中だった場合は選択を解除
           if (selectedChannel === channelId) {
@@ -85,18 +92,10 @@ const ChannelFavoriteDrawer: React.FC<ChannelFavoriteDrawerProps> = ({ isOpen, o
   // すべてのお気に入りを削除
   const clearAllFavorites = useCallback(() => {
     if (window.confirm("すべてのお気に入りチャンネルを削除しますか？")) {
-      try {
-        const favoriteChannels = youtubeClient.getFavoriteChannels()
-        favoriteChannels.forEach((channelId) => {
-          youtubeClient.toggleFavoriteChannel(channelId)
-        })
-        setUpdateTrigger((prev) => prev + 1)
-        // 選択をリセット
-        setSelectedChannel(null)
-        setChannelVideos([])
-      } catch (error) {
-        console.error("お気に入りのクリアに失敗しました:", error)
-      }
+      youtubeClient.clearFavoriteChannels()
+      // 選択をリセット
+      setSelectedChannel(null)
+      setChannelVideos([])
     }
   }, [])
 

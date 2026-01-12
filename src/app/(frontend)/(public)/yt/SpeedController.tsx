@@ -1,9 +1,10 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
+import type { YTPlayer } from "./constants"
 
 interface SpeedControllerProps {
-  player: YT.Player | null
+  player: YTPlayer | null
   onChange?: (speed: number) => void
   currentSpeed: number
 }

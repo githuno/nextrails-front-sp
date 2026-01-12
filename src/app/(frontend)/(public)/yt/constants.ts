@@ -75,7 +75,7 @@ export interface VideoDetail {
     definition: string
     caption: string
     licensedContent: boolean
-    contentRating: {}
+    contentRating: object
     projection: string
   }
   statistics: {
@@ -245,113 +245,101 @@ export const formatDuration = (isoDuration: string): string => {
   return `${totalMinutes}:${remainingSeconds.toString().padStart(2, "0")}`
 }
 
-declare global {
-  interface Window {
-    YT: typeof YT
-    onYouTubeIframeAPIReady: () => void
+// YouTube Playerの型定義
+export type YTPlayer = {
+  destroy(): void
+  loadVideoById(videoId: string, startSeconds?: number): void
+  cueVideoById(videoId: string, startSeconds?: number): void
+  playVideo(): void
+  pauseVideo(): void
+  stopVideo(): void
+  seekTo(seconds: number, allowSeekAhead: boolean): void
+  getVideoLoadedFraction(): number
+  getPlayerState(): number
+  getCurrentTime(): number
+  getDuration(): number
+  getVideoUrl(): string
+  getVideoEmbedCode(): string
+  getOptions(): string[]
+  getOption(key: string): unknown
+  setOption(key: string, value: unknown): void
+  getVideoData(): {
+    video_id: string
+    author: string
+    title: string
+    [key: string]: unknown
   }
-
-  namespace YT {
-    interface Player {
-      destroy(): void
-      loadVideoById(videoId: string, startSeconds?: number): void
-      cueVideoById(videoId: string, startSeconds?: number): void
-      playVideo(): void
-      pauseVideo(): void
-      stopVideo(): void
-      seekTo(seconds: number, allowSeekAhead: boolean): void
-      getVideoLoadedFraction(): number
-      getPlayerState(): number
-      getCurrentTime(): number
-      getDuration(): number
-      getVideoUrl(): string
-      getVideoEmbedCode(): string
-      getOptions(): string[]
-      getOption(key: string): unknown
-      setOption(key: string, value: unknown): void
-      getVideoData(): {
-        video_id: string
-        author: string
-        title: string
-        [key: string]: unknown
-      }
-      mute(): void
-      unMute(): void
-      isMuted(): boolean
-      setVolume(volume: number): void
-      getVolume(): number
-      setSize(width: number, height: number): void
-      setPlaybackRate(rate: number): void
-      getPlaybackRate(): number
-      getAvailablePlaybackRates(): number[]
-      setLoop(loopPlaylists: boolean): void
-      setShuffle(shufflePlaylist: boolean): void
-    }
-
-    interface PlayerOptions {
-      height?: string | number
-      width?: string | number
-      videoId?: string
-      playerVars?: PlayerVars
-      events?: Events
-    }
-
-    interface PlayerVars {
-      autoplay?: 0 | 1
-      cc_load_policy?: 0 | 1
-      color?: "red" | "white"
-      controls?: 0 | 1
-      disablekb?: 0 | 1
-      enablejsapi?: 0 | 1
-      end?: number
-      fs?: 0 | 1
-      hl?: string
-      iv_load_policy?: 1 | 3
-      list?: string
-      listType?: "playlist" | "search" | "user_uploads"
-      loop?: 0 | 1
-      modestbranding?: 0 | 1
-      origin?: string
-      playlist?: string
-      playsinline?: 0 | 1
-      rel?: 0 | 1
-      start?: number
-      mute?: 0 | 1
-    }
-
-    interface Events {
-      onReady?: (event: PlayerEvent) => void
-      onStateChange?: (event: OnStateChangeEvent) => void
-      onPlaybackQualityChange?: (event: PlayerEvent & { data: string }) => void
-      onPlaybackRateChange?: (event: PlayerEvent & { data: number }) => void
-      onError?: (event: PlayerEvent & { data: number }) => void
-      onApiChange?: (event: PlayerEvent) => void
-    }
-
-    interface PlayerEvent {
-      target: Player
-    }
-
-    interface OnStateChangeEvent {
-      target: Player
-      data: PlayerState
-    }
-
-    enum PlayerState {
-      UNSTARTED = -1,
-      ENDED = 0,
-      PLAYING = 1,
-      PAUSED = 2,
-      BUFFERING = 3,
-      CUED = 5,
-    }
-
-    interface PlayerConstructor {
-      new (container: HTMLElement | string, options: PlayerOptions): Player
-    }
-
-    const Player: PlayerConstructor
-  }
+  mute(): void
+  unMute(): void
+  isMuted(): boolean
+  setVolume(volume: number): void
+  getVolume(): number
+  setSize(width: number, height: number): void
+  setPlaybackRate(rate: number): void
+  getPlaybackRate(): number
+  getAvailablePlaybackRates(): number[]
+  setLoop(loopPlaylists: boolean): void
+  setShuffle(shufflePlaylist: boolean): void
 }
 
-export {}
+export interface YTPlayerOptions {
+  height?: string | number
+  width?: string | number
+  videoId?: string
+  playerVars?: YTPlayerVars
+  events?: YTPlayerEvents
+}
+
+export interface YTPlayerVars {
+  autoplay?: 0 | 1
+  cc_load_policy?: 0 | 1
+  color?: "red" | "white"
+  controls?: 0 | 1
+  disablekb?: 0 | 1
+  enablejsapi?: 0 | 1
+  end?: number
+  fs?: 0 | 1
+  hl?: string
+  iv_load_policy?: 1 | 3
+  list?: string
+  listType?: "playlist" | "search" | "user_uploads"
+  loop?: 0 | 1
+  modestbranding?: 0 | 1
+  origin?: string
+  playlist?: string
+  playsinline?: 0 | 1
+  rel?: 0 | 1
+  start?: number
+  mute?: 0 | 1
+}
+
+export interface YTPlayerEvents {
+  onReady?: (event: YTPlayerEvent) => void
+  onStateChange?: (event: YTPlayerOnStateChangeEvent) => void
+  onPlaybackQualityChange?: (event: YTPlayerEvent & { data: string }) => void
+  onPlaybackRateChange?: (event: YTPlayerEvent & { data: number }) => void
+  onError?: (event: YTPlayerEvent & { data: number }) => void
+  onApiChange?: (event: YTPlayerEvent) => void
+}
+
+export interface YTPlayerEvent {
+  target: YTPlayer
+}
+
+export interface YTPlayerOnStateChangeEvent {
+  target: YTPlayer
+  data: YTPlayerState
+}
+
+export enum YTPlayerState {
+  UNSTARTED = -1,
+  ENDED = 0,
+  PLAYING = 1,
+  PAUSED = 2,
+  BUFFERING = 3,
+  CUED = 5,
+}
+
+export interface YTPlayerConstructor {
+  new (container: HTMLElement | string, options: YTPlayerOptions): YTPlayer
+}

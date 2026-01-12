@@ -13,6 +13,14 @@ interface FavoriteDrawerProps {
 const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVideoSelect }) => {
   // お気に入り更新のトリガー用state
   const [favUpdateTrigger, setFavUpdateTrigger] = useState<number>(0)
+
+  // youtubeClient の変更を監視
+  useEffect(() => {
+    return youtubeClient.subscribe(() => {
+      setFavUpdateTrigger((prev) => prev + 1)
+    })
+  }, [])
+
   // 動画詳細情報
   const [videoDetails, setVideoDetails] = useState<VideoDetail[]>([])
   // ロード状態
@@ -56,7 +64,6 @@ const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVide
     if (window.confirm("この動画をお気に入りから削除しますか？")) {
       try {
         youtubeClient.toggleFavorite(videoId)
-        setFavUpdateTrigger((prev) => prev + 1)
       } catch (error) {
         console.error("お気に入りからの削除に失敗しました:", error)
       }
@@ -66,15 +73,7 @@ const FavoriteDrawer: React.FC<FavoriteDrawerProps> = ({ isOpen, onClose, onVide
   // すべてのお気に入りを削除
   const clearAllFavorites = useCallback(() => {
     if (window.confirm("すべてのお気に入りを削除しますか？")) {
-      try {
-        const favorites = youtubeClient.getFavorites()
-        favorites.forEach((videoId) => {
-          youtubeClient.toggleFavorite(videoId)
-        })
-        setFavUpdateTrigger((prev) => prev + 1)
-      } catch (error) {
-        console.error("お気に入りのクリアに失敗しました:", error)
-      }
+      youtubeClient.clearFavorites()
     }
   }, [])
 

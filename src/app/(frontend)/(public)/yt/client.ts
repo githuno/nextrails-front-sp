@@ -16,6 +16,17 @@ import {
 
 // YouTube APIクライアント
 class YouTubeClient {
+  private listeners: Set<() => void> = new Set()
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  private notify(): void {
+    this.listeners.forEach((l) => l())
+  }
+
   // 検索API呼び出し
   async search(params: SearchParams): Promise<SearchResponse> {
     try {
@@ -115,6 +126,7 @@ class YouTubeClient {
       const trimmedHistory = filteredHistory.slice(0, 100)
 
       localStorage.setItem(YT_HISTORY_KEY, JSON.stringify(trimmedHistory))
+      this.notify()
     } catch (error) {
       console.error("履歴の保存に失敗しました:", error)
     }
@@ -123,6 +135,7 @@ class YouTubeClient {
   clearHistory(): void {
     try {
       localStorage.removeItem(YT_HISTORY_KEY)
+      this.notify()
     } catch (error) {
       console.error("履歴のクリアに失敗しました:", error)
     }
@@ -133,6 +146,7 @@ class YouTubeClient {
       const history = this.getHistory()
       const filteredHistory = history.filter((h) => h.videoId !== videoId)
       localStorage.setItem(YT_HISTORY_KEY, JSON.stringify(filteredHistory))
+      this.notify()
     } catch (error) {
       console.error("履歴からの削除に失敗しました:", error)
     }
@@ -160,11 +174,13 @@ class YouTubeClient {
         // お気に入りから削除
         favorites.splice(index, 1)
         localStorage.setItem(YT_FAVORITES_KEY, JSON.stringify(favorites))
+        this.notify()
         return false
       } else {
         // お気に入りに追加
         favorites.push(videoId)
         localStorage.setItem(YT_FAVORITES_KEY, JSON.stringify(favorites))
+        this.notify()
         return true
       }
     } catch (error) {
@@ -180,6 +196,15 @@ class YouTubeClient {
     } catch (error) {
       console.error("お気に入りの確認に失敗しました:", error)
       return false
+    }
+  }
+
+  clearFavorites(): void {
+    try {
+      localStorage.removeItem(YT_FAVORITES_KEY)
+      this.notify()
+    } catch (error) {
+      console.error("お気に入りのクリアに失敗しました:", error)
     }
   }
 
@@ -230,11 +255,13 @@ class YouTubeClient {
         // お気に入りから削除
         favorites.splice(index, 1)
         localStorage.setItem(YT_CHANNEL_FAVORITES_KEY, JSON.stringify(favorites))
+        this.notify()
         return false
       } else {
         // お気に入りに追加
         favorites.push(channelId)
         localStorage.setItem(YT_CHANNEL_FAVORITES_KEY, JSON.stringify(favorites))
+        this.notify()
         return true
       }
     } catch (error) {
@@ -250,6 +277,15 @@ class YouTubeClient {
     } catch (error) {
       console.error("お気に入りチャンネルの確認に失敗しました:", error)
       return false
+    }
+  }
+
+  clearFavoriteChannels(): void {
+    try {
+      localStorage.removeItem(YT_CHANNEL_FAVORITES_KEY)
+      this.notify()
+    } catch (error) {
+      console.error("お気に入りチャンネルのクリアに失敗しました:", error)
     }
   }
 
@@ -360,11 +396,13 @@ class YouTubeClient {
         // お気に入りから削除
         const updatedFavorites = favorites.filter((id) => id !== playlistId)
         localStorage.setItem(YT_PLAYLIST_FAVORITES_KEY, JSON.stringify(updatedFavorites))
+        this.notify()
         return false
       } else {
         // お気に入りに追加
         favorites.push(playlistId)
         localStorage.setItem(YT_PLAYLIST_FAVORITES_KEY, JSON.stringify(favorites))
+        this.notify()
         return true
       }
     } catch (error) {
@@ -380,6 +418,15 @@ class YouTubeClient {
     } catch (error) {
       console.error("お気に入りプレイリストのチェックに失敗しました:", error)
       return false
+    }
+  }
+
+  clearFavoritePlaylists(): void {
+    try {
+      localStorage.removeItem(YT_PLAYLIST_FAVORITES_KEY)
+      this.notify()
+    } catch (error) {
+      console.error("お気に入りプレイリストのクリアに失敗しました:", error)
     }
   }
 
