@@ -33,7 +33,7 @@ const ListMenu = ({ children }: { children: React.ReactNode }) => {
         <Image src={`/images/more_horiz.svg`} alt="more_horiz" width={24} height={24} />
       </div>
       {isOpen && (
-        <ul className="absolute right-0 z-10 flex w-[224px] flex-col items-start self-stretch rounded bg-gray-900 text-white shadow-xl">
+        <ul className="absolute right-0 z-10 flex w-56 flex-col items-start self-stretch rounded bg-gray-900 text-white shadow-xl">
           {children}
         </ul>
       )}
