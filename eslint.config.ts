@@ -22,6 +22,7 @@ export default defineConfig([
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "warn", // any 型は段階的に是正する方針
+      "@next/next/no-img-element": "off", // img タグの使用を許可（パフォーマンス最適化は別途検討）
     },
   },
 ])
