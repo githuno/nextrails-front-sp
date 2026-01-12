@@ -32,7 +32,7 @@ const ToolRoot = ({ children, className, enableBackgroundTap = false, onBackgrou
 
   return (
     <ToolContext.Provider value={value}>
-      <div className={`bg-black text-white ${className || ""}`} {...props}>
+      <div className={`pointer-events-auto bg-black text-white ${className || ""}`} {...props}>
         {children}
       </div>
     </ToolContext.Provider>
@@ -45,7 +45,7 @@ const ToolMain = ({ children, className, ...props }: React.HTMLAttributes<HTMLDi
 
   return (
     <div
-      className={`${isMaximized ? "max-h-screen" : "mt-[10svh] max-h-[75svh]"} flex justify-center ${className || ""}`}
+      className={`${isMaximized ? "mt-[5svh] max-h-screen" : "mt-[20svh] max-h-[75svh]"} flex justify-center ${className || ""}`}
       {...props}
     >
       {children}
@@ -57,17 +57,15 @@ const ToolController = ({ children, className, ...props }: React.HTMLAttributes<
   const context = useContext(ToolContext)
   if (!context) return null
   const { isMaximized, setIsMaximized, enableBackgroundTap, onBackgroundTap } = context
-
   const handleBackgroundClick = () => {
     if (enableBackgroundTap) {
       setIsMaximized(!isMaximized)
       onBackgroundTap?.()
     }
   }
-
   return (
     <div
-      className={`fixed bottom-[5%] left-0 w-full border-t border-white/10 p-4 shadow-xl transition-opacity duration-300 ${
+      className={`fixed bottom-0 left-0 w-full border-t border-white/10 p-4 shadow-xl transition-opacity duration-300 ${
         isMaximized ? "bg-transparent" : "bg-zinc-900/10 backdrop-blur-xs"
       } ${className || ""}`}
       onClick={handleBackgroundClick}
@@ -82,17 +80,15 @@ const ToolShowcase = ({ children, className, ...props }: React.HTMLAttributes<HT
   const context = useContext(ToolContext)
   if (!context) return null
   const { isMaximized, setIsMaximized, enableBackgroundTap, onBackgroundTap } = context
-
   const handleBackgroundClick = () => {
     if (enableBackgroundTap) {
       setIsMaximized(!isMaximized)
       onBackgroundTap?.()
     }
   }
-
   return (
     <div
-      className={`fixed top-1 left-0 w-full border-white/10 bg-zinc-900/30 p-2 shadow-xl backdrop-blur-xs transition-all duration-300 ease-in-out ${
+      className={`fixed top-0 left-0 w-full border-white/10 bg-zinc-900/30 p-2 shadow-xl backdrop-blur-xs transition-all duration-300 ease-in-out ${
         isMaximized ? "h-8 cursor-pointer overflow-hidden" : "h-auto"
       } ${className || ""}`}
       onClick={handleBackgroundClick}

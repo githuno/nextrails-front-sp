@@ -1,11 +1,9 @@
-import { useModal } from "@/components/atoms"
 import { useImageset } from "@/components/camera"
 import { LoadingSpinner, useCamera } from "@/components/camera/_utils"
-import { useEffect, useRef } from "react"
+import { FC, useEffect, useRef } from "react"
 
-const CameraPreview = () => {
+const CameraPreview: FC<{ isOpen?: boolean }> = ({ isOpen = true }) => {
   const { imageset } = useImageset()
-  const { isOpen } = useModal()
   const { cameraState, camera } = useCamera()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)

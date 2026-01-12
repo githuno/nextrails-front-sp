@@ -1,7 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite"
 import { PGliteWorker } from "@electric-sql/pglite/worker"
 import { drizzle } from "drizzle-orm/pglite"
-import { useExternalStore } from "../atom/useExternalStore"
+import { useExternalStore } from "../atoms/useExternalStore"
 import * as schema from "./pgliteSchema"
 
 let pgInstance: PGliteWorker | null = null

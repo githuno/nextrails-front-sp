@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react"
-import { useIsClient } from "../_hooks/atom/useIsClient"
+import { useIsClient } from "../_hooks/atoms/useIsClient"
 
 // --- 型定義 ---
 

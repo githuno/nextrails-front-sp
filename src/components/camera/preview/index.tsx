@@ -1,10 +1,10 @@
 import { CameraPreview } from "./CameraPreview"
 import { ModalWebview } from "./WebView"
 
-const Preview = () => {
+const Preview: React.FC<{ isOpen?: boolean }> = ({ isOpen = true }) => {
   return (
     <>
-      <CameraPreview />
+      <CameraPreview isOpen={isOpen} />
       <ModalWebview />
     </>
   )

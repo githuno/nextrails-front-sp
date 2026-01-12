@@ -1,7 +1,7 @@
 import { usePathname, useSearchParams } from "next/navigation"
 import { useMemo } from "react"
-import { useExternalStore } from "./atom/useExternalStore"
-import { useIsClient } from "./atom/useIsClient"
+import { useExternalStore } from "./atoms/useExternalStore"
+import { useIsClient } from "./atoms/useIsClient"
 
 const STORAGE_KEY = "ftb-session-id"
 const INITIAL_STATE: SessionState = { ids: [], currentId: "" }

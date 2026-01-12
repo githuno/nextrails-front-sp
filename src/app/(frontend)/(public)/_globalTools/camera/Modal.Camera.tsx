@@ -1,6 +1,7 @@
-import { Carousel, Modal } from "@/components/atoms"
 import Image from "next/image"
 import React, { useEffect, useRef, useState } from "react"
+import { Carousel } from "../_components/atoms/Carousel"
+import { Modal } from "../_components/atoms/Modal"
 import { Tool } from "../_components/GlobalTool"
 import { LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "../_components/Icons"
 import { useToolActionStore } from "../_hooks/useToolActionStore"
@@ -65,8 +66,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
     cameraActions.startQrScan()
   }
 
-  const handleMainActionPointerDown = (e: React.PointerEvent) => {
-    e.preventDefault()
+  const handleMainActionPointerDown = () => {
     if (cameraState.isRecording) return
     setIsLongPressing(true)
     longPressTimerRef.current = setTimeout(() => {
@@ -76,8 +76,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
     }, 300) // 300ms長押しで録画開始
   }
 
-  const handleMainActionPointerUp = (e: React.PointerEvent) => {
-    e.preventDefault()
+  const handleMainActionPointerUp = () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current)
       longPressTimerRef.current = null
@@ -96,13 +95,11 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
     }
   }
 
-  if (!isOpen) return null
-
   return (
-    <Modal isOpen={isOpen} onClose={onClose} backdropClassName="backdrop:bg-transparent">
+    <Modal isOpen={isOpen} onClose={onClose} backdropClassName="backdrop:bg-transparent" className="h-full w-full p-0">
       <Tool className="bg-transparent" enableBackgroundTap onBackgroundTap={() => console.log("maximize")}>
         {/* Main Viewer: プレビュー */}
-        <Tool.Main>
+        <Tool.Main className="relative overflow-hidden">
           <>
             {cameraState.isAvailable === null && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950">

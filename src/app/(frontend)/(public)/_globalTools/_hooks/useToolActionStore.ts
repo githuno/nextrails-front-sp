@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm"
 import { z } from "zod"
 import { cameraActions, type CameraExternalActions, SavedFileResult } from "../camera/cameraStore"
-import { useExternalStore } from "./atom/useExternalStore"
+import { useExternalStore } from "./atoms/useExternalStore"
 import { capturedFiles } from "./db/pgliteSchema"
 import { idbStore } from "./db/useIdbStore"
 import { getDb, subscribe as subscribePglite } from "./db/usePgliteStore"

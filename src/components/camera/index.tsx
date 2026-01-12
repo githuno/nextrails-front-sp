@@ -80,7 +80,7 @@ const ImagesetContextProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 }
 
 // ----------------------------------------------------------------------------- ImagesetContent
-const ImagesetContent: React.FC = () => {
+const ImagesetContent: React.FC<{ isOpen?: boolean }> = ({ isOpen = true }) => {
   // const { imageset } = useImageset();
   const { cameraState } = useCamera()
 
@@ -147,7 +147,7 @@ const ImagesetContent: React.FC = () => {
         Call Hello Function
       </button> */}
       <div className="flex h-full w-full justify-center">
-        <Preview />
+        <Preview isOpen={isOpen} />
       </div>
       {cameraState.isAvailable !== null && (
         <div className="fixed bottom-[5%] left-0 w-full p-4">
@@ -162,10 +162,10 @@ const ImagesetContent: React.FC = () => {
 }
 
 // ----------------------------------------------------------------------------- Camera
-const Camera: React.FC = () => (
+const Camera: React.FC<{ isOpen?: boolean }> = ({ isOpen = true }) => (
   <CameraContextProvider>
     <ImagesetContextProvider>
-      <ImagesetContent />
+      <ImagesetContent isOpen={isOpen} />
     </ImagesetContextProvider>
   </CameraContextProvider>
 )

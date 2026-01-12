@@ -57,7 +57,9 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className }) => {
         onClose={() => setIsModalOpen(false)}
         className="fixed top-[25vh] h-[75vh] bg-transparent"
       >
-        {selectedComponent}
+        {selectedComponent && React.isValidElement(selectedComponent) && selectedComponent.type === Camera
+          ? React.cloneElement(selectedComponent as React.ReactElement<{ isOpen?: boolean }>, { isOpen: isModalOpen })
+          : selectedComponent}
       </Modal>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useExternalStore } from "../_hooks/atom/useExternalStore"
+import { useExternalStore } from "../_hooks/atoms/useExternalStore"
 import { createCameraClient, type CameraConfig } from "./cameraClient"
 
 interface CameraState {

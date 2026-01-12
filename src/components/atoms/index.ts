@@ -1,6 +1,6 @@
 import { Carousel } from "./Carousel"
 import { ListGroup, ListGroupItem } from "./ListGroup"
 import { ListMenu, ListMenuItem } from "./ListMenu"
-import { Modal, useModal } from "./Modal"
+import { Modal } from "./Modal"
 
-export { Carousel, ListGroup, ListGroupItem, ListMenu, ListMenuItem, Modal, useModal }
+export { Carousel, ListGroup, ListGroupItem, ListMenu, ListMenuItem, Modal }
