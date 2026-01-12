@@ -485,7 +485,7 @@ const cameraActions = {
 }
 
 export { cameraActions }
-export const useCameraState = () => {
+export const useCameraState = (): CameraState => {
   return useExternalStore<CameraState>({ subscribe, getSnapshot, getServerSnapshot })
 }
 
