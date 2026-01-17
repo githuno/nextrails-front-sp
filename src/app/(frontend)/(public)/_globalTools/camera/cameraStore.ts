@@ -482,6 +482,7 @@ const cameraActions = {
   setExternalActions,
   startOrientationTracking,
   cleanup,
+  getSnapshot,
 }
 
 export { cameraActions }

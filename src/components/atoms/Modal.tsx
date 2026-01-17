@@ -22,7 +22,6 @@ interface ModalProps extends HTMLAttributes<HTMLDialogElement> {
   isOpen: boolean
   onClose: () => void
   children: ReactNode
-  backdropClassName?: string
   hideCloseButton?: boolean
   closeOnBackdropClick?: boolean
 }

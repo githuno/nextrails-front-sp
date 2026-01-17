@@ -96,15 +96,30 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} backdropClassName="backdrop:bg-transparent" className="h-full w-full p-0">
+    <Modal isOpen={isOpen} onClose={onClose} className="h-full w-full p-0">
       <Tool className="bg-transparent" enableBackgroundTap onBackgroundTap={() => console.log("maximize")}>
         {/* Main Viewer: プレビュー */}
         <Tool.Main className="relative overflow-hidden">
           <>
-            {cameraState.isAvailable === null && (
+            {cameraState.isAvailable === null && !cameraState.error && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950">
                 <LoadingSpinner size="48px" color="#3b82f6" />
                 <p className="mt-4 animate-pulse text-xs tracking-widest text-zinc-500 uppercase">Initializing...</p>
+              </div>
+            )}
+            {cameraState.error && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950 px-8 text-center">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20 text-red-500">
+                  <StopIcon size="32px" color="currentColor" />
+                </div>
+                <h3 className="mb-2 text-lg font-bold text-white">Camera Error</h3>
+                <p className="mb-6 text-sm text-zinc-400">{cameraState.error.message}</p>
+                <button
+                  onClick={() => cameraActions.setup(videoRef.current!, canvasRef.current!)}
+                  className="rounded-full bg-zinc-800 px-6 py-2 text-xs font-bold text-white hover:bg-zinc-700"
+                >
+                  Retry
+                </button>
               </div>
             )}
             <video
@@ -156,6 +171,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                   e.stopPropagation()
                   setShowDeviceList(!showDeviceList)
                 }}
+                aria-label="Switch Camera"
                 className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
               >
                 <SwitchCameraIcon size="36px" color="#fff" />
@@ -191,6 +207,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                     e.stopPropagation()
                     handleMainActionClick()
                   }}
+                  aria-label="Stop Recording"
                   className="hover:shadow-3xl flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 hover:ring-2 active:scale-95"
                 >
                   <StopIcon size="32px" color="#ef4444" />
@@ -205,6 +222,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                     e.stopPropagation()
                     handleMainActionClick()
                   }}
+                  aria-label="Capture Image"
                   className={`group hover:shadow-3xl relative flex h-12 w-12 touch-none items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 select-none hover:ring-2 active:scale-95 ${isLongPressing ? "ring-4 ring-red-500" : ""}`}
                 >
                   <div className="relative flex h-12 w-12 items-center justify-center rounded-full border-2 border-zinc-200 transition-transform group-hover:scale-110">
@@ -220,6 +238,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                 e.stopPropagation()
                 onSelect?.()
               }}
+              aria-label="Open Gallery Select"
               className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
             >
               <PictureIcon size="28px" color="#fff" />
@@ -237,6 +256,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                   e.stopPropagation()
                   setIsLibraryOpen(true)
                 }}
+                aria-label="Open FileSet Library"
                 className="group flex h-8 items-center gap-2 rounded-full border border-white/5 bg-zinc-800/80 px-3 shadow-lg transition-all hover:bg-zinc-700 active:scale-95"
               >
                 <MenuIcon size="14px" color="#fff" />
@@ -278,6 +298,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                         cameraActions.removeCapturedImage(index)
                         if (viewingIndex === index) setViewingIndex(null)
                       }}
+                      aria-label="Delete Capture"
                       className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-zinc-700/80 shadow-md backdrop-blur-md transition-opacity group-hover:opacity-100 hover:bg-gray-600/50 hover:text-white sm:opacity-0"
                     >
                       ✕
@@ -324,7 +345,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
         isOpen={isLibraryOpen}
         onClose={() => setIsLibraryOpen(false)}
         className="shadow-3xl w-[95vw] max-w-md overflow-hidden border border-white/10 p-0"
-        backdropClassName="backdrop:bg-zinc-950/80 backdrop:backdrop-blur-sm"
       >
         <div className="flex max-h-[85vh] flex-col bg-zinc-900">
           {/* Header & Create Input */}
@@ -443,7 +463,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
         isOpen={!!isWebViewOpen}
         onClose={() => closeWebView()}
         className="h-full max-h-none w-full max-w-none p-0"
-        backdropClassName="backdrop:bg-black/90 backdrop:backdrop-blur-md"
       >
         <div className="relative h-full w-full overflow-hidden bg-white">
           {webUrl && (
