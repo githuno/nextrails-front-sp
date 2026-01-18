@@ -1,5 +1,6 @@
 import { FC, HTMLAttributes, ReactNode } from "react"
 
+// https://codepen.io/tak-dcxi/pen/RNPvmQr
 // https://www.notion.so/UI-HTML-dialog-ICS-MEDIA-2a6565e97d7c812db74fe5a9ce73bc6a
 
 const CloseIcon = ({ size = "h-5 w-5", color = "bg-current" }: { size?: string; color?: string }) => (

@@ -5,6 +5,8 @@ import { useToolActionStore } from "../_hooks/useToolActionStore"
 import { cameraActions } from "./cameraStore"
 import CameraModal from "./Modal.Camera"
 
+// https://howtotestfrontend.com/resources/how-to-write-good-frontend-tests
+
 // next/image のモック
 vi.mock("next/image", () => ({
   __esModule: true,

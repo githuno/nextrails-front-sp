@@ -55,7 +55,7 @@ export default function IconDemoPage() {
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="ml-2" />
         </label>
       </div>
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-10 gap-2">
         {icons.map(({ name, component: IconComponent }) => (
           <div key={name} className="flex flex-col items-center rounded border p-4">
             <IconComponent size={size} color={color} />
