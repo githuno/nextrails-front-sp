@@ -96,7 +96,10 @@ const ToolShowcase = ({ children, className, ...props }: React.HTMLAttributes<HT
     >
       {isMaximized ? (
         <div className="flex h-full items-center justify-center">
-          <div className="text-xs text-zinc-400">▼ Tap to expand</div>
+          <div className="flex h-3.5 w-5 flex-col justify-around">
+            <span className="block h-0.5 rounded bg-zinc-400"></span>
+            <span className="block h-0.5 rounded bg-zinc-400"></span>
+          </div>
         </div>
       ) : (
         children
