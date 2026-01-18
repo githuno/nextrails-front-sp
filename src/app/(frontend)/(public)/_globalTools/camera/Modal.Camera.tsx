@@ -323,7 +323,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
       {/* ImageViewer using Modal and Carousel */}
       <Modal isOpen={viewingIndex !== null} onClose={() => setViewingIndex(null)} className="h-[90vh] w-[90vw] p-0">
         {viewingIndex !== null && (
-          <Carousel index={viewingIndex} className="h-full p-4" containerClassName="h-full">
+          <Carousel index={viewingIndex} className="h-full p-4" containerClassName="h-full" fade={false}>
             {cameraState.capturedImages.map((image, index) => (
               <Carousel.Item key={index} className="relative h-full w-full">
                 <Image

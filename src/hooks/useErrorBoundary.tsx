@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect } from "react"
-import { useToast } from "./useToast"
 
 interface ErrorBoundaryContextType {
   handleError: (error: unknown) => void
@@ -11,20 +10,15 @@ interface ErrorBoundaryContextType {
 const ErrorBoundaryContext = createContext<ErrorBoundaryContextType | null>(null)
 
 export const ErrorBoundaryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { showError } = useToast()
-
-  const handleError = useCallback(
-    (error: unknown) => {
-      if (error instanceof Error) {
-        showError(error)
-      } else if (typeof error === "string") {
-        showError(new Error(error))
-      } else {
-        showError(new Error("An unexpected error occurred"))
-      }
-    },
-    [showError],
-  )
+  const handleError = useCallback((error: unknown) => {
+    if (error instanceof Error) {
+      // showError(error)
+    } else if (typeof error === "string") {
+      // showError(new Error(error))
+    } else {
+      // showError(new Error("An unexpected error occurred"))
+    }
+  }, [])
 
   const withErrorHandling = useCallback(
     <T extends (...args: any[]) => Promise<any>>(fn: T) => {

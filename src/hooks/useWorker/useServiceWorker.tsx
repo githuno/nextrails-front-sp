@@ -1,7 +1,6 @@
 "use client"
 
 import { useErrorBoundary } from "@/hooks/useErrorBoundary"
-import { useToast } from "@/hooks/useToast"
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { pubSub } from "./utils/pubsub"
 import {
@@ -68,7 +67,6 @@ export function ServiceWorkerProvider({
   options?: ServiceWorkerOptions
   autoPromptUpdates?: boolean
 }) {
-  const { showToast } = useToast()
   const { handleError } = useErrorBoundary()
 
   // serviceWorker.tsの現在の状態をReactステートに同期
@@ -77,16 +75,16 @@ export function ServiceWorkerProvider({
   // 更新プロンプトを表示する関数
   const showUpdatePrompt = useCallback(() => {
     if (state.registration?.waiting) {
-      showToast("アプリの新しいバージョンがインストールされました", {
-        type: "info",
-        duration: 10000,
-        action: {
-          label: "更新",
-          onClick: () => serviceWorker.skipWaiting(),
-        },
-      })
+      // showToast("アプリの新しいバージョンがインストールされました", {
+      //   type: "info",
+      //   duration: 10000,
+      //   action: {
+      //     label: "更新",
+      //     onClick: () => serviceWorker.skipWaiting(),
+      //   },
+      // })
     }
-  }, [state.registration, showToast])
+  }, [state.registration])
 
   // pubSubイベントの購読と状態更新
   useEffect(() => {
@@ -109,27 +107,27 @@ export function ServiceWorkerProvider({
     // 更新待機の通知
     const unsubscribeUpdateWaiting = pubSub.on("sw:update-waiting", ({ registration }) => {
       if (autoPromptUpdates) {
-        showToast("アプリの新しいバージョンがインストールされました", {
-          type: "info",
-          duration: 10000,
-          action: {
-            label: "更新",
-            onClick: () => serviceWorker.skipWaiting(),
-          },
-        })
+        // showToast("アプリの新しいバージョンがインストールされました", {
+        //   type: "info",
+        //   duration: 10000,
+        //   action: {
+        //     label: "更新",
+        //     onClick: () => serviceWorker.skipWaiting(),
+        //   },
+        // })
       }
     })
 
     // Service Workerメッセージ固有の処理
     const unsubscribeSWUpdated = pubSub.on("sw:SW_UPDATED", () => {
-      showToast("アプリケーションの新しいバージョンが利用可能です", {
-        type: "info",
-        duration: 10000,
-        action: {
-          label: "確認",
-          onClick: () => serviceWorker.checkForUpdates(),
-        },
-      })
+      // showToast("アプリケーションの新しいバージョンが利用可能です", {
+      //   type: "info",
+      //   duration: 10000,
+      //   action: {
+      //     label: "確認",
+      //     onClick: () => serviceWorker.checkForUpdates(),
+      //   },
+      // })
     })
 
     return () => {
@@ -138,7 +136,7 @@ export function ServiceWorkerProvider({
       unsubscribeUpdateWaiting()
       unsubscribeSWUpdated()
     }
-  }, [options, handleError, showToast, autoPromptUpdates])
+  }, [options, handleError, autoPromptUpdates])
 
   // コンテキスト値の作成
   const contextValue = {
@@ -173,8 +171,6 @@ export function useServiceWorker(): ServiceWorkerContextType {
   // Contextを試みる
   const context = useContext(ServiceWorkerContext)
   const isContextAvailable = Object.keys(context).length > 0
-
-  const { showToast } = useToast()
   const { handleError } = useErrorBoundary()
 
   // 現在のステート
@@ -183,16 +179,16 @@ export function useServiceWorker(): ServiceWorkerContextType {
   // Context以外のケース用の更新プロンプト
   const showDirectUpdatePrompt = useCallback(() => {
     if (directState.registration?.waiting) {
-      showToast("アプリの新しいバージョンがインストールされました", {
-        type: "info",
-        duration: 10000,
-        action: {
-          label: "更新",
-          onClick: () => serviceWorker.skipWaiting(),
-        },
-      })
+      // showToast("アプリの新しいバージョンがインストールされました", {
+      //   type: "info",
+      //   duration: 10000,
+      //   action: {
+      //     label: "更新",
+      //     onClick: () => serviceWorker.skipWaiting(),
+      //   },
+      // })
     }
-  }, [directState.registration, showToast])
+  }, [directState.registration])
 
   // Contextが利用できない場合は、直接serviceWorkerモジュールを使用
   useEffect(() => {
@@ -498,7 +494,6 @@ export function createServiceWorkerContext(name: string, defaultOptions: Service
     options?: ServiceWorkerOptions
     autoPromptUpdates?: boolean
   }) {
-    const { showToast } = useToast()
     const { handleError } = useErrorBoundary()
 
     // オプションをマージ
@@ -510,16 +505,16 @@ export function createServiceWorkerContext(name: string, defaultOptions: Service
     // 更新プロンプトを表示する関数
     const showUpdatePrompt = useCallback(() => {
       if (state.registration?.waiting) {
-        showToast(`${name}: アプリの新しいバージョンがインストールされました`, {
-          type: "info",
-          duration: 10000,
-          action: {
-            label: "更新",
-            onClick: () => serviceWorker.skipWaiting(),
-          },
-        })
+        // showToast(`${name}: アプリの新しいバージョンがインストールされました`, {
+        //   type: "info",
+        //   duration: 10000,
+        //   action: {
+        //     label: "更新",
+        //     onClick: () => serviceWorker.skipWaiting(),
+        //   },
+        // })
       }
-    }, [showToast, state.registration?.waiting])
+    }, [state.registration?.waiting])
 
     // pubSubイベントの購読と状態更新
     useEffect(() => {
@@ -546,14 +541,14 @@ export function createServiceWorkerContext(name: string, defaultOptions: Service
       // 更新待機の通知
       const unsubscribeUpdateWaiting = pubSub.on("sw:update-waiting", ({ registration }) => {
         if (autoPromptUpdates) {
-          showToast(`${name}: アプリの新しいバージョンがインストールされました`, {
-            type: "info",
-            duration: 10000,
-            action: {
-              label: "更新",
-              onClick: () => serviceWorker.skipWaiting(),
-            },
-          })
+          // showToast(`${name}: アプリの新しいバージョンがインストールされました`, {
+          //   type: "info",
+          //   duration: 10000,
+          //   action: {
+          //     label: "更新",
+          //     onClick: () => serviceWorker.skipWaiting(),
+          //   },
+          // })
         }
         // コンテキスト固有のイベントも発行
         pubSub.emit(`${eventPrefix}update-waiting` as any, { registration })
@@ -562,14 +557,14 @@ export function createServiceWorkerContext(name: string, defaultOptions: Service
       // Service Workerメッセージ固有の処理も拡張
       const unsubscribeSWUpdated = pubSub.on("sw:SW_UPDATED", (data) => {
         if (autoPromptUpdates) {
-          showToast(`${name}: アプリケーションの新しいバージョンが利用可能です`, {
-            type: "info",
-            duration: 10000,
-            action: {
-              label: "確認",
-              onClick: () => serviceWorker.checkForUpdates(),
-            },
-          })
+          // showToast(`${name}: アプリケーションの新しいバージョンが利用可能です`, {
+          //   type: "info",
+          //   duration: 10000,
+          //   action: {
+          //     label: "確認",
+          //     onClick: () => serviceWorker.checkForUpdates(),
+          //   },
+          // })
         }
         // コンテキスト固有のイベントも発行
         pubSub.emit(`${eventPrefix}SW_UPDATED` as any, data)
@@ -581,7 +576,7 @@ export function createServiceWorkerContext(name: string, defaultOptions: Service
         unsubscribeUpdateWaiting()
         unsubscribeSWUpdated()
       }
-    }, [mergedOptions, handleError, showToast, autoPromptUpdates])
+    }, [mergedOptions, handleError, autoPromptUpdates])
 
     // メッセージ送信ラッパー - コンテキスト名をメッセージに追加
     const sendContextMessage = useCallback(<T = any, R = any>(message: ServiceWorkerMessage<T>) => {
