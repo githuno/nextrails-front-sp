@@ -1,15 +1,25 @@
 import React, { ReactNode, useLayoutEffect, useRef, useState } from "react"
 
-const PrevIcon = () => (
-  <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-  </svg>
+const PrevIcon = ({ size = "h-4 w-4", color = "text-white" }: { size?: string; color?: string }) => (
+  <div className={`relative ${size}`}>
+    <span
+      className={`absolute top-1/2 left-1/2 h-0.5 w-2 ${color.replace("text-", "bg-")} origin-left -translate-x-1/2 -translate-y-1/2 rotate-45 transform`}
+    ></span>
+    <span
+      className={`absolute top-1/2 left-1/2 h-0.5 w-2 ${color.replace("text-", "bg-")} origin-left -translate-x-1/2 -translate-y-1/2 -rotate-45 transform`}
+    ></span>
+  </div>
 )
 
-const NextIcon = () => (
-  <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-  </svg>
+const NextIcon = ({ size = "h-4 w-4", color = "text-white" }: { size?: string; color?: string }) => (
+  <div className={`relative ${size}`}>
+    <span
+      className={`absolute top-1/2 left-1/2 h-0.5 w-2 ${color.replace("text-", "bg-")} origin-right -translate-x-1/2 -translate-y-1/2 -rotate-45 transform`}
+    ></span>
+    <span
+      className={`absolute top-1/2 left-1/2 h-0.5 w-2 ${color.replace("text-", "bg-")} origin-right -translate-x-1/2 -translate-y-1/2 rotate-45 transform`}
+    ></span>
+  </div>
 )
 
 interface CarouselProps {

@@ -10,19 +10,99 @@ interface IconProps {
   strokeWidth?: string
 }
 
-const LoadingSpinner: React.FC<IconProps> = ({ size = "36px", color = "#09f" }) => {
+const LoadingDot: React.FC<IconProps> = ({ size = "36px", color = "#09f" }) => {
+  const dotSize = `w-2 h-2`
+  const animationDelay = ["0s", "0.2s", "0.4s"]
   return (
-    <div className="spinner" style={{ width: size, height: size }}>
+    <div className="flex items-center justify-center space-x-1" style={{ width: size, height: size }}>
+      {animationDelay.map((delay, index) => (
+        <div
+          key={index}
+          className={`${dotSize} animate-pulse rounded-full`}
+          style={{ backgroundColor: color, animationDelay: delay, animationDuration: "1.5s" }}
+        ></div>
+      ))}
+    </div>
+  )
+}
+
+const LoadingSpinner: React.FC<IconProps & { dotSize?: string; mode?: "loading" | "sync"; isSpinning?: boolean }> = ({
+  size = "36px",
+  color = "#09f",
+  dotSize = "w-1 h-1",
+  mode = "loading",
+  isSpinning = true,
+}) => {
+  const angles = mode === "loading" ? [0, 45, 90, 135] : [0, 180]
+  const animationDelay = ["0s", "0.15s", "0.3s", "0.45s"]
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <div
+        className={`relative h-full w-full ${isSpinning ? (mode === "loading" ? "animate-spin-linear" : "animate-sync-orbit") : ""}`}
+      >
+        {angles.map((angle, index) => (
+          <div key={index} className="absolute inset-0" style={{ transform: `rotate(${angle}deg)` }}>
+            <div
+              className={`${dotSize} absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ${isSpinning ? (mode === "sync" ? "animate-sync-dot" : "animate-loading-dot") : ""}`}
+              style={{
+                backgroundColor: color,
+                animationDelay: animationDelay[index],
+                opacity: isSpinning ? 1 : 0.3,
+              }}
+            ></div>
+          </div>
+        ))}
+      </div>
       <style jsx>{`
-        .spinner {
-          border: 4px solid rgba(0, 0, 0, 0.1);
-          border-radius: 50%;
-          border-left-color: ${color};
+        .animate-spin-linear {
           animation: spin 1s linear infinite;
         }
+        .animate-sync-orbit {
+          animation: spin 3s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+        }
         @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
           to {
             transform: rotate(360deg);
+          }
+        }
+        .animate-loading-dot {
+          animation: loading-pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes loading-pulse {
+          0%,
+          100% {
+            transform: translate(-50%, -12px) scale(0.8);
+            opacity: 0.3;
+          }
+          50% {
+            transform: translate(-50%, -12px) scale(1.2);
+            opacity: 1;
+          }
+        }
+        .animate-sync-dot {
+          animation: sync-breath 3s ease-in-out infinite;
+        }
+        @keyframes sync-breath {
+          0%,
+          100% {
+            transform: translate(-50%, -8px) scale(0.7);
+            opacity: 0.5;
+          }
+          50% {
+            transform: translate(-50%, -16px) scale(1.3);
+            opacity: 1;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-spin-linear,
+          .animate-sync-orbit,
+          .animate-loading-dot,
+          .animate-sync-dot {
+            animation: none;
           }
         }
       `}</style>
@@ -30,26 +110,104 @@ const LoadingSpinner: React.FC<IconProps> = ({ size = "36px", color = "#09f" }) 
   )
 }
 
-const CloseIcon: React.FC<IconProps> = ({ size = "24px", color = "#000000" }) => {
+const CloseIcon = ({ size = "h-5 w-5", color = "bg-current" }: { size?: string; color?: string }) => {
+  const isPixelSize = size.includes("px")
+  const isHexColor = color.startsWith("#")
   return (
-    <svg
-      className="transition-transform hover:h-7 hover:w-7"
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ width: size, height: size }}
-    >
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M5.29289 5.29289C5.68342 4.90237 6.31658 4.90237 6.70711 5.29289L12 10.5858L17.2929 5.29289C17.6834 4.90237 18.3166 4.90237 18.7071 5.29289C19.0976 5.68342 19.0976 6.31658 18.7071 6.70711L13.4142 12L18.7071 17.2929C19.0976 17.6834 19.0976 18.3166 18.7071 18.7071C18.3166 19.0976 17.6834 19.0976 17.2929 18.7071L12 13.4142L6.70711 18.7071C6.31658 19.0976 5.68342 19.0976 5.29289 18.7071C4.90237 18.3166 4.90237 17.6834 5.29289 17.2929L10.5858 12L5.29289 6.70711C4.90237 6.31658 4.90237 5.68342 5.29289 5.29289Z"
-        fill={color}
-      />
-    </svg>
+    <div className={`relative ${isPixelSize ? "" : size}`} style={isPixelSize ? { width: size, height: size } : {}}>
+      <span
+        className={`absolute top-1/2 left-1/2 h-0.5 w-full -translate-x-1/2 -translate-y-1/2 rotate-45 transform ${isHexColor ? "" : color}`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+      <span
+        className={`absolute top-1/2 left-1/2 h-0.5 w-full -translate-x-1/2 -translate-y-1/2 -rotate-45 transform ${isHexColor ? "" : color}`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+    </div>
   )
 }
 
-const EditIcon: React.FC<IconProps> = ({ size = "16px", color = "#4B4B4B" }) => (
+const PrevIcon = ({ size = "h-4 w-4", color = "text-white" }: { size?: string; color?: string }) => {
+  const isPixelSize = size.includes("px")
+  const isHexColor = color.startsWith("#")
+  return (
+    <div className={`relative ${isPixelSize ? "" : size}`} style={isPixelSize ? { width: size, height: size } : {}}>
+      <span
+        className={`absolute top-1/2 left-1/2 h-0.5 w-2 ${isHexColor ? "" : color.replace("text-", "bg-")} origin-left -translate-x-1/2 -translate-y-1/2 rotate-45 transform`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+      <span
+        className={`absolute top-1/2 left-1/2 h-0.5 w-2 ${isHexColor ? "" : color.replace("text-", "bg-")} origin-left -translate-x-1/2 -translate-y-1/2 -rotate-45 transform`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+    </div>
+  )
+}
+
+const NextIcon = ({ size = "h-4 w-4", color = "text-white" }: { size?: string; color?: string }) => {
+  const isPixelSize = size.includes("px")
+  const isHexColor = color.startsWith("#")
+  return (
+    <div className={`relative ${isPixelSize ? "" : size}`} style={isPixelSize ? { width: size, height: size } : {}}>
+      <span
+        className={`absolute top-1/2 left-1/2 h-0.5 w-2 ${isHexColor ? "" : color.replace("text-", "bg-")} origin-right -translate-x-1/2 -translate-y-1/2 -rotate-45 transform`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+      <span
+        className={`absolute top-1/2 left-1/2 h-0.5 w-2 ${isHexColor ? "" : color.replace("text-", "bg-")} origin-right -translate-x-1/2 -translate-y-1/2 rotate-45 transform`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+    </div>
+  )
+}
+
+const MenuIcon = ({ size = "h-6 w-6", color = "bg-current" }: { size?: string; color?: string }) => {
+  const isPixelSize = size.includes("px")
+  const isHexColor = color.startsWith("#")
+  return (
+    <div
+      className={`flex flex-col items-center justify-center ${isPixelSize ? "" : size}`}
+      style={isPixelSize ? { width: size, height: size } : {}}
+    >
+      <span
+        className={`block h-0.5 w-4 ${isHexColor ? "" : color} mb-1`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+      <span
+        className={`block h-0.5 w-4 ${isHexColor ? "" : color} mb-1`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+      <span
+        className={`block h-0.5 w-4 ${isHexColor ? "" : color}`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></span>
+    </div>
+  )
+}
+
+const StopIcon = ({ size = "h-8 w-8", color = "bg-red-500" }: { size?: string; color?: string }) => {
+  const isPixelSize = size.includes("px")
+  const isHexColor = color.startsWith("#")
+  return (
+    <div className={`relative ${isPixelSize ? "" : size}`} style={isPixelSize ? { width: size, height: size } : {}}>
+      <div
+        className={`absolute inset-0 ${isHexColor ? "" : color} rounded-full`}
+        style={isHexColor ? { backgroundColor: color } : {}}
+      ></div>
+      <div className="absolute inset-2 rounded bg-white"></div>
+    </div>
+  )
+}
+
+const SyncIcon: React.FC<IconProps & { isSpinning?: boolean }> = ({
+  size = "32px",
+  color = "#4B4B4B",
+  isSpinning = true,
+}) => {
+  return <LoadingSpinner size={size} color={color} mode="sync" isSpinning={isSpinning} dotSize="w-1.5 h-1.5" />
+}
+
+const PenIcon: React.FC<IconProps> = ({ size = "16px", color = "#4B4B4B" }) => (
   <svg
     version="1.1"
     id="_x32_"
@@ -154,54 +312,6 @@ const RecordIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) =
   </svg>
 )
 
-const StopIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) => (
-  <svg
-    version="1.1"
-    id="_x32_"
-    xmlns="http://www.w3.org/2000/svg"
-    xmlnsXlink="http://www.w3.org/1999/xlink"
-    x="0px"
-    y="0px"
-    width="64px"
-    height="64px"
-    viewBox="0 0 512 512"
-    style={{ width: size, height: size, opacity: 1 }}
-    xmlSpace="preserve"
-  >
-    <style type="text/css">{`.st0{fill:${color};}`}</style>
-    <path
-      className="st0"
-      d="M256,0C114.625,0,0,114.625,0,256s114.625,256,256,256s256-114.625,256-256S397.375,0,256,0z M328,328H184V184
-      h144V328z"
-      style={{ fill: color }}
-    ></path>
-  </svg>
-)
-
-const MenuIcon: React.FC<IconProps> = ({ size = "24px", color = "#4B4B4B" }) => (
-  <svg
-    version="1.1"
-    id="_x32_"
-    xmlns="http://www.w3.org/2000/svg"
-    xmlnsXlink="http://www.w3.org/1999/xlink"
-    x="0px"
-    y="0px"
-    viewBox="0 0 512 512"
-    style={{ width: size, height: size, opacity: 1 }}
-    xmlSpace="preserve"
-  >
-    <style type="text/css">{`.st0{fill:${color};}`}</style>
-    <g>
-      <circle className="st0" cx="48" cy="64" r="48" style={{ fill: color }}></circle>
-      <rect x="160" y="16" className="st0" width="352" height="96" style={{ fill: color }}></rect>
-      <circle className="st0" cx="48" cy="256" r="48" style={{ fill: color }}></circle>
-      <rect x="160" y="208" className="st0" width="352" height="96" style={{ fill: color }}></rect>
-      <circle className="st0" cx="48" cy="448" r="48" style={{ fill: color }}></circle>
-      <rect x="160" y="400" className="st0" width="352" height="96" style={{ fill: color }}></rect>
-    </g>
-  </svg>
-)
-
 const PictureIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) => (
   <svg
     version="1.1"
@@ -229,46 +339,6 @@ const PictureIcon: React.FC<IconProps> = ({ size = "32px", color = "#4B4B4B" }) 
       <polygon
         className="st0"
         points="450.529,0 0,0 0,450.529 46.104,450.529 46.104,46.104 450.529,46.104"
-        style={{ fill: color }}
-      />
-    </g>
-  </svg>
-)
-
-const SyncIcon: React.FC<IconProps & { isSpinning?: boolean }> = ({
-  size = "32px",
-  color = "#4B4B4B",
-  isSpinning = true,
-}) => (
-  <svg
-    version="1.1"
-    id="_x32_"
-    xmlns="http://www.w3.org/2000/svg"
-    xmlnsXlink="http://www.w3.org/1999/xlink"
-    x="0px"
-    y="0px"
-    viewBox="0 0 512 512"
-    style={{
-      width: size,
-      height: size,
-      opacity: 1,
-      animationDirection: "reverse",
-    }}
-    className={isSpinning ? "animate-spin" : ""}
-    xmlSpace="preserve"
-  >
-    <style type="text/css">{`.st0{fill:${color};}`}</style>
-    <g>
-      <path
-        className="st0"
-        d="M219.147,181.496c16.249,0,189.803-21.675,241.023,70.898c-2.526-75.721-72.438-187.506-241.023-186.276V0
-        L51.83,126.804l167.318,126.784V181.496z"
-        style={{ fill: color }}
-      />
-      <path
-        className="st0"
-        d="M292.821,330.522c-16.226,0-189.812,21.62-240.991-70.906c2.499,75.73,72.425,187.47,240.991,186.265V512
-        L460.17,385.187L292.821,258.402V330.522z"
         style={{ fill: color }}
       />
     </g>
@@ -316,10 +386,13 @@ const SwitchCameraIcon: React.FC<IconProps> = ({ size = "24px", color = "#4B4B4B
 export {
   CameraIcon,
   CloseIcon,
-  EditIcon,
+  LoadingDot,
   LoadingSpinner,
   MenuIcon,
+  NextIcon,
+  PenIcon,
   PictureIcon,
+  PrevIcon,
   RecordIcon,
   StopIcon,
   SwitchCameraIcon,

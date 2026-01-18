@@ -110,7 +110,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
             {cameraState.error && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-zinc-950 px-8 text-center">
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20 text-red-500">
-                  <StopIcon size="32px" color="currentColor" />
+                  <StopIcon size="h-8 w-8" color="text-red-500" />
                 </div>
                 <h3 className="mb-2 text-lg font-bold text-white">Camera Error</h3>
                 <p className="mb-6 text-sm text-zinc-400">{cameraState.error.message}</p>
@@ -210,7 +210,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                   aria-label="Stop Recording"
                   className="hover:shadow-3xl flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 hover:ring-2 active:scale-95"
                 >
-                  <StopIcon size="32px" color="#ef4444" />
+                  <StopIcon size="h-8 w-8" color="bg-red-500" />
                 </button>
               ) : (
                 <button
@@ -259,7 +259,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                 aria-label="Open FileSet Library"
                 className="group flex h-8 items-center gap-2 rounded-full border border-white/5 bg-zinc-800/80 px-3 shadow-lg transition-all hover:bg-zinc-700 active:scale-95"
               >
-                <MenuIcon size="14px" color="#fff" />
+                <MenuIcon size="h-3.5 w-3.5" color="bg-white" />
                 <div className="flex flex-col items-start leading-none">
                   <span className="max-w-64 truncate text-[14px] font-bold text-zinc-100">{currentFileSet}</span>
                 </div>

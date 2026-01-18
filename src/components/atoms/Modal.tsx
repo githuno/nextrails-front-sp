@@ -2,20 +2,15 @@ import { FC, HTMLAttributes, ReactNode } from "react"
 
 // https://www.notion.so/UI-HTML-dialog-ICS-MEDIA-2a6565e97d7c812db74fe5a9ce73bc6a
 
-const CloseIcon = ({ size = "20px", color = "currentColor" }: { size?: string; color?: string }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke={color}
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="18" y1="6" x2="6" y2="18" />
-    <line x1="6" y1="6" x2="18" y2="18" />
-  </svg>
+const CloseIcon = ({ size = "h-5 w-5", color = "bg-current" }: { size?: string; color?: string }) => (
+  <div className={`relative ${size}`}>
+    <span
+      className={`absolute top-1/2 left-1/2 h-0.5 w-full -translate-x-1/2 -translate-y-1/2 rotate-45 transform ${color}`}
+    ></span>
+    <span
+      className={`absolute top-1/2 left-1/2 h-0.5 w-full -translate-x-1/2 -translate-y-1/2 -rotate-45 transform ${color}`}
+    ></span>
+  </div>
 )
 
 interface ModalProps extends HTMLAttributes<HTMLDialogElement> {
