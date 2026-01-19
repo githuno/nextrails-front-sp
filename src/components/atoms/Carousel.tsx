@@ -76,6 +76,7 @@ interface CarouselProps {
   gap?: string // アイテム間の隙間
   columnWidth?: string // アイテムの幅
   fade?: boolean // 両端のフェードアウトを有効にするか
+  circularButtons?: boolean // 循環スクロール時にボタンを端で非表示にするか
 }
 
 interface CarouselItemProps {
@@ -97,6 +98,7 @@ const CarouselRoot = ({
   gap = "1rem",
   columnWidth = "auto",
   fade = true,
+  circularButtons = true,
 }: CarouselProps) => {
   const rootRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -157,7 +159,23 @@ const CarouselRoot = ({
   const handleManualScroll = (direction: "left" | "right") => {
     const container = scrollRef.current
     if (!container) return
-    const step = container.clientWidth
+    const itemElements = Array.from(container.querySelectorAll("[data-carousel-item-wrapper]")) as HTMLElement[]
+    const itemWidth = itemElements[0]?.clientWidth || 0
+    const step = index !== null ? container.clientWidth : itemWidth || container.clientWidth
+    const currentScroll = container.scrollLeft
+    const currentIndex = Math.round(currentScroll / step)
+    const maxIndex = childItems.length - 1
+    // 左端（最初のアイテム）でprevボタンを押した場合、右端（最後のアイテム）へジャンプ
+    if (direction === "left" && currentIndex === 0) {
+      container.scrollTo({ left: maxIndex * step, behavior: "smooth" })
+      return
+    }
+    // 右端（最後のアイテム）でnextボタンを押した場合、左端（最初のアイテム）へジャンプ
+    if (direction === "right" && currentIndex === maxIndex) {
+      container.scrollTo({ left: 0, behavior: "smooth" })
+      return
+    }
+    // 通常のスクロール
     container.scrollBy({ left: direction === "left" ? -step : step, behavior: "smooth" })
   }
 
@@ -178,6 +196,7 @@ const CarouselRoot = ({
       ref={rootRef}
       className={`group relative flex w-full min-w-0 flex-col ${className}`}
       data-carousel-root
+      data-circular-buttons={circularButtons}
       style={marqueeVars}
     >
       <style>{`
@@ -230,6 +249,14 @@ const CarouselRoot = ({
           animation-range: entry 0% entry 20%;
         }
 
+        /* circularButtons=false の場合、ボタンを常に表示 */
+        [data-carousel-root][data-circular-buttons="false"] .carousel-prev-logic,
+        [data-carousel-root][data-circular-buttons="false"] .carousel-next-logic {
+          opacity: 1 !important;
+          pointer-events: auto !important;
+          animation: none !important;
+        }
+
         .carousel-mask {
           mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
         }
@@ -259,9 +286,7 @@ const CarouselRoot = ({
             {/* Sentinels: 端の検知用 */}
             {!marquee && (
               <div
-                style={
-                  { "view-timeline-name": "--start-sentinel", "view-timeline-axis": "inline" } as React.CSSProperties
-                }
+                style={{ viewTimelineName: "--start-sentinel", viewTimelineAxis: "inline" } as React.CSSProperties}
                 className="pointer-events-none h-full w-10 shrink-0 opacity-0"
               />
             )}
@@ -282,8 +307,8 @@ const CarouselRoot = ({
                   className={`relative flex-none snap-center snap-always ${index !== null ? "w-full" : "w-auto"} ${customClassName}`}
                   style={
                     {
-                      "view-timeline-name": !isDuplicate ? `--item-${idx}` : undefined,
-                      "view-timeline-axis": "inline",
+                      viewTimelineName: !isDuplicate ? `--item-${idx}` : undefined,
+                      viewTimelineAxis: "inline",
                     } as React.CSSProperties
                   }
                 >
@@ -297,8 +322,8 @@ const CarouselRoot = ({
               <div
                 style={
                   {
-                    "view-timeline-name": "--end-sentinel",
-                    "view-timeline-axis": "inline",
+                    viewTimelineName: "--end-sentinel",
+                    viewTimelineAxis: "inline",
                   } as React.CSSProperties
                 }
                 className="pointer-events-none h-full w-10 shrink-0 opacity-0"
@@ -317,9 +342,7 @@ const CarouselRoot = ({
                   e.stopPropagation()
                   handleManualScroll("left")
                 }}
-                className={`carousel-prev-logic pointer-events-auto rounded-full p-2 ${btnBgClass} active:scale-95 ${
-                  index === 0 ? "pointer-events-none! opacity-0!" : ""
-                }`}
+                className={`carousel-prev-logic pointer-events-auto cursor-pointer rounded-full p-2 ${btnBgClass} active:scale-95`}
               >
                 <PrevIcon />
               </button>
@@ -329,9 +352,7 @@ const CarouselRoot = ({
                   e.stopPropagation()
                   handleManualScroll("right")
                 }}
-                className={`carousel-next-logic pointer-events-auto rounded-full p-2 ${btnBgClass} active:scale-95 ${
-                  index !== null && index >= childItems.length - 1 ? "pointer-events-none! opacity-0!" : ""
-                }`}
+                className={`carousel-next-logic pointer-events-auto cursor-pointer rounded-full p-2 ${btnBgClass} active:scale-95`}
               >
                 <NextIcon />
               </button>
@@ -364,9 +385,9 @@ const CarouselRoot = ({
                 className="carousel-dot h-1.5 w-1.5 cursor-pointer rounded-full"
                 style={
                   {
-                    "animation-name": "dot-sync",
-                    "animation-fill-mode": "both",
-                    "animation-timeline": `--item-${idx}`,
+                    animationName: "dot-sync",
+                    animationFillMode: "both",
+                    animationTimeline: `--item-${idx}`,
                   } as React.CSSProperties
                 }
               />

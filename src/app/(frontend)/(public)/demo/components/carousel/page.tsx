@@ -1,7 +1,9 @@
 "use client"
 
 import { Carousel } from "@/components/atoms/Carousel"
-import React from "react"
+import { Modal } from "@/components/atoms/Modal"
+import Image from "next/image"
+import React, { useState } from "react"
 
 const DEMO_IMAGES = [
   "https://images.unsplash.com/photo-1510915228340-29c85a43dcfe?q=80&w=1200&auto=format&fit=crop",
@@ -30,6 +32,8 @@ const DemoSection = ({
 )
 
 export default function CarouselDemoPage() {
+  const [viewingIndex, setViewingIndex] = useState<number | null>(null)
+
   return (
     <div className="mx-auto max-w-5xl space-y-12 px-4 py-12">
       <header className="px-4">
@@ -37,18 +41,38 @@ export default function CarouselDemoPage() {
         <p className="mt-2 text-lg text-zinc-500">CSS View Timelines, Viewport Masks, and SVG Scaling integration.</p>
       </header>
 
-      {/* 1. Interactive Snapshot Mode (Default) */}
+      {/* 1. Interactive Snapshot Mode Variants */}
       <DemoSection
-        title="Interactive Snap Scroll"
-        description="Default interactive mode with view-timeline synced indicators and snap-mandatory behavior."
+        title="Interactive Snap Scroll Variants"
+        description="Compare default behavior (buttons hide at edges) vs always-visible buttons for circular navigation."
       >
-        <Carousel gap="1rem" className="h-100">
-          {DEMO_IMAGES.map((src, i) => (
-            <Carousel.Item key={i} className="h-full w-[80%] md:w-[60%]">
-              <img src={src} alt="" className="h-full w-full rounded-2xl object-cover shadow-xl" />
-            </Carousel.Item>
-          ))}
-        </Carousel>
+        <div className="space-y-6">
+          {/* Default behavior */}
+          <div>
+            <p className="mb-3 text-sm font-medium text-zinc-700">Default: Buttons hide at scroll edges</p>
+            <Carousel gap="1rem" className="h-60">
+              {DEMO_IMAGES.map((src, i) => (
+                <Carousel.Item key={i} className="h-full w-[80%] md:w-[60%]">
+                  <img src={src} alt="" className="h-full w-full rounded-2xl object-cover shadow-xl" />
+                </Carousel.Item>
+              ))}
+            </Carousel>
+          </div>
+
+          {/* Always visible buttons */}
+          <div>
+            <p className="mb-3 text-sm font-medium text-zinc-700">
+              Always Visible: Buttons stay visible for circular navigation
+            </p>
+            <Carousel gap="1rem" className="h-60" circularButtons={false}>
+              {DEMO_IMAGES.map((src, i) => (
+                <Carousel.Item key={i} className="h-full w-[80%] md:w-[60%]">
+                  <img src={src} alt="" className="h-full w-full rounded-2xl object-cover shadow-xl" />
+                </Carousel.Item>
+              ))}
+            </Carousel>
+          </div>
+        </div>
       </DemoSection>
 
       {/* 2. FitText Infinite Marquee */}
@@ -110,27 +134,86 @@ export default function CarouselDemoPage() {
       {/* 5. Custom Styling & Grid Control */}
       <DemoSection
         title="Custom Grid & Transitions"
-        description="Direct control over column widths and transition behavior via props."
+        description="Control grid alignment with containerClassName, adjust gaps with gap prop, and customize item styling for unique layouts."
       >
-        <Carousel containerClassName="items-end pb-4" gap="0.75rem">
-          {DEMO_IMAGES.map((src, i) => (
-            <Carousel.Item key={i} className="w-32">
-              <div className="group relative aspect-3/4 w-full overflow-hidden rounded-xl bg-zinc-200 shadow-xl ring-1 ring-black/5">
-                <img
-                  src={src}
-                  alt=""
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-                <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-              </div>
-            </Carousel.Item>
-          ))}
-        </Carousel>
+        <div className="space-y-4">
+          {/* Default grid */}
+          <div>
+            <p className="mb-2 text-sm text-zinc-600">Default: items-start, gap=1rem</p>
+            <Carousel gap="1rem" className="h-32">
+              {DEMO_IMAGES.slice(0, 3).map((src, i) => (
+                <Carousel.Item key={i} className="w-24">
+                  <img src={src} alt="" className="h-full w-full rounded-lg object-cover" />
+                </Carousel.Item>
+              ))}
+            </Carousel>
+          </div>
+
+          {/* Custom alignment and gap */}
+          <div>
+            <p className="mb-2 text-sm text-zinc-600">Custom: items-end, gap=0.75rem, hover effects</p>
+            <Carousel containerClassName="items-end pb-4" gap="0.75rem" className="h-32">
+              {DEMO_IMAGES.slice(0, 3).map((src, i) => (
+                <Carousel.Item key={i} className="w-24">
+                  <div className="group relative w-full overflow-hidden rounded-lg bg-zinc-200 shadow-sm">
+                    <img
+                      src={src}
+                      alt=""
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+                  </div>
+                </Carousel.Item>
+              ))}
+            </Carousel>
+          </div>
+        </div>
+      </DemoSection>
+
+      {/* 6. Modal Integration (ImageViewer Style) */}
+      <DemoSection
+        title="Modal Integration (ImageViewer Style)"
+        description="Modal component integration for full-screen image viewing, similar to camera gallery. Click thumbnails to open modal."
+      >
+        <div className="space-y-4">
+          {/* Gallery Thumbnails */}
+          <div className="grid grid-cols-5 gap-2">
+            {DEMO_IMAGES.map((src, i) => (
+              <button
+                key={i}
+                onClick={() => setViewingIndex(i)}
+                className="aspect-square overflow-hidden rounded-lg bg-zinc-200 shadow-sm ring-1 ring-black/5 transition-all hover:scale-105 hover:shadow-md active:scale-95"
+              >
+                <img src={src} alt={`Thumbnail ${i}`} className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
       </DemoSection>
 
       <footer className="border-t border-zinc-100 pt-20 pb-12 text-center">
         <p className="text-sm text-zinc-400">Built with React & Modern CSS Native Features.</p>
       </footer>
+
+      {/* ImageViewer Modal */}
+      <Modal isOpen={viewingIndex !== null} onClose={() => setViewingIndex(null)} className="h-[90vh] w-[90vw] p-0">
+        {viewingIndex !== null && (
+          <Carousel index={viewingIndex} className="h-full p-4" containerClassName="h-full" fade={false} gap="0">
+            {DEMO_IMAGES.map((image, index) => (
+              <Carousel.Item key={index} className="relative h-full w-full">
+                <Image
+                  src={image}
+                  alt={`View ${index}`}
+                  fill
+                  unoptimized
+                  className="object-contain drop-shadow-2xl"
+                  priority={index === viewingIndex}
+                />
+              </Carousel.Item>
+            ))}
+          </Carousel>
+        )}
+      </Modal>
     </div>
   )
 }
