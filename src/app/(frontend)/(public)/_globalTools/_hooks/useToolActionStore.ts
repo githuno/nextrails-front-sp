@@ -193,9 +193,13 @@ async function syncData() {
         .where(and(eq(capturedFiles.sessionId, sessionID), eq(capturedFiles.fileSet, state.currentFileSet)))
         .orderBy(desc(capturedFiles.createdAt))
 
-      // 3. プレビューURLの生成と状態更新
+      // 3. プレビューURLの生成と状態更新（既存URLを再利用してパフォーマンス向上）
       const newFiles: ToolFile[] = await Promise.all(
         records.map(async (r) => {
+          const existingFile = state.files.find((f) => f.idbKey === r.idbKey)
+          if (existingFile?.url) {
+            return { ...r, url: existingFile.url } as ToolFile
+          }
           const blob = await idb.get(r.idbKey)
           const url = blob ? URL.createObjectURL(blob) : null
           return { ...r, url } as ToolFile
@@ -296,55 +300,69 @@ export const actions: ToolActions = {
     try {
       await idb.put(idbKey, file)
 
+      // 共通の最適化UI更新: まずはpending状態で追加
+      const tempUrl = URL.createObjectURL(file)
+      const tempFile: ToolFile = {
+        id: idbKey, // 一時的なIDとしてidbKeyを使用
+        sessionId: getSessionState()?.currentId || "default",
+        fileName: options?.fileName || `captured_${Date.now()}`,
+        mimeType: file.type,
+        size: file.size,
+        idbKey,
+        createdAt: new Date(),
+        url: tempUrl,
+        isPending: true,
+      }
+      state = {
+        ...state,
+        files: [tempFile, ...state.files],
+      }
+      notify()
+      updateCameraStoreImages()
+
       if (state.isDbReady) {
-        // PGliteがreadyなら通常通り
-        const db = await getDb()
-        const sessionID = getSessionState()?.currentId || "default"
-        const fileName = options?.fileName || `captured_${Date.now()}`
-        const [inserted] = await db
-          .insert(capturedFiles)
-          .values({
-            sessionId: sessionID,
-            fileSet: state.currentFileSet,
-            fileName,
-            mimeType: file.type,
-            size: file.size,
-            idbKey,
-          })
-          .returning()
+        // PGliteがreadyなら非同期でDB保存
+        const saveToDb = async () => {
+          try {
+            const db = await getDb()
+            const sessionID = getSessionState()?.currentId || "default"
+            const fileName = options?.fileName || `captured_${Date.now()}`
+            const [inserted] = await db
+              .insert(capturedFiles)
+              .values({
+                sessionId: sessionID,
+                fileSet: state.currentFileSet,
+                fileName,
+                mimeType: file.type,
+                size: file.size,
+                idbKey,
+              })
+              .returning()
 
-        // 状態を再同期（または部分更新）
-        await syncData()
+            // 状態を再同期（これにより pending が正規データに置き換わる）
+            await syncData()
+            return inserted
+          } catch (e) {
+            console.error("[ToolActionStore] Async save failed:", e)
+            // エラー時はpendingから削除されるよう再読み込み
+            await syncData()
+            throw e
+          }
+        }
 
+        void saveToDb() // バックグラウンドでDB保存を開始（待機しない）
         const result: SavedFileResult = {
-          id: inserted.id,
-          idbKey: inserted.idbKey,
+          id: idbKey, // 即座に返す
+          idbKey,
         }
         return result
       } else {
-        // バッファに追加
-        // 即座にUIに反映させるための一時的なエントリを作成
-        const tempUrl = URL.createObjectURL(file)
-        const tempFile: ToolFile = {
-          id: idbKey, // 一時的なIDとしてidbKeyを使用
-          sessionId: getSessionState()?.currentId || "default",
-          fileName: options?.fileName || `captured_${Date.now()}`,
-          mimeType: file.type,
-          size: file.size,
-          idbKey: idbKey,
-          createdAt: new Date(),
-          url: tempUrl,
-          isPending: true,
-        }
-
+        // バッファに追加（すでに追加済みの tempFile はそのまま活かす）
         state = {
           ...state,
-          // すでに同じidbKeyが存在しないことを確認して追加(念のため)
-          files: [tempFile, ...state.files.filter((f) => f.idbKey !== idbKey)],
           syncStatus: "buffering",
         }
         notify()
-        updateCameraStoreImages() // バッファ追加時もカメラストアを更新
 
         return new Promise<SavedFileResult>((resolve, reject) => {
           state.pendingSaves.push({
@@ -367,15 +385,25 @@ export const actions: ToolActions = {
    * ファイルを削除する
    */
   deleteFile: async (idbKey: string, dbId: string): Promise<void> => {
+    // 最適化UI更新: 即座に一覧から消す
+    state = {
+      ...state,
+      files: state.files.filter((f) => f.idbKey !== idbKey),
+    }
+    notify()
+    updateCameraStoreImages()
+
     const db = await getDb()
     const idb = idbStore()
     try {
-      if (dbId) {
+      if (dbId && dbId !== idbKey) {
         await db.delete(capturedFiles).where(eq(capturedFiles.id, dbId))
       }
       await idb.remove(idbKey)
       await syncData()
     } catch (error) {
+      console.error("[ToolActionStore] Delete failed:", error)
+      await syncData() // 復旧のために再読み込み
       throw new Error("Failed to delete file", { cause: error })
     }
   },

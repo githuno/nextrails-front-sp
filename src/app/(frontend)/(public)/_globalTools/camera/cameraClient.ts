@@ -232,55 +232,64 @@ const createCameraClient = (config: CameraConfig = {}) => {
     deviceOrientation: number, // デバイスの物理的な向き 0, 90, 180, 270
     onComplete: (url: string | null, blob: Blob | null) => void,
   ): Promise<void> => {
-    const context = canvasElement.getContext("2d")
+    const context = canvasElement.getContext("2d", { alpha: false })
     if (!context) {
       onComplete(null, null)
       return
     }
-    // フレーム固定ロジック
+
+    // 1. フレーム固定（pauseのみ。currentTimeの設定は重いので避ける）
     videoElement.pause()
-    const currentTime = videoElement.currentTime
-    videoElement.currentTime = currentTime
     const vw = videoElement.videoWidth
     const vh = videoElement.videoHeight
-    // 回転を考慮したキャンバスサイズの設定
+
+    // 2. キャンバスサイズ設定（必要時のみ変更してメモリ再確保を抑制したいが、現状は毎回設定）
     const isLandscape = deviceOrientation === 90 || deviceOrientation === 270
-    if (isLandscape) {
-      canvasElement.width = vh
-      canvasElement.height = vw
-    } else {
-      canvasElement.width = vw
-      canvasElement.height = vh
+    const targetWidth = isLandscape ? vh : vw
+    const targetHeight = isLandscape ? vw : vh
+
+    if (canvasElement.width !== targetWidth || canvasElement.height !== targetHeight) {
+      canvasElement.width = targetWidth
+      canvasElement.height = targetHeight
     }
-    context.save()
-    // 中心に移動して回転
-    context.translate(canvasElement.width / 2, canvasElement.height / 2)
-    context.rotate((deviceOrientation * Math.PI) / 180)
-    // 描画 (中心をずらして描画)
-    context.drawImage(videoElement, -vw / 2, -vh / 2, vw, vh)
-    context.restore()
 
-    // PNG形式のBlobとして取得 (メモリ効率のためDataURLは避ける)
-    return new Promise((resolve) => {
-      canvasElement.toBlob(
-        async (blob) => {
-          // 少し待ってから再生再開（視覚的なフィードバックのため）
-          setTimeout(() => {
-            videoElement.play().catch(() => {})
-          }, 100)
+    // 3. 描画処理
+    const draw = () => {
+      context.save()
+      context.translate(canvasElement.width / 2, canvasElement.height / 2)
+      context.rotate((deviceOrientation * Math.PI) / 180)
+      context.drawImage(videoElement, -vw / 2, -vh / 2, vw, vh)
+      context.restore()
 
-          if (blob) {
-            const url = URL.createObjectURL(blob)
-            await onComplete(url, blob)
-          } else {
-            await onComplete(null, null)
-          }
-          resolve()
-        },
-        "image/png",
-        0.9,
-      )
-    })
+      // 描画が終わったら即座に再生を再開（ユーザーへのフィードバックを最優先）
+      videoElement.play().catch(() => {})
+    }
+    draw()
+
+    // 4. 即座にプレビューURLを通知（UIのトレイに表示するため）
+    const previewUrl = canvasElement.toDataURL("image/jpeg", 0.6)
+    onComplete(previewUrl, null)
+
+    // 5. Blob生成（非同期）。
+    // キャンバスの安全な解放を待つため、Promiseはこの完了を待機する。
+    // コンポーネント側でシャッターを早く開けたい場合は、このPromiseをawaitせずにisCapturingを更新すればよい。
+    const processBlob = async () => {
+      return new Promise<void>((resolve) => {
+        canvasElement.toBlob(
+          (blob) => {
+            if (blob) {
+              const url = URL.createObjectURL(blob)
+              onComplete(url, blob) // 2回目の通知（本当のURLとBlob）
+            }
+            resolve()
+          },
+          "image/jpeg",
+          0.85,
+        )
+      })
+    }
+
+    return processBlob()
   }
 
   const startRecord = (stream: MediaStream, onDataAvailable: (blob: Blob) => void): MediaRecorder => {

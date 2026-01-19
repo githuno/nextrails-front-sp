@@ -269,7 +269,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
             {cameraState.capturedImages.length > 0 ? (
               <Carousel containerClassName="gap-x-3 h-16">
                 {cameraState.capturedImages.map((image, index) => (
-                  <Carousel.Item key={index} className="group">
+                  <Carousel.Item key={image.idbKey || image.url} className="group">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()

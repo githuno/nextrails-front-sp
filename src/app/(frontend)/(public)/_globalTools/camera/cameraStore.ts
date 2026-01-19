@@ -279,46 +279,64 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
     onComplete?.(null)
     return
   }
+
+  // 撮影中はスキャンを停止してキャンバスの競合を防ぐ
+  const wasScanning = state.isScanning
+  if (wasScanning) stopQrScan()
+
   const client = getCameraClient()
   state.isCapturing = true
   notify()
-  // 撮影処理と最低表示時間を並行して待機
+
+  // シャッターを素早く開けるためのタイマー (50-80msが適切)
+  const shutterTimer = setTimeout(() => {
+    state.isCapturing = false
+    notify()
+  }, 80)
+
+  let previewUrl: string | null = null
+
   const capturePromise = client.capture(
     state.videoElement,
     state.canvasElement,
     state.deviceOrientation,
     async (url, blob) => {
-      if (url && blob) {
-        let savedInfo: CapturedImage = { url, idbKey: undefined, dbId: undefined }
-        // 外部アクション（永続化）があれば実行
-        if (state.externalActions.saveCapturedFile) {
-          try {
-            const result = await state.externalActions.saveCapturedFile(blob)
-            if (result) {
-              savedInfo = {
-                url,
-                idbKey: result.idbKey,
-                dbId: result.id,
-              }
-            }
-          } catch (e) {
-            console.error("Failed to persist captured image:", e)
-          }
-          // Note: ここでstate.capturedImagesを直接更新しない!
-          // actions.saveCapturedFile(blob)の内部でsyncData()が呼ばれ、
-          // cameraActions.setCapturedImages経由で最新リストが流れてくる。
-        } else {
-          // 外部アクションがない場合、フォールバックとしてオンメモリ保存
-          state.capturedImages = [savedInfo, ...state.capturedImages]
-          notify()
-        }
+      if (!url) {
+        onComplete?.(null)
+        return
+      }
+
+      // 1. プレビュー通知（blob=null）の場合
+      if (!blob) {
+        previewUrl = url
+        const optimisticImage: CapturedImage = { url, isPending: true }
+        state.capturedImages = [optimisticImage, ...state.capturedImages]
+        notify()
+        return
+      }
+
+      // 2. 本番通知（blobあり）の場合
+      // 先程追加したプレビュー（DataURL）があれば差し替える
+      state.capturedImages = state.capturedImages.map((img) =>
+        img.url === previewUrl ? { ...img, url, isPending: true } : img,
+      )
+      notify()
+
+      if (state.externalActions.saveCapturedFile) {
+        state.externalActions.saveCapturedFile(blob).catch((e) => {
+          console.error("Failed to persist captured image:", e)
+        })
       }
       onComplete?.(url)
     },
   )
-  const delayPromise = new Promise((resolve) => setTimeout(resolve, 200)) // 最低200msはシャッター状態を維持
-  await Promise.all([capturePromise, delayPromise])
-  state.isCapturing = false
+
+  // キャンバスが解放されるのを待ってからスキャンを再開
+  await capturePromise
+  clearTimeout(shutterTimer)
+  state.isCapturing = false // 念のため
+
+  if (wasScanning) startQrScan()
   notify()
 }
 
@@ -357,22 +375,18 @@ const removeCapturedImage = async (index: number): Promise<void> => {
   const target = state.capturedImages[index]
   if (!target) return
 
-  // 永続化されている場合は削除アクションを実行
+  // 最適化UI更新: 即座に一覧から削除
+  state.capturedImages = state.capturedImages.filter((_, i) => i !== index)
+  notify()
+
+  // 永続化されている場合は非同期で削除アクションを実行
   if (target.idbKey && target.dbId && state.externalActions.deleteFile) {
-    try {
-      await state.externalActions.deleteFile(target.idbKey, target.dbId)
-      // ToolActionStore側でsyncData()が走り、setCapturedImages経由で状態が更新されるため
-      // ここで手動でstate.capturedImagesを操作しない
-    } catch (e) {
+    state.externalActions.deleteFile(target.idbKey, target.dbId).catch((e) => {
       console.error("Failed to delete persisted file:", e)
-    }
-  } else {
-    // 永続化されていない(インメモリのみの)場合は手動削除
-    if (target.url.startsWith("blob:")) {
-      URL.revokeObjectURL(target.url)
-    }
-    state.capturedImages = state.capturedImages.filter((_, i) => i !== index)
-    notify()
+    })
+  } else if (target.url.startsWith("blob:")) {
+    // 永続化されていない(インメモリのみの)場合はURLを解放
+    URL.revokeObjectURL(target.url)
   }
 }
 
@@ -389,25 +403,17 @@ const setCapturedImages = (images: CapturedImage[]): void => {
 
 const addCapturedFile = async (file: Blob | File): Promise<void> => {
   const url = URL.createObjectURL(file)
-  let savedInfo: CapturedImage = { url, idbKey: undefined, dbId: undefined }
+
+  // 最適化UI更新
+  const optimisticImage: CapturedImage = { url, isPending: true }
+  state.capturedImages = [optimisticImage, ...state.capturedImages]
+  notify()
 
   if (state.externalActions.saveCapturedFile) {
-    try {
-      const result = await state.externalActions.saveCapturedFile(file)
-      if (result) {
-        savedInfo = {
-          url,
-          idbKey: result.idbKey,
-          dbId: result.id,
-        }
-      }
-    } catch (e) {
+    state.externalActions.saveCapturedFile(file).catch((e) => {
       console.error("Failed to persist added file:", e)
-    }
+    })
   }
-
-  state.capturedImages = [savedInfo, ...state.capturedImages]
-  notify()
 }
 
 const startOrientationTracking = (): void => {
