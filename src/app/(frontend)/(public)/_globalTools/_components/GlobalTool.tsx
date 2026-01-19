@@ -88,7 +88,7 @@ const ToolShowcase = ({ children, className, ...props }: React.HTMLAttributes<HT
   }
   return (
     <div
-      className={`fixed top-0 left-0 w-full border-white/10 bg-zinc-900/30 p-2 shadow-xl backdrop-blur-xs transition-all duration-300 ease-in-out ${
+      className={`fixed top-0 left-0 w-full border-white/10 bg-zinc-900/30 p-1 shadow-xl backdrop-blur-xs transition-all duration-300 ease-in-out ${
         isMaximized ? "h-8 cursor-pointer overflow-hidden" : "h-auto"
       } ${className || ""}`}
       onClick={handleBackgroundClick}

@@ -257,7 +257,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                   setIsLibraryOpen(true)
                 }}
                 aria-label="Open FileSet Library"
-                className="group flex h-8 items-center gap-2 rounded-full border border-white/5 bg-zinc-800/80 px-3 shadow-lg transition-all hover:bg-zinc-700 active:scale-95"
+                className="group flex h-6 items-center gap-2 rounded-full border border-white/5 bg-zinc-800/80 px-3 shadow-lg transition-all hover:bg-zinc-700 active:scale-95"
               >
                 <MenuIcon size="h-3.5 w-3.5" color="bg-white" />
                 <div className="flex flex-col items-start leading-none">
@@ -323,7 +323,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
       {/* ImageViewer using Modal and Carousel */}
       <Modal isOpen={viewingIndex !== null} onClose={() => setViewingIndex(null)} className="h-[90vh] w-[90vw] p-0">
         {viewingIndex !== null && (
-          <Carousel index={viewingIndex} className="h-full p-4" containerClassName="h-full" fade={false}>
+          <Carousel index={viewingIndex} className="h-full p-4" containerClassName="h-full" fade={false} gap="0">
             {cameraState.capturedImages.map((image, index) => (
               <Carousel.Item key={index} className="relative h-full w-full">
                 <Image

@@ -70,7 +70,6 @@ interface CarouselProps {
   index?: number | null
   className?: string
   containerClassName?: string
-  //洗練されたプロダクトのための新プロパティ
   marquee?: boolean // 自動無限ループモード
   marqueeSpeed?: number // 一周の秒数
   marqueeDirection?: "ltr" | "rtl"
@@ -103,30 +102,14 @@ const CarouselRoot = ({
   const scrollRef = useRef<HTMLDivElement>(null)
   const isInitializedRef = useRef(false)
   const [opacity, setOpacity] = useState(0)
-  const childItems = React.Children.toArray(children)
+  const childItems = useMemo(() => React.Children.toArray(children), [children])
 
-  // スクロール状態の監視（JS Stateを使わず、DOM属性値で制御）
-  useLayoutEffect(() => {
-    if (marquee) return
-    const el = scrollRef.current
-    const root = rootRef.current
-    if (!el || !root) return
-
-    const update = () => {
-      root.dataset.canScrollLeft = String(el.scrollLeft > 5)
-      root.dataset.canScrollRight = String(el.scrollLeft < el.scrollWidth - el.clientWidth - 5)
-    }
-
-    el.addEventListener("scroll", update, { passive: true })
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-
-    update()
-    return () => {
-      el.removeEventListener("scroll", update)
-      observer.disconnect()
-    }
-  }, [childItems.length, marquee])
+  // ドット用と端検知用の全てのタイムライン名を結合
+  // CSS仕様（[ <dashed-ident> ]#）に従い、カンマ区切りで指定します。
+  const timelines = useMemo(
+    () => [...childItems.map((_, i) => `--item-${i}`), "--start-sentinel", "--end-sentinel"].join(", "),
+    [childItems],
+  )
 
   // マーキーモード用のアイテム複製
   const items = useMemo(() => {
@@ -136,6 +119,9 @@ const CarouselRoot = ({
 
   // 初期ジャンプと index 変更の追跡（ここだけはJavaScript制御）
   useLayoutEffect(() => {
+    if (rootRef.current) {
+      rootRef.current.style.setProperty("timeline-scope", timelines)
+    }
     if (marquee) {
       requestAnimationFrame(() => setOpacity(1))
       return
@@ -166,7 +152,7 @@ const CarouselRoot = ({
       }
     }
     performJump()
-  }, [index, childItems.length, marquee])
+  }, [index, childItems.length, marquee, timelines])
 
   const handleManualScroll = (direction: "left" | "right") => {
     const container = scrollRef.current
@@ -174,8 +160,6 @@ const CarouselRoot = ({
     const step = container.clientWidth
     container.scrollBy({ left: direction === "left" ? -step : step, behavior: "smooth" })
   }
-
-  const timelines = childItems.map((_, i) => `--item-${i}`).join(", ")
 
   // マーキーのアニメーション幅計算用の CSS Custom Properties
   const marqueeVars = {
@@ -192,43 +176,58 @@ const CarouselRoot = ({
   return (
     <div
       ref={rootRef}
-      className={`group relative flex w-full min-w-0 flex-col overflow-hidden ${className}`}
-      style={{ ...marqueeVars, timelineScope: timelines } as React.CSSProperties}
+      className={`group relative flex w-full min-w-0 flex-col ${className}`}
+      data-carousel-root
+      style={marqueeVars}
     >
       <style>{`
         @keyframes dot-sync {
           0.1%, 99.9% { 
-            opacity: 1; 
-            transform: scale(1.1); 
-            background-color: white; 
-            box-shadow: 0 0 4px white;
+            opacity: 1; transform: scale(1.1); background-color: white; box-shadow: 0 0 4px white;
           }
         }
-        @keyframes carousel-marquee-rtl {
-          to { translate: calc(var(--_scroller-calculated-width) * -1) 0; }
+        
+        /* ボタンを表示する基本アニメーション */
+        @keyframes btn-show {
+          0% { opacity: 0; pointer-events: none; transform: translateX(-10px); }
+          100% { opacity: 1; pointer-events: auto; transform: translateX(0); }
         }
+        @keyframes btn-hide {
+          0% { opacity: 1; pointer-events: auto; transform: translateX(0); }
+          100% { opacity: 0; pointer-events: none; transform: translateX(10px); }
+        }
+
+        @keyframes carousel-marquee-rtl { to { translate: calc(var(--_scroller-calculated-width) * -1) 0; } }
         @keyframes carousel-marquee-ltr {
           from { translate: calc(var(--_scroller-calculated-width) * -1) 0; }
           to { translate: 0 0; }
         }
+
         .carousel-dot {
-          opacity: 0.6;
-          background-color: rgba(255, 255, 255, 0.6);
-          transform: scale(1);
+          opacity: 0.6; background-color: rgba(255, 255, 255, 0.4);
           transition: opacity 0.2s, transform 0.2s;
         }
-        .carousel-prev-btn, .carousel-next-btn {
-          opacity: 0; pointer-events: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+        /* スクロール位置に基づく表示制御 */
+        .carousel-ui-wrapper {
+          opacity: 0; transition: opacity 0.3s ease;
         }
-        .carousel-prev-btn { transform: translateX(-10px); }
-        .carousel-next-btn { transform: translateX(10px); }
+        .group:hover .carousel-ui-wrapper { opacity: 1; }
+        [data-carousel-root][data-test-visible] .carousel-ui-wrapper { opacity: 1; }
         
-        /* JS Stateを使わず属性値でボタンを制御 */
-        [data-can-scroll-left="true"].group:hover .carousel-prev-btn {
-          opacity: 1; pointer-events: auto; transform: translateX(0);
+        .carousel-prev-logic {
+          opacity: 0;
+          pointer-events: none;
+          animation: btn-show 1s linear both;
+          animation-timeline: --start-sentinel;
+          animation-range: exit 0% exit 20%;
         }
-        [data-can-scroll-right="true"].group:hover .carousel-next-btn {
-          opacity: 1; pointer-events: auto; transform: translateX(0);
+        .carousel-next-logic {
+          opacity: 1;
+          pointer-events: auto;
+          animation: btn-hide 1s linear both;
+          animation-timeline: --end-sentinel;
+          animation-range: entry 0% entry 20%;
         }
 
         .carousel-mask {
@@ -242,49 +241,49 @@ const CarouselRoot = ({
           column-gap: var(--_column-gap);
           animation: var(--_animation-name) var(--_duration) linear infinite;
         }
-
-        @media (prefers-reduced-motion: reduce) {
-          .marquee-scroller {
-            animation: none;
-            overflow-x: auto;
-          }
-        }
       `}</style>
 
-      {/* 
-          Image / Content Area Wrapper 
-          Buttons are absolute within this area to avoid dots.
-      */}
+      {/* メイン・コンテンツエリア（可変） */}
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
+          data-carousel-scroll
           className={`scrollbar-hide grid h-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden ${marquee ? "snap-none overflow-hidden" : ""} ${fade ? "carousel-mask" : ""}`}
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" } as React.CSSProperties}
         >
-          {/* Layer 1: Items */}
+          {/* Layer 1: Items & Sentinels */}
           <div
-            className={`col-start-1 row-start-1 flex min-h-full ${index === null ? "w-fit justify-center-safe justify-self-center" : "w-full"} ${containerClassName} transition-opacity duration-300 ${marquee ? "marquee-scroller" : ""}`}
-            style={{ opacity, gap: marquee || index !== null ? undefined : gap } as React.CSSProperties}
+            className={`relative col-start-1 row-start-1 flex min-h-full ${marquee ? "marquee-scroller w-fit" : index === null ? "w-fit justify-self-center" : "w-full justify-start"} ${containerClassName} transition-opacity duration-300`}
+            style={{ opacity, gap: marquee ? undefined : gap } as React.CSSProperties}
           >
+            {/* Sentinels: 端の検知用 */}
+            {!marquee && (
+              <div
+                style={
+                  { "view-timeline-name": "--start-sentinel", "view-timeline-axis": "inline" } as React.CSSProperties
+                }
+                className="pointer-events-none h-full w-10 shrink-0 opacity-0"
+              />
+            )}
+
             {items.map((child, idx) => {
               if (!child || !React.isValidElement(child)) return null
-
-              const isCarouselItem = (child.type as React.ComponentType).displayName === "CarouselItem"
+              const isCarouselItem =
+                (child.type as React.ComponentType & { displayName?: string }).displayName === "CarouselItem"
               const itemProps = isCarouselItem ? (child.props as CarouselItemProps) : null
               const customClassName = itemProps?.className ?? ""
               const content = itemProps ? itemProps.children : child
               const isDuplicate = idx >= childItems.length
-
               return (
                 <div
                   key={idx}
                   data-carousel-item-wrapper
                   aria-hidden={isDuplicate ? "true" : undefined}
-                  className={`relative flex-none snap-start snap-always ${index !== null ? "w-full" : "w-auto"} ${customClassName}`}
+                  className={`relative flex-none snap-center snap-always ${index !== null ? "w-full" : "w-auto"} ${customClassName}`}
                   style={
                     {
-                      viewTimelineName: !isDuplicate ? `--item-${idx}` : undefined,
-                      viewTimelineAxis: "inline",
+                      "view-timeline-name": !isDuplicate ? `--item-${idx}` : undefined,
+                      "view-timeline-axis": "inline",
                     } as React.CSSProperties
                   }
                 >
@@ -292,31 +291,47 @@ const CarouselRoot = ({
                 </div>
               )
             })}
+
+            {/* 末尾の番兵：コンテンツの最後の検知用 */}
+            {!marquee && (
+              <div
+                style={
+                  {
+                    "view-timeline-name": "--end-sentinel",
+                    "view-timeline-axis": "inline",
+                  } as React.CSSProperties
+                }
+                className="pointer-events-none h-full w-10 shrink-0 opacity-0"
+              />
+            )}
           </div>
         </div>
 
-        {/* Layer 2: UI Buttons Scoped to Scroll Area */}
+        {/* Layer 2: UI Buttons - マスクの外側 */}
         {!marquee && (
-          <div className="pointer-events-none absolute inset-0 z-30 flex items-center">
-            <div className="pl-2">
+          <div className="pointer-events-none absolute inset-0 flex items-center">
+            <div className="carousel-ui-wrapper flex w-full justify-between px-2">
               <button
+                data-carousel-prev
                 onClick={(e) => {
                   e.stopPropagation()
                   handleManualScroll("left")
                 }}
-                className={`carousel-prev-btn rounded-full p-2 ${btnBgClass} active:scale-90`}
+                className={`carousel-prev-logic pointer-events-auto rounded-full p-2 ${btnBgClass} active:scale-95 ${
+                  index === 0 ? "pointer-events-none! opacity-0!" : ""
+                }`}
               >
                 <PrevIcon />
               </button>
-            </div>
-
-            <div className="ml-auto pr-2">
               <button
+                data-carousel-next
                 onClick={(e) => {
                   e.stopPropagation()
                   handleManualScroll("right")
                 }}
-                className={`carousel-next-btn rounded-full p-2 ${btnBgClass} active:scale-90`}
+                className={`carousel-next-logic pointer-events-auto rounded-full p-2 ${btnBgClass} active:scale-95 ${
+                  index !== null && index >= childItems.length - 1 ? "pointer-events-none! opacity-0!" : ""
+                }`}
               >
                 <NextIcon />
               </button>
@@ -325,11 +340,11 @@ const CarouselRoot = ({
         )}
       </div>
 
-      {/* Layer 3: Counter Section (Flow below the image area) */}
+      {/* Layer 3: Dots (スクローラーの外、下部に固定配置) */}
       {!marquee && childItems.length > 1 && (
-        <div className="flex justify-center py-1">
+        <div className="relative flex justify-center py-0.5">
           <div
-            className={`flex items-center space-x-1 rounded-full px-3 py-1 blur-[0.3px] backdrop-blur-sm transition-colors ${fade ? "bg-black/70" : "bg-black/30"}`}
+            className={`flex items-center space-x-1.5 rounded-full px-3 py-1 blur-[0.3px] backdrop-blur-sm transition-colors ${fade ? "bg-black/70" : "bg-black/30"}`}
           >
             {childItems.map((_, idx) => (
               <div
@@ -349,10 +364,9 @@ const CarouselRoot = ({
                 className="carousel-dot h-1.5 w-1.5 cursor-pointer rounded-full"
                 style={
                   {
-                    animationName: "dot-sync",
-                    animationFillMode: "both",
-                    animationTimeline: `--item-${idx}`,
-                    viewTimelineAxis: "inline",
+                    "animation-name": "dot-sync",
+                    "animation-fill-mode": "both",
+                    "animation-timeline": `--item-${idx}`,
                   } as React.CSSProperties
                 }
               />
