@@ -380,18 +380,13 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                   setIsLibraryOpen(true)
                 }}
                 aria-label="Open FileSet Library"
-                className="group flex flex-col items-end transition-opacity hover:opacity-70 active:scale-95"
+                className="group relative -top-2 -right-2 float-right flex flex-col items-end rounded-2xl bg-white/50 shadow-lg transition-all hover:scale-110"
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="max-w-48 truncate text-[11px] font-black tracking-[0.2em] text-zinc-400 uppercase">
+                  <div className="flex h-6 max-w-64 min-w-12 cursor-pointer items-center justify-center-safe truncate px-2 text-sm font-bold text-zinc-800">
                     {currentFileSet}
-                  </span>
-                  <div className="h-4 w-4 rounded-full border border-white/20 bg-zinc-800" />
+                  </div>
                 </div>
-                <div
-                  className="mt-0.5 h-px w-full origin-right scale-x-50 opacity-20 transition-transform group-hover:scale-x-100"
-                  style={{ backgroundColor: SABI_GOLD }}
-                />
               </button>
             </div>
 
