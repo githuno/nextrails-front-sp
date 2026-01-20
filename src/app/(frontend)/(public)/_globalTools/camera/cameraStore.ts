@@ -11,17 +11,9 @@ interface CameraState {
   facingMode: "user" | "environment"
   availableDevices: MediaDeviceInfo[]
   scannedData: string | null
-  capturedImages: CapturedImage[]
   error: Error | null
   aspectRatio: number | null
   deviceOrientation: number // デバイスの物理的な向き 0, 90, 180, 270
-}
-
-export interface CapturedImage {
-  url: string
-  idbKey?: string
-  dbId?: string
-  isPending?: boolean
 }
 
 export interface SavedFileResult {
@@ -30,7 +22,8 @@ export interface SavedFileResult {
 }
 
 export interface CameraExternalActions {
-  saveCapturedFile?: (file: Blob | File, options?: { fileName?: string }) => Promise<SavedFileResult>
+  addPreviewFile?: (url: string) => string
+  saveCapturedFile?: (file: Blob | File, options?: { fileName?: string; idbKey?: string }) => Promise<SavedFileResult>
   getFileWithUrl?: (idbKey: string) => Promise<string | null>
   deleteFile?: (idbKey: string, dbId: string) => Promise<void>
 }
@@ -63,7 +56,6 @@ const state: CameraStateInternal = {
   facingMode: "environment",
   availableDevices: [],
   scannedData: null,
-  capturedImages: [],
   error: null,
   stream: null,
   videoElement: null,
@@ -90,7 +82,6 @@ const serverSnapshot: CameraState = {
   facingMode: "environment",
   availableDevices: [],
   scannedData: null,
-  capturedImages: [],
   error: null,
   aspectRatio: null,
   deviceOrientation: 0,
@@ -130,7 +121,6 @@ const getSnapshot = (): CameraState => {
       facingMode: state.facingMode,
       availableDevices: state.availableDevices,
       scannedData: state.scannedData,
-      capturedImages: state.capturedImages,
       error: state.error,
       aspectRatio: state.aspectRatio,
       deviceOrientation: state.deviceOrientation,
@@ -279,23 +269,18 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
     onComplete?.(null)
     return
   }
-
   // 撮影中はスキャンを停止してキャンバスの競合を防ぐ
   const wasScanning = state.isScanning
   if (wasScanning) stopQrScan()
-
   const client = getCameraClient()
   state.isCapturing = true
   notify()
-
   // シャッターを素早く開けるためのタイマー (50-80msが適切)
   const shutterTimer = setTimeout(() => {
     state.isCapturing = false
     notify()
   }, 80)
-
-  let previewUrl: string | null = null
-
+  let tempId: string | undefined = undefined
   const capturePromise = client.capture(
     state.videoElement,
     state.canvasElement,
@@ -305,37 +290,27 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
         onComplete?.(null)
         return
       }
-
       // 1. プレビュー通知（blob=null）の場合
       if (!blob) {
-        previewUrl = url
-        const optimisticImage: CapturedImage = { url, isPending: true }
-        state.capturedImages = [optimisticImage, ...state.capturedImages]
-        notify()
+        // UI側のToolActionStore側で楽観的更新を行う
+        if (state.externalActions.addPreviewFile) {
+          tempId = state.externalActions.addPreviewFile(url)
+        }
         return
       }
-
       // 2. 本番通知（blobあり）の場合
-      // 先程追加したプレビュー（DataURL）があれば差し替える
-      state.capturedImages = state.capturedImages.map((img) =>
-        img.url === previewUrl ? { ...img, url, isPending: true } : img,
-      )
-      notify()
-
       if (state.externalActions.saveCapturedFile) {
-        state.externalActions.saveCapturedFile(blob).catch((e) => {
+        state.externalActions.saveCapturedFile(blob, { idbKey: tempId }).catch((e) => {
           console.error("Failed to persist captured image:", e)
         })
       }
       onComplete?.(url)
     },
   )
-
   // キャンバスが解放されるのを待ってからスキャンを再開
   await capturePromise
   clearTimeout(shutterTimer)
   state.isCapturing = false // 念のため
-
   if (wasScanning) startQrScan()
   notify()
 }
@@ -369,51 +344,6 @@ const stopRecord = (onComplete: (blob: Blob) => void): void => {
     { once: true },
   )
   state.mediaRecorder.stop()
-}
-
-const removeCapturedImage = async (index: number): Promise<void> => {
-  const target = state.capturedImages[index]
-  if (!target) return
-
-  // 最適化UI更新: 即座に一覧から削除
-  state.capturedImages = state.capturedImages.filter((_, i) => i !== index)
-  notify()
-
-  // 永続化されている場合は非同期で削除アクションを実行
-  if (target.idbKey && target.dbId && state.externalActions.deleteFile) {
-    state.externalActions.deleteFile(target.idbKey, target.dbId).catch((e) => {
-      console.error("Failed to delete persisted file:", e)
-    })
-  } else if (target.url.startsWith("blob:")) {
-    // 永続化されていない(インメモリのみの)場合はURLを解放
-    URL.revokeObjectURL(target.url)
-  }
-}
-
-const addCapturedImage = (image: CapturedImage | string): void => {
-  const newImage = typeof image === "string" ? { url: image } : image
-  state.capturedImages = [newImage, ...state.capturedImages]
-  notify()
-}
-
-const setCapturedImages = (images: CapturedImage[]): void => {
-  state.capturedImages = images
-  notify()
-}
-
-const addCapturedFile = async (file: Blob | File): Promise<void> => {
-  const url = URL.createObjectURL(file)
-
-  // 最適化UI更新
-  const optimisticImage: CapturedImage = { url, isPending: true }
-  state.capturedImages = [optimisticImage, ...state.capturedImages]
-  notify()
-
-  if (state.externalActions.saveCapturedFile) {
-    state.externalActions.saveCapturedFile(file).catch((e) => {
-      console.error("Failed to persist added file:", e)
-    })
-  }
 }
 
 const startOrientationTracking = (): void => {
@@ -480,10 +410,6 @@ const cameraActions = {
   capture,
   startRecord,
   stopRecord,
-  removeCapturedImage,
-  addCapturedImage,
-  addCapturedFile,
-  setCapturedImages,
   setCallbacks,
   setExternalActions,
   startOrientationTracking,

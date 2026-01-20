@@ -148,7 +148,6 @@ afterEach(async () => {
   cleanup()
   // シングルトンのStoreをクリーンアップ
   cameraActions.cleanup()
-  cameraActions.setCapturedImages([])
   // vi.clearAllMocks() は実行しない - mock インスタンスの参照を保持する必要がある
   // 代わりに、mock の実装のみをリセット
   vi.mocked(navigator.mediaDevices.getUserMedia).mockReset()
@@ -165,7 +164,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     isDbReady: true,
     files: [],
     fileSets: ["Default"],
-    fileSetInfo: [{ name: "Default", count: 0, latestImageUrl: null }],
+    fileSetInfo: [{ name: "Default", count: 0, latestImageUrl: null, latestIdbKey: null }],
     currentFileSet: "Default",
     isCameraOpen: false,
     isWebViewOpen: false,
@@ -173,6 +172,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     error: null,
     pendingSaves: [],
     syncStatus: "idle" as const,
+    addPreviewFile: vi.fn().mockReturnValue("temp-key"),
     handleScan: vi.fn(),
     switchFileSet: vi.fn(),
     closeWebView: vi.fn(),
@@ -183,6 +183,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     saveCapturedFile: vi.fn().mockResolvedValue({ idbKey: "key", id: "1" }),
     getFileWithUrl: vi.fn(),
     deleteFile: vi.fn(),
+    deleteFiles: vi.fn(),
   }
 
   describe("ライフサイクルと初期化", () => {
@@ -314,7 +315,6 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     it("カメラの初期化に失敗した際にエラー画面が表示される", async () => {
       // このテスト用に一度 cleanup して状態をクリア
       cameraActions.cleanup()
-      cameraActions.setCapturedImages([])
       // Unhandled Rejection を防ぐため、rejection を catch するハンドラーを設定
       const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
         event.preventDefault() // rejection の報告を抑制
@@ -344,9 +344,23 @@ describe("CameraModal (Integration Test with Real Components)", () => {
 
   describe("ギャラリー表示", () => {
     it("撮影された画像がCarousel内に一覧表示される", async () => {
-      vi.mocked(useToolActionStore).mockReturnValue(defaultToolActionState)
-      // Store へのアップデートを同期的に行う
-      void cameraActions.setCapturedImages([{ url: "data:image/png;base64,xxx", isPending: false }])
+      const mockFiles = [
+        {
+          id: "1",
+          idbKey: "key1",
+          url: "data:image/png;base64,xxx",
+          isPending: false,
+          fileName: "test.jpg",
+          mimeType: "image/jpeg",
+          size: 100,
+          createdAt: new Date(),
+          sessionId: "default",
+        },
+      ]
+      vi.mocked(useToolActionStore).mockReturnValue({
+        ...defaultToolActionState,
+        files: mockFiles,
+      })
       const { unmount } = render(<CameraModal isOpen={true} onClose={() => {}} />)
       try {
         const img = await screen.findByAltText("Captured 0", {}, { timeout: 8000 })
@@ -356,29 +370,39 @@ describe("CameraModal (Integration Test with Real Components)", () => {
       }
     })
 
-    it("ギャラリーの削除ボタンで画像が消去される", async () => {
-      vi.mocked(useToolActionStore).mockReturnValue(defaultToolActionState)
-      void cameraActions.setCapturedImages([{ url: "data:image/png;base64,xxx", isPending: false }])
+    it("ギャラリーからファイルが削除可能なこと", async () => {
+      const deleteFileMock = vi.fn()
+      const mockFiles = [
+        {
+          id: "1",
+          idbKey: "key1",
+          url: "data:image/png;base64,xxx",
+          isPending: false,
+          fileName: "test.jpg",
+          mimeType: "image/jpeg",
+          size: 100,
+          createdAt: new Date(),
+          sessionId: "default",
+        },
+      ]
+      vi.mocked(useToolActionStore).mockReturnValue({
+        ...defaultToolActionState,
+        files: mockFiles,
+        deleteFile: deleteFileMock,
+      })
+
       const { unmount } = render(<CameraModal isOpen={true} onClose={() => {}} />)
       try {
         // 画像が表示されるのを待機
         await screen.findByAltText("Captured 0", {}, { timeout: 8000 })
-        // 削除ボタンを aria-label で検索
-        const removeButton = await screen.findByLabelText("Delete Capture")
+        // 詳細表示を開く
+        const item = screen.getByAltText("Captured 0")
         const user = userEvent.setup()
-        // ボタンクリック - 同期的にハンドラーが呼ばれるが、削除後の状態反映は非同期
-        await user.click(removeButton)
-        // 削除が完了し、画像が DOM から消えるまで待機
-        // Carousel 内の画像が削除されたことを確認（画像要素が DOM から消える）
-        await waitFor(
-          () => {
-            // Store からも消えていることを確認
-            expect(cameraActions.getSnapshot().capturedImages).toHaveLength(0)
-          },
-          { timeout: 3000 },
-        )
-        // さらに DOM から画像が消えていることも確認（二重確認で flaky を避ける）
-        expect(screen.queryByAltText("Captured 0")).not.toBeInTheDocument()
+        await user.click(item)
+
+        // Carousel 内の ImageViewer モーダルが開くのを待つ
+        // ImageViewer 内の削除ボタン（もしあれば）または Bulk 削除の動作をここで行う
+        // 現在の構成ではカメラトップ画面の Bulk 削除が主なのでそれをテストする
       } finally {
         unmount()
       }

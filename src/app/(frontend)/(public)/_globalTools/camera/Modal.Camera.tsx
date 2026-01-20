@@ -3,9 +3,11 @@ import React, { useEffect, useRef, useState } from "react"
 import { Carousel } from "../_components/atoms/Carousel"
 import { Modal } from "../_components/atoms/Modal"
 import { Tool } from "../_components/GlobalTool"
-import { LoadingSpinner, MenuIcon, PictureIcon, StopIcon, SwitchCameraIcon } from "../_components/Icons"
+import { CheckIcon, LoadingSpinner, PictureIcon, StopIcon, SwitchCameraIcon, TrashIcon } from "../_components/Icons"
 import { useToolActionStore } from "../_hooks/useToolActionStore"
 import { cameraActions, useCameraState } from "./cameraStore"
+
+const SABI_GOLD = "rgb(159, 137, 14)"
 
 interface CameraModalProps {
   isOpen: boolean
@@ -15,8 +17,17 @@ interface CameraModalProps {
 }
 
 const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSelect }) => {
-  const { isDbReady, isWebViewOpen, webUrl, closeWebView, currentFileSet, fileSetInfo, switchFileSet } =
-    useToolActionStore()
+  const {
+    isDbReady,
+    isWebViewOpen,
+    webUrl,
+    closeWebView,
+    currentFileSet,
+    fileSetInfo,
+    switchFileSet,
+    files,
+    deleteFiles,
+  } = useToolActionStore()
   const cameraState = useCameraState()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -26,6 +37,14 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
   const [isLongPressing, setIsLongPressing] = useState(false)
   const [viewingIndex, setViewingIndex] = useState<number | null>(null)
   const [isLibraryOpen, setIsLibraryOpen] = useState(false)
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+
+  // currentFileSet の変更を render 時に検知して同期（useEffect を避けて cascading render を防止）
+  const [prevFileSet, setPrevFileSet] = useState(currentFileSet)
+  if (currentFileSet !== prevFileSet) {
+    setPrevFileSet(currentFileSet)
+    setSelectedKeys(new Set())
+  }
 
   // アクション（コールバック）の登録
   useEffect(() => {
@@ -92,6 +111,34 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
       })
     } else {
       await cameraActions.capture()
+    }
+  }
+
+  const toggleSelection = (idbKey: string) => {
+    const next = new Set(selectedKeys)
+    if (next.has(idbKey)) {
+      next.delete(idbKey)
+    } else {
+      next.add(idbKey)
+    }
+    setSelectedKeys(next)
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedKeys.size === 0) return
+    const count = selectedKeys.size
+    if (confirm(`Delete ${count} selected images?`)) {
+      // files.find の O(N^2) ループを避けるため Map を作成
+      const fileMap = new Map(files.map((f) => [f.idbKey, f]))
+      const itemsToDelete = Array.from(selectedKeys)
+        .map((idbKey) => {
+          const file = fileMap.get(idbKey)
+          return file ? { idbKey: file.idbKey, id: file.id } : null
+        })
+        .filter((item): item is { idbKey: string; id: string } => item !== null)
+      await deleteFiles(itemsToDelete)
+      setSelectedKeys(new Set())
+      setViewingIndex(null) // Previewをリセット
     }
   }
 
@@ -249,62 +296,132 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
         {/* Showcase: 撮影済み画像一覧 */}
         <Tool.Showcase>
           <div className="grid grid-rows-[auto_1fr] gap-2">
-            <div className="flex justify-end px-1">
-              {/* Library / Set Management button */}
+            <div className="flex items-center justify-between px-2">
+              {/* Left Side: Delete Action with Numeric Badge */}
+              <div className="flex h-5 items-center gap-3">
+                {selectedKeys.size > 0 && (
+                  <div className="animate-in fade-in slide-in-from-left-2 flex items-center gap-3">
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleBulkDelete()
+                        }}
+                        className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 ring-1 ring-white/10 transition-all hover:bg-zinc-800 hover:text-red-400 active:scale-90"
+                      >
+                        <TrashIcon size="14px" color="currentColor" />
+                      </button>
+                      {/* Numeric Badge */}
+                      <div
+                        style={{ backgroundColor: SABI_GOLD }}
+                        className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black text-white shadow-sm ring-1 ring-zinc-950"
+                      >
+                        {selectedKeys.size}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedKeys(new Set())
+                      }}
+                      className="text-[9px] font-black tracking-widest text-zinc-600 uppercase transition-colors hover:text-zinc-400"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Side: FileSet Navigation (Minimal Text) */}
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   setIsLibraryOpen(true)
                 }}
                 aria-label="Open FileSet Library"
-                className="group flex h-6 items-center gap-2 rounded-full border border-white/5 bg-zinc-800/80 px-3 shadow-lg transition-all hover:bg-zinc-700 active:scale-95"
+                className="group flex flex-col items-end transition-opacity hover:opacity-70 active:scale-95"
               >
-                <MenuIcon size="h-3.5 w-3.5" color="bg-white" />
-                <div className="flex flex-col items-start leading-none">
-                  <span className="max-w-64 truncate text-[14px] font-bold text-zinc-100">{currentFileSet}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="max-w-48 truncate text-[11px] font-black tracking-[0.2em] text-zinc-400 uppercase">
+                    {currentFileSet}
+                  </span>
+                  <div className="h-4 w-4 rounded-full border border-white/20 bg-zinc-800" />
                 </div>
+                <div
+                  className="mt-0.5 h-px w-full origin-right scale-x-50 opacity-20 transition-transform group-hover:scale-x-100"
+                  style={{ backgroundColor: SABI_GOLD }}
+                />
               </button>
             </div>
+
             {/* ギャラリー */}
-            {cameraState.capturedImages.length > 0 ? (
-              <Carousel containerClassName="gap-x-3 h-16">
-                {cameraState.capturedImages.map((image, index) => (
-                  <Carousel.Item key={image.idbKey || image.url} className="group">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setViewingIndex(index)
-                      }}
-                      className={`h-full overflow-hidden rounded-xs shadow-2xl transition-opacity ${image.isPending ? "opacity-50" : ""}`}
-                    >
-                      <Image
-                        src={image.url}
-                        alt={`Captured ${index}`}
-                        width={96}
-                        height={54}
-                        unoptimized
-                        className={`h-full w-auto rounded-xs border border-zinc-700/30 object-contain transition-all group-hover:scale-105 group-hover:brightness-110 ${image.isPending ? "grayscale" : ""}`}
-                      />
-                      {image.isPending && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <LoadingSpinner size="12px" color="#fff" />
-                        </div>
+            {files.length > 0 ? (
+              <Carousel containerClassName="gap-x-2 h-16">
+                {files.map((image, index) => {
+                  const isSelected = !!image.idbKey && selectedKeys.has(image.idbKey)
+                  return (
+                    <Carousel.Item key={image.idbKey || index} className="group relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setViewingIndex(index)
+                        }}
+                        style={{
+                          borderColor: isSelected ? SABI_GOLD : "rgba(255,255,255,0.05)",
+                          backgroundColor: isSelected ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.2)",
+                        }}
+                        className={`h-full overflow-hidden transition-all duration-500 ease-out sm:rounded-none ${
+                          isSelected ? "scale-[0.88] shadow-none ring-1" : "scale-100 shadow-xl"
+                        }`}
+                      >
+                        {image.url ? (
+                          <Image
+                            src={image.url}
+                            alt={`Captured ${index}`}
+                            width={96}
+                            height={54}
+                            unoptimized
+                            className={`h-full w-auto object-contain transition-all group-hover:brightness-110 ${image.isPending ? "grayscale" : ""}`}
+                          />
+                        ) : (
+                          <div className="flex h-full w-16 items-center justify-center bg-zinc-900/50">
+                            <LoadingSpinner size="10px" color="rgba(255,255,255,0.1)" />
+                          </div>
+                        )}
+                        {image.isPending && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <LoadingSpinner size="10px" color="#666" />
+                          </div>
+                        )}
+                      </button>
+
+                      {/* Select Toggle (Top Right Corner Indicator) */}
+                      {image.idbKey && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleSelection(image.idbKey!)
+                          }}
+                          className={`absolute -top-1 -right-1 z-10 flex h-7 w-7 items-center justify-center transition-all duration-300 active:scale-75 ${
+                            isSelected ? "opacity-100" : "opacity-50 hover:opacity-100"
+                          }`}
+                        >
+                          <div
+                            style={{
+                              backgroundColor: isSelected ? SABI_GOLD : "rgba(255,255,255,250)",
+                              borderColor: isSelected ? SABI_GOLD : "rgba(0,0,0,0.6)",
+                            }}
+                            className={`flex h-4.5 w-4.5 items-center justify-center rounded-full border shadow-sm transition-all ${
+                              !isSelected && "hover:border-white/60"
+                            }`}
+                          >
+                            <CheckIcon size="10px" color={isSelected ? "#fff" : "rgba(0,0,0,0.6)"} />
+                          </div>
+                        </button>
                       )}
-                    </button>
-                    {/* remove */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        cameraActions.removeCapturedImage(index)
-                        if (viewingIndex === index) setViewingIndex(null)
-                      }}
-                      aria-label="Delete Capture"
-                      className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-zinc-700/80 shadow-md backdrop-blur-md transition-opacity group-hover:opacity-100 hover:bg-gray-600/50 hover:text-white sm:opacity-0"
-                    >
-                      ✕
-                    </button>
-                  </Carousel.Item>
-                ))}
+                    </Carousel.Item>
+                  )
+                })}
               </Carousel>
             ) : !isDbReady ? (
               <div className="flex h-16 w-full items-center justify-center gap-2 text-[8px] font-bold tracking-[0.2em] text-zinc-600 uppercase italic">
@@ -324,39 +441,43 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
       <Modal isOpen={viewingIndex !== null} onClose={() => setViewingIndex(null)} className="h-[90vh] w-[90vw] p-0">
         {viewingIndex !== null && (
           <Carousel index={viewingIndex} className="h-full p-4" containerClassName="h-full" fade={false} gap="0">
-            {cameraState.capturedImages.map((image, index) => (
-              <Carousel.Item key={index} className="relative h-full w-full">
-                <Image
-                  src={image.url}
-                  alt={`View ${index}`}
-                  fill
-                  unoptimized
-                  className="object-contain drop-shadow-2xl"
-                  priority={index === viewingIndex}
-                />
+            {files.map((image, index) => (
+              <Carousel.Item key={image.idbKey} className="relative h-full w-full">
+                {image.url ? (
+                  <Image
+                    src={image.url}
+                    alt={`View ${index}`}
+                    fill
+                    unoptimized
+                    className="object-contain drop-shadow-2xl"
+                    priority={index === viewingIndex}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <LoadingSpinner size="24px" color="rgba(255,255,255,0.2)" />
+                  </div>
+                )}
               </Carousel.Item>
             ))}
           </Carousel>
         )}
       </Modal>
 
-      {/* FileSet Library Modal - Integrated Management */}
+      {/* FileSet Library Modal - Revised Aesthetic Layout */}
       <Modal
         isOpen={isLibraryOpen}
         onClose={() => setIsLibraryOpen(false)}
-        className="shadow-3xl w-[95vw] max-w-md overflow-hidden border border-white/10 p-0"
+        className="w-[90vw] max-w-lg border border-white/5 bg-zinc-700/80 p-0 shadow-[0_40px_100px_rgba(0,0,0,0.8)]"
       >
-        <div className="flex max-h-[85vh] flex-col bg-zinc-900">
-          {/* Header & Create Input */}
-          <div className="border-b border-zinc-800 bg-linear-to-b from-zinc-800 to-zinc-900 px-8 pt-10 pb-6">
-            <h3 className="mb-2 flex items-center gap-2 text-xl font-bold text-white">
-              <PictureIcon size="20px" color="#3b82f6" />
-              FileSet Library
+        <div className="flex max-h-[85vh] flex-col overflow-hidden">
+          {/* Header Area (Compact) */}
+          <div className="relative border-b border-white/5 px-8 pt-10 pb-6">
+            <h3
+              style={{ color: SABI_GOLD }}
+              className="flex items-center gap-2 text-[10px] font-black tracking-[0.4em] uppercase"
+            >
+              Collection Library
             </h3>
-            <p className="mb-8 text-[10px] leading-relaxed font-bold tracking-[0.2em] text-zinc-500 uppercase">
-              Organize your workspace into independent collections.
-            </p>
-
             <form
               onSubmit={(e) => {
                 e.preventDefault()
@@ -367,34 +488,41 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                   setIsLibraryOpen(false)
                 }
               }}
-              className="group relative"
+              className="mt-6 flex items-baseline gap-4"
             >
-              <input
-                key={isLibraryOpen ? currentFileSet : "closed"}
-                type="text"
-                name="setName"
-                defaultValue={currentFileSet}
-                autoFocus
-                className="w-full rounded-2xl border border-zinc-700 bg-zinc-950/50 px-6 py-4 text-lg font-bold text-white shadow-inner transition-all outline-none placeholder:text-zinc-700 focus:border-blue-500"
-                placeholder="Name a new collection..."
-              />
+              <div className="group relative flex-1">
+                <input
+                  key={isLibraryOpen ? currentFileSet : "closed"}
+                  type="text"
+                  name="setName"
+                  defaultValue={currentFileSet}
+                  autoFocus
+                  className="w-full bg-transparent py-2 text-xl font-bold text-zinc-100 placeholder:text-zinc-700 focus:outline-none"
+                  placeholder="Name collection..."
+                />
+                {/* Visual affordance for input - Sabi Gold underline */}
+                <div
+                  className="absolute bottom-0 left-0 h-0.5 w-full bg-zinc-800 transition-all group-focus-within:bg-current"
+                  style={{ backgroundColor: "rgba(159, 137, 14, 0.3)" }}
+                />
+                <div
+                  className="absolute bottom-0 left-0 h-0.5 w-0 bg-current transition-all duration-500 group-focus-within:w-full"
+                  style={{ backgroundColor: SABI_GOLD }}
+                />
+              </div>
               <button
                 type="submit"
-                className="absolute top-2 right-2 bottom-2 rounded-xl bg-blue-600 px-5 text-[10px] font-black tracking-widest text-white uppercase shadow-lg transition-all hover:bg-blue-500 active:scale-95"
+                style={{ color: SABI_GOLD }}
+                className="text-[10px] font-black tracking-widest uppercase transition-opacity hover:opacity-50"
               >
-                Execute
+                Create / Switch
               </button>
             </form>
           </div>
 
-          {/* Library Grid */}
-          <div className="scrollbar-hide flex-1 overflow-y-auto p-6">
-            <div className="mb-4 flex items-center justify-between px-2">
-              <h4 className="text-[10px] font-black tracking-[0.25em] text-zinc-600 uppercase">Existing Collections</h4>
-              <span className="text-[10px] font-bold text-zinc-700">{fileSetInfo.length} sets</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+          {/* Library Grid (Expanded Thumbnail Area) */}
+          <div className="custom-scrollbar flex-1 overflow-y-auto bg-zinc-950/20 px-4 py-6 sm:px-8">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-2">
               {fileSetInfo.map((set) => (
                 <button
                   key={set.name}
@@ -402,56 +530,67 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                     switchFileSet(set.name)
                     setIsLibraryOpen(false)
                   }}
-                  className={`group relative flex flex-col text-left transition-all active:scale-[0.98] ${
-                    currentFileSet === set.name
-                      ? "ring-2 ring-blue-500 ring-offset-4 ring-offset-zinc-900"
-                      : "hover:-translate-y-0.5"
+                  className={`group flex flex-col items-start transition-all ${
+                    currentFileSet === set.name ? "opacity-100" : "opacity-60 hover:opacity-100"
                   }`}
                 >
-                  {/* Thumbnail */}
-                  <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-white/5 bg-zinc-950 shadow-xl">
+                  {/* Larger Thumbnail Area */}
+                  <div
+                    className={`relative aspect-video w-full overflow-hidden transition-all duration-500 ${
+                      currentFileSet === set.name
+                        ? "border border-zinc-500 shadow-[0_0_20px_rgba(159,137,14,0.1)]"
+                        : "border border-zinc-800 hover:border-zinc-500"
+                    }`}
+                  >
                     {set.latestImageUrl ? (
                       <Image
                         src={set.latestImageUrl}
                         alt={set.name}
                         fill
                         unoptimized
-                        className="object-cover opacity-80 transition-all group-hover:scale-110 group-hover:opacity-100"
+                        className="object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                     ) : (
-                      <div className="absolute inset-0 flex items-center justify-center border-2 border-dashed border-zinc-800">
-                        <PictureIcon size="24px" color="#18181b" />
+                      <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/40">
+                        <PictureIcon size="16px" color="rgba(255,255,255,0.05)" />
                       </div>
                     )}
-                    {/* Badge */}
-                    <div className="absolute top-2 right-2 rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[8px] font-black tracking-tighter text-white uppercase backdrop-blur-md">
-                      {set.count} items
+
+                    {/* Meta Overlay Badge */}
+                    <div className="absolute top-2 right-2">
+                      <div className="rounded-xs bg-black/40 px-1.5 py-0.5 text-[7px] font-bold tracking-widest text-zinc-300 uppercase backdrop-blur-md">
+                        {set.count} P
+                      </div>
                     </div>
                   </div>
 
-                  {/* Set Name */}
-                  <div className="mt-2 px-1">
-                    <div className="truncate text-xs font-black tracking-widest text-zinc-400 uppercase transition-colors group-hover:text-blue-400">
-                      {set.name}
+                  {/* Minimal Text Info */}
+                  <div className="mt-3 flex w-full flex-col px-0.5">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`truncate text-[10px] font-black tracking-[0.2em] uppercase transition-colors ${
+                          currentFileSet === set.name ? "text-zinc-100" : "text-zinc-500"
+                        }`}
+                      >
+                        {set.name}
+                      </span>
+                      {currentFileSet === set.name && (
+                        <div style={{ backgroundColor: SABI_GOLD }} className="h-1 w-1 animate-pulse rounded-full" />
+                      )}
                     </div>
                   </div>
-
-                  {/* Active Indicator */}
-                  {currentFileSet === set.name && (
-                    <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full border-2 border-zinc-900 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
-                  )}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="flex justify-center bg-zinc-950/50 p-4">
+          {/* Minimal Footer */}
+          <div className="border-t border-white/5 p-6 text-center">
             <button
               onClick={() => setIsLibraryOpen(false)}
-              className="text-[10px] font-bold tracking-[0.2em] text-zinc-600 uppercase transition-colors hover:text-white"
+              className="text-[9px] font-bold tracking-[0.3em] text-zinc-600 uppercase transition-colors hover:text-zinc-300"
             >
-              Back to Camera
+              Close Archive
             </button>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 import { cameraActions, type CameraExternalActions, SavedFileResult } from "../camera/cameraStore"
 import { useExternalStore } from "./atoms/useExternalStore"
@@ -32,6 +32,7 @@ export interface FileSetInfo {
   name: string
   latestImageUrl: string | null
   count: number
+  latestIdbKey: string | null
 }
 
 interface RawSetInfo {
@@ -52,6 +53,7 @@ interface PendingSave {
  * アクションの型定義
  */
 export interface ToolActions extends Required<CameraExternalActions> {
+  addPreviewFile: (url: string) => string
   handleScan: (data: string) => void
   switchFileSet: (fileSet: string) => void
   closeWebView: () => void
@@ -59,6 +61,7 @@ export interface ToolActions extends Required<CameraExternalActions> {
   addFiles: (files: FileList | File[]) => void
   handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>) => void
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
+  deleteFiles: (items: { idbKey: string; id: string }[]) => Promise<void>
 }
 
 interface ToolActionState {
@@ -104,23 +107,6 @@ const notify = () => {
   listeners.forEach((l) => l())
 }
 
-/**
- * cameraStoreの表示用データを更新
- */
-const updateCameraStoreImages = () => {
-  if (typeof window === "undefined") return
-  cameraActions.setCapturedImages(
-    state.files
-      .filter((f) => !!f.url)
-      .map((f) => ({
-        url: f.url!,
-        idbKey: f.idbKey,
-        dbId: f.id,
-        isPending: f.isPending,
-      })),
-  )
-}
-
 const getSnapshot = () => state
 
 /**
@@ -128,10 +114,10 @@ const getSnapshot = () => state
  */
 const revokeUrls = (files: ToolFile[], setInfos: FileSetInfo[] = []) => {
   files.forEach((f) => {
-    if (f.url) URL.revokeObjectURL(f.url)
+    if (f.url?.startsWith("blob:")) URL.revokeObjectURL(f.url)
   })
   setInfos.forEach((s) => {
-    if (s.latestImageUrl) URL.revokeObjectURL(s.latestImageUrl)
+    if (s.latestImageUrl?.startsWith("blob:")) URL.revokeObjectURL(s.latestImageUrl)
   })
 }
 
@@ -140,17 +126,25 @@ const revokeUrls = (files: ToolFile[], setInfos: FileSetInfo[] = []) => {
  * DBの初期化をトリガーに実行される
  */
 let isSyncing = false
+let needsSync = false
+
 async function syncData() {
-  if (isSyncing) return
+  if (isSyncing) {
+    needsSync = true
+    return
+  }
   isSyncing = true
+
   try {
-    const db = await getDb()
     const idb = idbStore()
 
-    // 蓄積された保存や最新状態の取得を、キューがなくなるまで繰り返す
-    let hasProcessedQueue = true
-    while (hasProcessedQueue) {
-      hasProcessedQueue = false
+    // hasProcessedQueue（保存処理による再実行）か needsSync（外部からの割り込み）がある限りループする
+    let shouldSync = true
+    while (shouldSync) {
+      shouldSync = false
+      needsSync = false
+
+      const db = await getDb()
       const sessionID = getSessionState()?.currentId || "default"
 
       // 1. セッション内の全ファイルセット情報を取得 (メタデータ: カウントと最新プレビュー)
@@ -165,23 +159,32 @@ async function syncData() {
          GROUP BY file_set`,
       )
 
-      // Zodにより実行時型安全性を確保。不正なデータは例外をスローして早期終了させる（AGENTS.md方針）
+      // Zodにより実行時型安全性を確保。不正なデータは例外をスローして早期終了させる
       const rawSetInfos: RawSetInfo[] = z.array(RawSetInfoSchema).parse(res.rows)
       const fileSetNameList = Array.from(new Set([...rawSetInfos.map((s) => s.name), state.currentFileSet])).sort()
+      const existingSetInfoMap = new Map(state.fileSetInfo.map((s) => [s.name, s]))
 
       const fileSetInfo: FileSetInfo[] = await Promise.all(
         fileSetNameList.map(async (name) => {
           const info = rawSetInfos.find((s) => s.name === name)
-          const idbKey = info?.latest_idb_key
+          const latestIdbKey = info?.latest_idb_key || null
+          // 前回の情報を再利用して、Blobの読み込みとURL生成を最小限にする
+          const existing = existingSetInfoMap.get(name)
+          if (existing && existing.latestIdbKey === latestIdbKey && existing.count === (info?.count || 0)) {
+            return existing
+          }
+          // 新規、または変更があった場合
           let latestImageUrl = null
-          if (idbKey) {
-            const blob = await idb.get(idbKey)
+          if (latestIdbKey) {
+            const blob = await idb.get(latestIdbKey)
             if (blob) latestImageUrl = URL.createObjectURL(blob)
           }
+          // 古いUrlはあとで一括で解放される
           return {
             name,
             count: info?.count || 0,
             latestImageUrl,
+            latestIdbKey,
           }
         }),
       )
@@ -193,18 +196,15 @@ async function syncData() {
         .where(and(eq(capturedFiles.sessionId, sessionID), eq(capturedFiles.fileSet, state.currentFileSet)))
         .orderBy(desc(capturedFiles.createdAt))
 
-      // 3. プレビューURLの生成と状態更新（既存URLを再利用してパフォーマンス向上）
-      const newFiles: ToolFile[] = await Promise.all(
-        records.map(async (r) => {
-          const existingFile = state.files.find((f) => f.idbKey === r.idbKey)
-          if (existingFile?.url) {
-            return { ...r, url: existingFile.url } as ToolFile
-          }
-          const blob = await idb.get(r.idbKey)
-          const url = blob ? URL.createObjectURL(blob) : null
-          return { ...r, url } as ToolFile
-        }),
-      )
+      // 3. 状態更新
+      const existingFileMap = new Map(state.files.map((f) => [f.idbKey, f]))
+      const newFiles: ToolFile[] = records.map((r) => {
+        const existingFile = existingFileMap.get(r.idbKey)
+        return {
+          ...r,
+          url: existingFile?.url || null,
+        } as ToolFile
+      })
 
       // 重複を避けるため、DBにあるデータ（newFiles）のidbKeyセットを作成
       const dbIdbKeys = new Set(newFiles.map((f) => f.idbKey))
@@ -215,29 +215,57 @@ async function syncData() {
       // URLのリソース管理：消えるファイル（pendingでもない、newFilesでもない）のURLを解放
       const nextFiles = [...pendingFiles, ...newFiles]
       const nextIdbKeys = new Set(nextFiles.map((f) => f.idbKey))
-      const filesToRevoke = state.files.filter((f) => !nextIdbKeys.has(f.idbKey))
 
-      // 前回の fileSetInfo のUrlも解放対象
-      revokeUrls(filesToRevoke, state.fileSetInfo)
+      // 解放対象の算出
+      const filesToRevoke = state.files.filter((f) => !nextIdbKeys.has(f.idbKey))
+      const setsToRevoke = state.fileSetInfo.filter((s) => {
+        const next = fileSetInfo.find((ns) => ns.name === s.name)
+        return !next || (next.latestImageUrl !== s.latestImageUrl && s.latestImageUrl?.startsWith("blob:"))
+      })
+
+      revokeUrls(filesToRevoke, setsToRevoke)
 
       state = {
         ...state,
         files: nextFiles,
         fileSets: fileSetNameList,
         fileSetInfo,
-        isDbReady: true, // DBの準備完了
+        isDbReady: true,
         error: null,
       }
       notify()
-      updateCameraStoreImages()
 
-      // 4. バッファされた保存を処理
+      // 4. 未取得のURLをバックグラウンドで逐次ロードする
+      const filesWithoutUrl = nextFiles.filter((f) => !f.url)
+      if (filesWithoutUrl.length > 0) {
+        const CHUNK_SIZE = 5
+        for (let i = 0; i < filesWithoutUrl.length; i += CHUNK_SIZE) {
+          const chunk = filesWithoutUrl.slice(i, i + CHUNK_SIZE)
+          const updatedChunk = await Promise.all(
+            chunk.map(async (f) => {
+              const blob = await idb.get(f.idbKey)
+              return { ...f, url: blob ? URL.createObjectURL(blob) : null }
+            }),
+          )
+          const updatedMap = new Map(updatedChunk.map((up) => [up.idbKey, up]))
+          state = {
+            ...state,
+            files: state.files.map((f) => {
+              const updated = updatedMap.get(f.idbKey)
+              return updated || f
+            }),
+          }
+          notify()
+          if (needsSync) break
+        }
+      }
+
+      // 5. バッファされた保存を処理
       if (state.pendingSaves.length > 0) {
         // 処理を開始する前にキューを空出しして多重実行を防止する
         const queue = [...state.pendingSaves]
         state = { ...state, pendingSaves: [], syncStatus: "syncing" }
         notify()
-
         try {
           for (const pending of queue) {
             const currentSessionID = getSessionState()?.currentId || "default"
@@ -256,18 +284,21 @@ async function syncData() {
             pending.resolve(inserted)
           }
           state = { ...state, syncStatus: "idle" }
-          hasProcessedQueue = true // 挿入があったので、再度メタデータをリロードする
+          shouldSync = true // 挿入があったので、再度メタデータをリロードする
         } catch (error) {
           state = { ...state, syncStatus: "error" }
           queue.forEach((p) => p.reject(error))
         }
         notify()
       }
+
+      // 外部からの割り込みがあれば、再度ループする
+      if (needsSync) {
+        shouldSync = true
+      }
     }
 
     notify()
-    // DB同期後にカメラストアの画像を更新
-    updateCameraStoreImages()
   } catch (err) {
     console.error("[ToolActionStore] syncData error:", err)
     state = {
@@ -287,23 +318,20 @@ export const actions: ToolActions = {
   /**
    * 撮影・選択されたファイルを保存する
    */
-  saveCapturedFile: async (file: Blob | File, options?: { fileName?: string }): Promise<SavedFileResult> => {
+  saveCapturedFile: async (
+    file: Blob | File,
+    options?: { fileName?: string; idbKey?: string },
+  ): Promise<SavedFileResult> => {
     const idb = idbStore()
-    const idbKey = crypto.randomUUID()
+    const idbKey = options?.idbKey || crypto.randomUUID()
 
-    // バッファサイズ制限
-    const MAX_BUFFER_SIZE = 50
-    if (state.pendingSaves.length >= MAX_BUFFER_SIZE) {
-      throw new Error("Buffer full, cannot save more files")
-    }
-
-    try {
-      await idb.put(idbKey, file)
-
-      // 共通の最適化UI更新: まずはpending状態で追加
+    // 1. 最適化UI更新 (Reflection fix)
+    // すでに addPreviewFile で追加されている場合はスキップまたは更新
+    const existingIndex = state.files.findIndex((f) => f.idbKey === idbKey)
+    if (existingIndex === -1) {
       const tempUrl = URL.createObjectURL(file)
       const tempFile: ToolFile = {
-        id: idbKey, // 一時的なIDとしてidbKeyを使用
+        id: idbKey,
         sessionId: getSessionState()?.currentId || "default",
         fileName: options?.fileName || `captured_${Date.now()}`,
         mimeType: file.type,
@@ -318,8 +346,24 @@ export const actions: ToolActions = {
         files: [tempFile, ...state.files],
       }
       notify()
-      updateCameraStoreImages()
-
+    } else {
+      // 既存のプレビューがあればフラグ等を維持しつつURLだけBlob URLに差し替え（もしDataURLなら）
+      const tempUrl = URL.createObjectURL(file)
+      state = {
+        ...state,
+        files: state.files.map((f, i) =>
+          i === existingIndex ? { ...f, url: tempUrl, size: file.size, isPending: true } : f,
+        ),
+      }
+      notify()
+    }
+    const MAX_BUFFER_SIZE = 50
+    if (state.pendingSaves.length >= MAX_BUFFER_SIZE) {
+      throw new Error("Buffer full, cannot save more files")
+    }
+    try {
+      // 2. IDB保存 (Background)
+      await idb.put(idbKey, file)
       if (state.isDbReady) {
         // PGliteがreadyなら非同期でDB保存
         const saveToDb = async () => {
@@ -338,26 +382,20 @@ export const actions: ToolActions = {
                 idbKey,
               })
               .returning()
-
-            // 状態を再同期（これにより pending が正規データに置き換わる）
+            // 状態を再同期
             await syncData()
             return inserted
           } catch (e) {
             console.error("[ToolActionStore] Async save failed:", e)
-            // エラー時はpendingから削除されるよう再読み込み
             await syncData()
             throw e
           }
         }
 
-        void saveToDb() // バックグラウンドでDB保存を開始（待機しない）
-        const result: SavedFileResult = {
-          id: idbKey, // 即座に返す
-          idbKey,
-        }
-        return result
+        void saveToDb()
+        return { id: idbKey, idbKey }
       } else {
-        // バッファに追加（すでに追加済みの tempFile はそのまま活かす）
+        // バッファに追加
         state = {
           ...state,
           syncStatus: "buffering",
@@ -377,35 +415,81 @@ export const actions: ToolActions = {
       }
     } catch (error) {
       await idb.remove(idbKey).catch(() => {})
+      // 失敗時はUIからも消す
+      state = {
+        ...state,
+        files: state.files.filter((f) => f.idbKey !== idbKey),
+      }
+      notify()
       throw new Error("Failed to save captured file", { cause: error })
     }
+  },
+
+  /**
+   * プレビュー（DataURL）を即座にUIに反映する
+   */
+  addPreviewFile: (url: string): string => {
+    const tempId = crypto.randomUUID()
+    const tempFile: ToolFile = {
+      id: tempId,
+      sessionId: getSessionState()?.currentId || "default",
+      fileName: `capturing_${Date.now()}`,
+      mimeType: "image/jpeg",
+      size: 0,
+      idbKey: tempId,
+      createdAt: new Date(),
+      url: url, // DataURL
+      isPending: true,
+    }
+    state = {
+      ...state,
+      files: [tempFile, ...state.files],
+    }
+    notify()
+    return tempId
   },
 
   /**
    * ファイルを削除する
    */
   deleteFile: async (idbKey: string, dbId: string): Promise<void> => {
-    // 最適化UI更新: 即座に一覧から消す
+    return actions.deleteFiles([{ idbKey, id: dbId }])
+  },
+
+  /**
+   * 複数のファイルを一括削除する
+   */
+  deleteFiles: async (items: { idbKey: string; id: string }[]): Promise<void> => {
+    if (items.length === 0) return
+    const idbKeysToRemove = new Set(items.map((i) => i.idbKey))
+    // 1. 最適化UI更新: 即座にメモリから消して再描画
+    // これにより、重いDB処理を待たずにサムネイルが消える
     state = {
       ...state,
-      files: state.files.filter((f) => f.idbKey !== idbKey),
+      files: state.files.filter((f) => !idbKeysToRemove.has(f.idbKey)),
     }
     notify()
-    updateCameraStoreImages()
-
-    const db = await getDb()
-    const idb = idbStore()
-    try {
-      if (dbId && dbId !== idbKey) {
-        await db.delete(capturedFiles).where(eq(capturedFiles.id, dbId))
+    // 2. バックグラウンドで残りの処理を行う
+    // async関数自体は即座に終了する（awaitしない）
+    const processDeletion = async () => {
+      const db = await getDb()
+      const idb = idbStore()
+      try {
+        const validDbIds = items.map((i) => i.id).filter((id) => id && id.length > 10)
+        if (validDbIds.length > 0) {
+          await db.delete(capturedFiles).where(inArray(capturedFiles.id, validDbIds))
+        }
+        // IndexedDBから削除 (並列実行)
+        await Promise.all(items.map((item) => idb.remove(item.idbKey)))
+        // 最後に一回だけデータを同期して整合性を確定させる
+        await syncData()
+      } catch (error) {
+        console.error("[ToolActionStore] Background delete failed:", error)
+        await syncData() // 復旧のために再読み込み
       }
-      await idb.remove(idbKey)
-      await syncData()
-    } catch (error) {
-      console.error("[ToolActionStore] Delete failed:", error)
-      await syncData() // 復旧のために再読み込み
-      throw new Error("Failed to delete file", { cause: error })
     }
+    // 非同期で実行し、この関数自体はすぐにリターンする
+    void processDeletion()
   },
 
   /**
@@ -442,9 +526,12 @@ export const actions: ToolActions = {
    * ファイルセットを切り替える
    */
   switchFileSet: (fileSet: string): void => {
+    // 即座に既存のファイルをクリアしてUIフィードバックを出す
+    revokeUrls(state.files, state.fileSetInfo)
     state = {
       ...state,
       currentFileSet: fileSet,
+      files: [],
     }
     notify()
     syncData()
