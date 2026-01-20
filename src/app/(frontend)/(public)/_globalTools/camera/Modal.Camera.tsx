@@ -7,7 +7,12 @@ import { CheckIcon, LoadingSpinner, PictureIcon, StopIcon, SwitchCameraIcon, Tra
 import { useToolActionStore } from "../_hooks/useToolActionStore"
 import { cameraActions, useCameraState } from "./cameraStore"
 
-const SABI_GOLD = "rgb(159, 137, 14)"
+const SABI_GOLD = "#9f890e"
+
+const hexToRgb = (hex: string): string => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : "159, 137, 14"
+}
 
 interface CameraModalProps {
   isOpen: boolean
@@ -148,6 +153,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
         {/* Main Viewer: プレビュー */}
         <Tool.Main className="relative overflow-hidden">
           <>
+            <input id="qr-toggle" type="checkbox" className="peer hidden" />
             {cameraState.isAvailable === null && !cameraState.error && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950">
                 <LoadingSpinner size="48px" color="#3b82f6" />
@@ -176,28 +182,63 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
               muted
               className={`${cameraState.isCapturing ? "scale-[0.98] brightness-50" : "scale-100 brightness-100"} ${cameraState.isAvailable ? "opacity-100" : "opacity-0"}`}
             />
+            <label htmlFor="qr-toggle" className="absolute inset-0 cursor-pointer" />
             <canvas ref={canvasRef} className="hidden" />
             {/* QR Overlay */}
-            {cameraState.isScanning && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="relative h-48 w-48 rounded-lg border-2 border-blue-500/30">
-                  <div className="absolute inset-0 animate-pulse rounded-lg bg-blue-500/5" />
-                  {/* Corner accents */}
-                  <div className="absolute -top-1 -left-1 h-6 w-6 rounded-tl-lg border-t-4 border-l-4 border-blue-500" />
-                  <div className="absolute -top-1 -right-1 h-6 w-6 rounded-tr-lg border-t-4 border-r-4 border-blue-500" />
-                  <div className="absolute -bottom-1 -left-1 h-6 w-6 rounded-bl-lg border-b-4 border-l-4 border-blue-500" />
-                  <div className="absolute -right-1 -bottom-1 h-6 w-6 rounded-br-lg border-r-4 border-b-4 border-blue-500" />
-
-                  {/* Scanning line: Tailwind v4 arbitrary animation */}
-                  <div className="@keyframes-scan:[0%{top:0}100%{top:100%}] absolute left-0 h-1 w-full animate-[scan_2s_linear_infinite] bg-linear-to-r from-transparent via-blue-400 to-transparent shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
-                </div>
-                {cameraState.scannedData && (
-                  <div className="absolute bottom-10 animate-bounce rounded-full bg-blue-600 px-6 py-2 text-sm font-bold shadow-xl">
-                    QR Detected: {cameraState.scannedData}
+            <div
+              className="pointer-events-none absolute inset-0 flex items-center justify-center peer-checked:hidden"
+              style={{ "--sabi-gold": hexToRgb(SABI_GOLD) } as React.CSSProperties}
+            >
+              {cameraState.isScanning && (
+                <>
+                  <div
+                    className="relative h-48 w-48 rounded-lg border"
+                    style={{ borderColor: `rgba(var(--sabi-gold), 0.2)` }}
+                  >
+                    <div
+                      className="absolute inset-0 rounded-lg"
+                      style={{ backgroundColor: `rgba(var(--sabi-gold), 0.05)` }}
+                    />
+                    {/* Corner accents - subtle wabi-sabi corners */}
+                    <div
+                      className="absolute -top-1 -left-1 h-4 w-4 border-t-2 border-l-2"
+                      style={{ borderColor: `rgba(var(--sabi-gold), 0.6)` }}
+                    />
+                    <div
+                      className="absolute -top-1 -right-1 h-4 w-4 border-t-2 border-r-2"
+                      style={{ borderColor: `rgba(var(--sabi-gold), 0.6)` }}
+                    />
+                    <div
+                      className="absolute -bottom-1 -left-1 h-4 w-4 border-b-2 border-l-2"
+                      style={{ borderColor: `rgba(var(--sabi-gold), 0.6)` }}
+                    />
+                    <div
+                      className="absolute -right-1 -bottom-1 h-4 w-4 border-r-2 border-b-2"
+                      style={{ borderColor: `rgba(var(--sabi-gold), 0.6)` }}
+                    />
+                    {/* Scanning line: gentle wabi-sabi movement */}
+                    <div
+                      className="@keyframes-scan:[0%{top:0}100%{top:100%}] absolute left-0 h-0.5 w-full animate-[scan_3s_ease-in-out_infinite] to-transparent"
+                      style={{
+                        backgroundImage: `linear-gradient(to right, transparent, rgba(var(--sabi-gold), 0.4), transparent)`,
+                        boxShadow: `0 0 8px rgba(var(--sabi-gold), 0.2)`,
+                      }}
+                    />
                   </div>
-                )}
-              </div>
-            )}
+                  {cameraState.scannedData && (
+                    <div
+                      className="absolute bottom-10 rounded-lg px-4 py-2 text-xs font-medium shadow-sm backdrop-blur-sm"
+                      style={{
+                        backgroundColor: `rgba(var(--sabi-gold), 0.1)`,
+                        color: SABI_GOLD,
+                      }}
+                    >
+                      QR Detected
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
             {/* Recording Indicator */}
             {cameraState.isRecording && (
               <div className="absolute top-24 left-1/2 flex -translate-x-1/2 animate-pulse items-center gap-2 rounded-full bg-red-600/90 px-4 py-1 text-[10px] font-bold tracking-widest text-white uppercase shadow-lg">
@@ -366,12 +407,10 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                           e.stopPropagation()
                           setViewingIndex(index)
                         }}
-                        style={{
-                          borderColor: isSelected ? SABI_GOLD : "rgba(255,255,255,0.05)",
-                          backgroundColor: isSelected ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.2)",
-                        }}
                         className={`h-full overflow-hidden transition-all duration-500 ease-out sm:rounded-none ${
-                          isSelected ? "scale-[0.88] shadow-none ring-1" : "scale-100 shadow-xl"
+                          isSelected
+                            ? "scale-[0.88] bg-black/40 shadow-none ring-1 ring-yellow-200/10"
+                            : "scale-100 border-white/5 bg-black/20 shadow-xl"
                         }`}
                       >
                         {image.url ? (
