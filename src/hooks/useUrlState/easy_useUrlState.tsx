@@ -160,7 +160,7 @@ export function useUrlState<T>(
   const setState = useCallback(
     (value: T | ((prev: T) => T)) => {
       // 関数かそのままの値かを判定
-      const newValue = typeof value === "function" ? (value as Function)(state) : value
+      const newValue = typeof value === "function" ? (value as (prev: T) => T)(state) : value
 
       // 単純な文字列や数値の場合、入力の反応性を最大化するため比較をスキップ
       const skipCompare = typeof newValue === "string" || typeof newValue === "number"

@@ -1,5 +1,5 @@
 import { apiFetch } from "@/hooks/useFetch"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { CloudManager, CloudState } from "./type"
 
 // Google関連のエンドポイント
@@ -29,6 +29,7 @@ class GDriveManager implements CloudManager {
     isUploading: [],
     isDownloading: [],
     isDeleting: [],
+    isConnected: false,
   }
   private setState: React.Dispatch<React.SetStateAction<CloudState>>
   private endpoint: string
@@ -335,9 +336,8 @@ const useGDrive = (
     isUploading: [],
     isDownloading: [],
     isDeleting: [],
+    isConnected: false,
   })
-
-  const gdriveRef = useRef<GDriveManager | null>(null)
 
   const options = storageOptions || {
     endpoint: process.env.NEXT_PUBLIC_API_BASE || "",

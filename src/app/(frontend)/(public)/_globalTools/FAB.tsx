@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef, useState } from "react"
+import React, { Suspense, useRef, useState } from "react"
 import FloatingActionButton from "./_components/FloatingActionButton"
 import { CameraIcon } from "./_components/Icons"
 import { useSessionSync } from "./_hooks/useSessionSync"
@@ -14,7 +14,7 @@ import { Modal } from "./_components/atoms/Modal"
 import { usePgliteStore } from "./_hooks/db/usePgliteStore"
 // ---------------------------------------------------------
 
-const FAB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
+const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
   useSessionSync() // URLとStateのセッション同期を有効化
   const { isCameraOpen, handleScan, setCameraOpen, handleSelect, handleFileChange } = useToolActionStore()
   const cameraState = useCameraState()
@@ -66,4 +66,10 @@ const FAB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ classNam
   )
 }
 
-export default FAB
+export const FAB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
+  return (
+    <Suspense>
+      <FABContent className={className} />
+    </Suspense>
+  )
+}

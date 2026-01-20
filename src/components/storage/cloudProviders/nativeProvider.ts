@@ -18,6 +18,7 @@ class R2manager implements CloudManager {
     isUploading: [],
     isDownloading: [],
     isDeleting: [],
+    isConnected: false,
   }
   private setState: React.Dispatch<React.SetStateAction<CloudState>>
   private endpoint: string
@@ -158,7 +159,7 @@ class R2manager implements CloudManager {
     }
   }
 
-  async delete({ keys }: { keys: string[] }): Promise<void> {
+  async delete({ keys: _keys }: { keys: string[] }): Promise<void> {
     try {
       alert("delete")
     } catch (error) {
@@ -179,6 +180,7 @@ const useR2 = (
     isUploading: [],
     isDownloading: [],
     isDeleting: [],
+    isConnected: false,
   })
 
   const options =

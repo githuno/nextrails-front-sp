@@ -1,6 +1,6 @@
 import MultiInputFTB from "@/components/MultiInputFTB"
 import Image from "next/image"
-import FAB from "../_globalTools/FAB"
+import { FAB } from "../_globalTools/FAB"
 
 export default function Page() {
   return (

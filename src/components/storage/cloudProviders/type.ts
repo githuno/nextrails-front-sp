@@ -1,10 +1,12 @@
-import { UserSession } from "@/app/(frontend)/(public)/home/page"
 export interface StorageSession {
   uuid: string
   type: ProviderType
 }
 export interface Session {
-  user: UserSession | null
+  user: {
+    uuid: string
+    name: string
+  } | null
   storage: StorageSession | null
 }
 
