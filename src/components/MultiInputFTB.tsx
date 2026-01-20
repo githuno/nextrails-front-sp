@@ -52,11 +52,7 @@ const MultiInputFTB: React.FC<MultiInputFTBProps> = ({ className }) => {
     <div className="pointer-events-none fixed top-0 z-50 h-svh w-svw overflow-hidden">
       <FloatingActionButton.Simple items={items} className={className} position={{ right: "8%", bottom: "30%" }} />
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        className="fixed top-[25vh] h-[75vh] bg-transparent"
-      >
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} className="h-full bg-transparent">
         {selectedComponent && React.isValidElement(selectedComponent) && selectedComponent.type === Camera
           ? React.cloneElement(selectedComponent as React.ReactElement<{ isOpen?: boolean }>, { isOpen: isModalOpen })
           : selectedComponent}

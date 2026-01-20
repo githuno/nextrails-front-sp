@@ -79,7 +79,7 @@ const Showcase = () => {
   // };
 
   return (
-    <div className="w-vw grid h-[23vh] grid-rows-5 place-content-center rounded-lg bg-white/80 px-2 py-1 shadow-lg">
+    <div className="w-vw grid h-[15vh] grid-rows-5 place-content-center rounded-lg bg-white/80 px-2 py-1 shadow-lg">
       <Modal id="setName" isOpen={isNameModalOpen} onClose={() => setIsNameModalOpen(false)} className="bg-transparent">
         <div className="rounded-lg bg-white/80 p-4 shadow-lg">
           {/* TODO: 変更・追加（作成）・移動をわかりやすくする セット間の転送も必要 */}

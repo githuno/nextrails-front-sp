@@ -150,11 +150,11 @@ const ImagesetContent: React.FC<{ isOpen?: boolean }> = ({ isOpen = true }) => {
         <Preview isOpen={isOpen} />
       </div>
       {cameraState.isAvailable !== null && (
-        <div className="fixed bottom-[5%] left-0 w-full p-4">
+        <div className="fixed bottom-[10%] left-0 w-full p-4">
           <Controller />
         </div>
       )}
-      <div className="fixed top-1 left-0 w-full p-2">
+      <div className="fixed top-[-1] p-2">
         <Showcase />
       </div>
     </>

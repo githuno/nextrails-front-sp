@@ -1,7 +1,5 @@
 import { Carousel } from "@/components/atoms"
 import { ImagesetState, useImageset } from "@/components/camera"
-import { LoadingSpinner } from "@/components/camera/_utils"
-import Image from "next/image"
 import { useCallback, useEffect, useState } from "react"
 import { useSyncLatests } from "./hooks/useSyncLatests"
 
@@ -13,7 +11,7 @@ const LinesIcon = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => (
 
 const DrawerImagesets = () => {
   const { imageset, setImageset } = useImageset()
-  const { isLoading, syncPullLatests, latestImagesets } = useSyncLatests()
+  const { syncPullLatests, latestImagesets } = useSyncLatests()
 
   // const pullLatests = useCallback(async (): Promise<
   //   { storeName: string; files: File[] }[]
@@ -146,14 +144,14 @@ const DrawerImagesets = () => {
     latestImagesets.length > 1 && (
       <div className="fixed z-10">
         <input type="checkbox" id="drawerToggle" className="peer hidden" />
-        <div id="bg" className="fixed top-2 left-0 hidden h-[24vh] w-full bg-black/50 peer-checked:block" />
-        <div className="fixed top-7 left-[-95vw] flex h-[20vh] w-[95vw] flex-col items-end rounded-tr-3xl bg-white/80 shadow-lg transition-all duration-300 peer-checked:left-0">
+        <div id="bg" className="fixed top-2 left-0 hidden h-[24vh] w-[90vw] bg-black/50 peer-checked:block" />
+        <div className="fixed top-7 left-[-85vw] flex h-[20vh] w-[85vw] flex-col items-end rounded-tr-3xl bg-white/80 shadow-lg transition-all duration-300 peer-checked:left-0">
           <label
             htmlFor="drawerToggle"
             className="absolute right-[-1.2rem] bottom-0 flex h-8 w-8 translate-x-1/2 transform cursor-pointer items-center justify-center rounded-tr-full rounded-br-full bg-white/80 shadow-[4px_4px_6px_-1px_rgba(0,0,0,0.3)] transition-transform duration-300 peer-checked:rotate-180"
             // INFO: shadow-[X方向_Y方向_ぼかし半径_拡散半径_色] で影を調整している
           >
-            {isLoading ? <LoadingSpinner size="16px" /> : <LinesIcon className="h-4 w-4" fill="#999" />}
+            <LinesIcon className="h-4 w-4" fill="#999" />
           </label>
 
           {/* ドロワー内の要素 */}
@@ -176,17 +174,10 @@ const DrawerImagesets = () => {
                         {files[0].contentType === "video/webm" ? (
                           <video controls src={files[0].idbUrl ?? ""} className="h-full w-full object-contain" />
                         ) : (
-                          // <img
-                          //   src={files[0].idbUrl ?? ""}
-                          //   alt={`Image ${files[0].idbId}`}
-                          //   className="h-full w-full object-contain"
-                          // />
-                          <Image
+                          <img
                             src={files[0].idbUrl ?? ""}
                             alt={`Image ${files[0].idbId}`}
-                            fill
-                            style={{ objectFit: "contain" }}
-                            className="p-0.5"
+                            className="h-full w-full object-contain p-0.5"
                           />
                         )}
                       </div>

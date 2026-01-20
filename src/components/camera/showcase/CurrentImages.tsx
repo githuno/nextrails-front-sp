@@ -126,7 +126,7 @@ const CurrentImages = () => {
     } finally {
       setIsLoading((prev) => prev.filter((name) => name !== currentName))
     }
-  }, [imageset.name, idb, syncPullFiles, setImageset, checkUpdatedAt])
+  }, [imageset.name, idb, cloud.state.isConnected, setImageset, checkUpdatedAt, syncPullFiles])
 
   const localCleanup = useCallback(
     async (imagesetName: string) => {
@@ -271,14 +271,14 @@ const CurrentImages = () => {
 
   return (
     <>
-      {(isLoading.includes(imageset.name) || cameraState.isAvailable === null) && (
+      {/* {(isLoading.includes(imageset.name) || cameraState.isAvailable === null) && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/50">
           <div className="flex w-12 items-center justify-center">
             <LoadingSpinner size="48px" />
           </div>
         </div>
-      )}
-      <Carousel className="h-16" containerClassName="gap-x-3">
+      )} */}
+      <Carousel className="h-16" containerClassName="h-full" gap="0">
         {imageset.files
           .filter((file) => !file.deletedAt)
           .map((file) => (
