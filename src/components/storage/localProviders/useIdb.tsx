@@ -36,13 +36,97 @@ class IdbManager<T extends IdbFile> {
     return this._dbName
   }
 
-  private updateState(newState: Partial<IdbState>) {
-    this.setState((prevState) => {
-      const nextState = { ...prevState, ...newState }
-      this.state = nextState
-      return nextState
+  // private updateState(newState: Partial<IdbState>) {
+  //   this.setState((prevState) => {
+  //     // 実際の内容が変わっているかチェック
+  //     const isChanged = Object.entries(newState).some(([key, value]) => {
+  //       const current = prevState[key as keyof IdbState]
+  //       if (Array.isArray(value) && Array.isArray(current)) {
+  //         return value.length !== current.length || value.some((v, i) => v !== current[i])
+  //       }
+  //       return current !== value
+  //     })
+
+  //     if (!isChanged) return prevState
+
+  //     const nextState = { ...prevState, ...newState }
+  //     this.state = nextState
+  //     return nextState
+  //   })
+  // }
+
+  private addStoreLoading(storeName: string) {
+    this.setState((prev) => {
+      if (prev.isStoreLoading.includes(storeName)) return prev
+      const next = { ...prev, isStoreLoading: [...prev.isStoreLoading, storeName] }
+      this.state = next
+      return next
     })
   }
+
+  private removeStoreLoading(storeName: string) {
+    this.setState((prev) => {
+      if (!prev.isStoreLoading.includes(storeName)) return prev
+      const next = { ...prev, isStoreLoading: prev.isStoreLoading.filter((n) => n !== storeName) }
+      this.state = next
+      return next
+    })
+  }
+
+  private addUpdating(idbId: string) {
+    this.setState((prev) => {
+      if (prev.isUpdating.includes(idbId)) return prev
+      const next = { ...prev, isUpdating: [...prev.isUpdating, idbId] }
+      this.state = next
+      return next
+    })
+  }
+
+  private removeUpdating(idbId: string) {
+    this.setState((prev) => {
+      if (!prev.isUpdating.includes(idbId)) return prev
+      const next = { ...prev, isUpdating: prev.isUpdating.filter((id) => id !== idbId) }
+      this.state = next
+      return next
+    })
+  }
+
+  private addDeleting(idbId: string) {
+    this.setState((prev) => {
+      if (prev.isDeleting.includes(idbId)) return prev
+      const next = { ...prev, isDeleting: [...prev.isDeleting, idbId] }
+      this.state = next
+      return next
+    })
+  }
+
+  private removeDeleting(idbId: string) {
+    this.setState((prev) => {
+      if (!prev.isDeleting.includes(idbId)) return prev
+      const next = { ...prev, isDeleting: prev.isDeleting.filter((id) => id !== idbId) }
+      this.state = next
+      return next
+    })
+  }
+
+  private addStoreSyncing(storeName: string) {
+    this.setState((prev) => {
+      if (prev.isStoreSyncing.includes(storeName)) return prev
+      const next = { ...prev, isStoreSyncing: [...prev.isStoreSyncing, storeName] }
+      this.state = next
+      return next
+    })
+  }
+
+  private removeStoreSyncing(storeName: string) {
+    this.setState((prev) => {
+      if (!prev.isStoreSyncing.includes(storeName)) return prev
+      const next = { ...prev, isStoreSyncing: prev.isStoreSyncing.filter((n) => n !== storeName) }
+      this.state = next
+      return next
+    })
+  }
+
   public revokeObjectURLs() {
     this.objectURLs.forEach((url) => {
       URL.revokeObjectURL(url)
@@ -84,13 +168,12 @@ class IdbManager<T extends IdbFile> {
   }
 
   async createStore(storeName: string): Promise<IDBPDatabase> {
-    this.updateState({
-      isStoreLoading: [...this.state.isStoreLoading, storeName],
-    })
+    this.addStoreLoading(storeName)
     try {
       const db = await openDB(this.dbName)
       if (!db.objectStoreNames.contains(storeName)) {
         const newVersion = db.version + 1
+        db.close() // 重要: アップデート前に既存の接続を閉じる
         return openDB(this.dbName, newVersion, {
           upgrade(db) {
             db.createObjectStore(storeName, { keyPath: "idbId" })
@@ -102,16 +185,12 @@ class IdbManager<T extends IdbFile> {
       console.error("Error create store:", storeName, error)
       throw error
     } finally {
-      this.updateState({
-        isStoreLoading: this.state.isStoreLoading.filter((name) => name !== storeName),
-      })
+      this.removeStoreLoading(storeName)
     }
   }
 
   async destroyStore(storeName: string): Promise<void> {
-    this.updateState({
-      isStoreLoading: [...this.state.isStoreLoading, storeName],
-    })
+    this.addStoreLoading(storeName)
     try {
       const db = await openDB(this.dbName)
       if (db.objectStoreNames.contains(storeName)) {
@@ -125,16 +204,18 @@ class IdbManager<T extends IdbFile> {
             this.objectURLs.delete(object.idbId)
           }
         })
-        // storeを削除
-        db.deleteObjectStore(storeName)
+        db.close() // 重要: アップデート前に既存の接続を閉じる
+        await openDB(this.dbName, db.version + 1, {
+          upgrade(db) {
+            db.deleteObjectStore(storeName)
+          },
+        })
       }
     } catch (error) {
       console.error("Error destroy store:", storeName, error)
       throw error
     } finally {
-      this.updateState({
-        isStoreLoading: this.state.isStoreLoading.filter((name) => name !== storeName),
-      })
+      this.removeStoreLoading(storeName)
     }
   }
 
@@ -176,76 +257,87 @@ class IdbManager<T extends IdbFile> {
       }
     },
   ): Promise<T | T[] | undefined> {
-    this.updateState({
-      isStoreLoading: [...this.state.isStoreLoading, storeName],
-    })
+    this.addStoreLoading(storeName)
     try {
-      const db = await this.createStore(storeName) // storeがなければ作成される
+      const db = await openDB(this.dbName)
+      if (!db.objectStoreNames.contains(storeName)) {
+        return options?.date?.order === "latest" ? undefined : []
+      }
       const tx = db.transaction(storeName, "readonly")
       const store = tx.objectStore(storeName)
-      if (options?.date?.order === "latest") {
-        // INFO: 最新のファイルを一つだけ取得する場合
-        const files = (await store.getAll()) as T[]
-        if (files.length === 0) return undefined
+      const result = await (async () => {
+        if (options?.date?.order === "latest") {
+          // INFO: 最新のファイルを一つだけ取得する場合
+          const files = (await store.getAll()) as T[]
+          if (files.length === 0) return undefined
 
-        const latestFile: T = files
-          .filter((file) => file.deletedAt === null) // 論理削除されていないファイルのみ
-          .reduce((latest, file) => {
-            const currentValue = file[options.date!.key]
-            const latestValue = latest[options.date!.key]
-            return currentValue > latestValue ? file : latest
-          }, files[0])
+          const latestFile: T = files
+            .filter((file) => file.deletedAt === null) // 論理削除されていないファイルのみ
+            .reduce((latest, file) => {
+              const currentValue = file[options.date!.key]
+              const latestValue = latest[options.date!.key]
+              return currentValue > latestValue ? file : latest
+            }, files[0])
 
-        if (latestFile.blob) {
-          const existingUrl = this.objectURLs.get(latestFile.idbId)
-          if (existingUrl) URL.revokeObjectURL(existingUrl)
-          const newUrl = URL.createObjectURL(latestFile.blob)
-          this.objectURLs.set(latestFile.idbId, newUrl)
-          latestFile.idbUrl = newUrl
-          latestFile.blob = null // blobは返さない
-        }
-        return latestFile
-      } else if (options?.idbId) {
-        // INFO: 特定のファイルを取得する場合
-        const file = (await store.get(options.idbId)) as T
-        if (!file.blob) return undefined
-        // // CHECK: 一旦単体GETではidbUrlの更新は行わない
-        // const existingUrl = this.objectURLs.get(file.idbId);
-        // if (existingUrl) URL.revokeObjectURL(existingUrl);
-        // const newUrl = URL.createObjectURL(file.blob);
-        // this.objectURLs.set(file.idbId, newUrl);
-        // file.idbUrl = newUrl;
-        file.blob = null // blobは返さない
-        return file
-      } else {
-        // INFO: 全てのファイルを取得する場合
-        const files = (await store.getAll()) as T[]
-        for (const file of files) {
-          if (!file.blob) continue
-          const existingUrl = this.objectURLs.get(file.idbId)
-          if (existingUrl) URL.revokeObjectURL(existingUrl)
-          const newUrl = URL.createObjectURL(file.blob)
-          this.objectURLs.set(file.idbId, newUrl)
-          file.idbUrl = newUrl
+          if (latestFile.blob) {
+            const existingUrl = this.objectURLs.get(latestFile.idbId)
+            // 既存のURLがある場合はそれを再利用し、新規発行は避ける（破棄もしない）
+            if (existingUrl) {
+              latestFile.idbUrl = existingUrl
+            } else {
+              const newUrl = URL.createObjectURL(latestFile.blob)
+              this.objectURLs.set(latestFile.idbId, newUrl)
+              latestFile.idbUrl = newUrl
+            }
+            latestFile.blob = null // blobは返さない
+          }
+          return latestFile
+        } else if (options?.idbId) {
+          // INFO: 特定のファイルを取得する場合
+          const file = (await store.get(options.idbId)) as T
+          if (!file || !file.blob) return undefined
+          // // CHECK: 一旦単体GETではidbUrlの更新は行わない
+          // const existingUrl = this.objectURLs.get(file.idbId);
+          // if (existingUrl) URL.revokeObjectURL(existingUrl);
+          // const newUrl = URL.createObjectURL(file.blob);
+          // this.objectURLs.set(file.idbId, newUrl);
+          // file.idbUrl = newUrl;
           file.blob = null // blobは返さない
+          return file
+        } else {
+          // INFO: 全てのファイルを取得する場合
+          const files = (await store.getAll()) as T[]
+          for (const file of files) {
+            if (!file.blob) continue
+            const existingUrl = this.objectURLs.get(file.idbId)
+            if (existingUrl) {
+              file.idbUrl = existingUrl
+            } else {
+              const newUrl = URL.createObjectURL(file.blob)
+              this.objectURLs.set(file.idbId, newUrl)
+              file.idbUrl = newUrl
+            }
+            file.blob = null // blobは返さない
+          }
+          // ソート設定がある場合は指定されたキーでソート
+          if (options?.date?.order === "asc" || options?.date?.order === "desc") {
+            const { key, order } = options.date
+            files.sort((a, b) => {
+              const valueA = a[key]
+              const valueB = b[key]
+              return order === "desc"
+                ? valueA > valueB // 降順
+                  ? -1
+                  : 1
+                : valueA > valueB // 昇順
+                  ? 1
+                  : -1
+            })
+          }
+          return files
         }
-        // ソート設定がある場合は指定されたキーでソート
-        if (options?.date?.order === "asc" || options?.date?.order === "desc") {
-          const { key, order } = options.date
-          files.sort((a, b) => {
-            const valueA = a[key]
-            const valueB = b[key]
-            return order === "desc"
-              ? valueA > valueB // 降順
-                ? -1
-                : 1
-              : valueA > valueB // 昇順
-                ? 1
-                : -1
-          })
-        }
-        return files
-      }
+      })()
+      return result
     } catch (error) {
       console.error("Error fetching objects:", error)
       if (error instanceof Error) {
@@ -254,9 +346,7 @@ class IdbManager<T extends IdbFile> {
       }
       throw error
     } finally {
-      this.updateState({
-        isStoreLoading: this.state.isStoreLoading.filter((name) => name !== storeName),
-      })
+      this.removeStoreLoading(storeName)
     }
   }
 
@@ -264,7 +354,7 @@ class IdbManager<T extends IdbFile> {
   // もし同じIDで新しいファイルを追加しようとすると、既存のエントリが上書きされます。
   async post<T extends IdbFile>(storeName: string, data: T): Promise<T> {
     if (!data.blob) throw new Error("Data blob is required")
-    this.updateState({ isUpdating: [...this.state.isUpdating, data.idbId] })
+    this.addUpdating(data.idbId)
     try {
       const db = await this.createStore(storeName)
       const tx = db.transaction(storeName, "readwrite")
@@ -280,9 +370,7 @@ class IdbManager<T extends IdbFile> {
       console.error("Error post object:", error)
       throw error
     } finally {
-      this.updateState({
-        isUpdating: this.state.isUpdating.filter((idbId) => idbId !== data.idbId),
-      })
+      this.removeUpdating(data.idbId)
     }
   }
 
@@ -307,8 +395,6 @@ class IdbManager<T extends IdbFile> {
         if (idbLatestFile) {
           idbLatestFile.blob = null // blobは返さない
           results.push({ files: [idbLatestFile], storeName })
-        } else {
-          results.push({ files: [], storeName })
         }
       }
     } else {
@@ -319,8 +405,10 @@ class IdbManager<T extends IdbFile> {
       for (const { files, storeName } of set) {
         let latestFile: T | null = null
         if (!idbStoreNames.includes(storeName)) {
-          // idbにストアが存在しない場合
-          latestFile = await this.post(storeName, files[0]) // ファイルを作成して返す
+          // idbにストアが存在しない場合（クラウドのファイルを1件保存してストア作成）
+          if (files[0]) {
+            latestFile = await this.post(storeName, files[0])
+          }
         } else {
           // idbにストアが存在する場合
           const idbLatestFile = (await this.get(storeName, {
@@ -339,8 +427,6 @@ class IdbManager<T extends IdbFile> {
         if (latestFile) {
           latestFile.blob = null // blobは返さない
           results.push({ files: [latestFile], storeName })
-        } else {
-          results.push({ files: [], storeName })
         }
       }
 
@@ -353,8 +439,6 @@ class IdbManager<T extends IdbFile> {
           if (idbLatestFile) {
             idbLatestFile.blob = null // blobは返さない
             results.push({ files: [idbLatestFile], storeName })
-          } else {
-            results.push({ files: [], storeName })
           }
         }
       }
@@ -368,15 +452,14 @@ class IdbManager<T extends IdbFile> {
     files: T[],
     options?: { dateKey: keyof T; order: "asc" | "desc" },
   ): Promise<(T & { storeName?: string })[]> {
-    this.updateState({
-      isStoreSyncing: [...this.state.isStoreSyncing, storeName],
-    })
+    this.addStoreSyncing(storeName)
     let newFiles: T[] = []
     try {
-      const db = await openDB(this.dbName)
+      const db = files.length > 0 ? await this.createStore(storeName) : await openDB(this.dbName)
+      if (!db.objectStoreNames.contains(storeName)) return []
       const tx = db.transaction(storeName, "readwrite")
       const store = tx.objectStore(storeName)
-      const existingFiles = await store.getAll()
+      const existingFiles = (await store.getAll()) as T[]
       if (!existingFiles) {
         newFiles = files
       } else {
@@ -388,9 +471,9 @@ class IdbManager<T extends IdbFile> {
           )
         })
       }
-      this.updateState({
-        isUpdating: [...this.state.isUpdating, ...newFiles.map((file) => file.idbId)],
-      })
+      for (const file of newFiles) {
+        this.addUpdating(file.idbId)
+      }
       for (const file of newFiles) {
         await store.put(file) // putメソッドはエントリが存在しない場合は追加し、存在する場合は更新する
       }
@@ -404,17 +487,17 @@ class IdbManager<T extends IdbFile> {
       console.error("Error sync object:", error)
       throw error
     } finally {
-      this.updateState({
-        isUpdating: this.state.isUpdating.filter((idbId) => !newFiles.some((file) => file.idbId === idbId)),
-        isStoreSyncing: this.state.isStoreSyncing.filter((name) => name !== storeName),
-      })
+      for (const file of newFiles) {
+        this.removeUpdating(file.idbId)
+      }
+      this.removeStoreSyncing(storeName)
     }
   }
 
   async put(storeName: string, data: T): Promise<void> {
-    this.updateState({ isUpdating: [...this.state.isUpdating, data.idbId] })
+    this.addUpdating(data.idbId)
     try {
-      const db = await openDB(this.dbName)
+      const db = await this.createStore(storeName)
       const tx = db.transaction(storeName, "readwrite")
       const store = tx.objectStore(storeName)
       const existingFile = (await store.get(data.idbId)) as T
@@ -438,14 +521,12 @@ class IdbManager<T extends IdbFile> {
       console.error("Error put object:", error)
       throw error
     } finally {
-      this.updateState({
-        isUpdating: this.state.isUpdating.filter((idbId) => idbId !== data.idbId),
-      })
+      this.removeUpdating(data.idbId)
     }
   }
 
   async delete(storeName: string, idbId: string): Promise<void> {
-    this.updateState({ isDeleting: [...this.state.isDeleting, idbId] })
+    this.addDeleting(idbId)
     try {
       const db = await openDB(this.dbName)
       const tx = db.transaction(storeName, "readwrite")
@@ -460,9 +541,7 @@ class IdbManager<T extends IdbFile> {
       console.error("Error delete object:", error)
       throw error
     } finally {
-      this.updateState({
-        isDeleting: this.state.isDeleting.filter((deleteId) => deleteId !== idbId),
-      })
+      this.removeDeleting(idbId)
     }
   }
 
@@ -522,7 +601,7 @@ const createIdbContext = <T extends IdbFile>() => {
 }
 
 // デフォルトのコンテキスト
-const DefaultIdbContext = createIdbContext<any>()
+const DefaultIdbContext = createIdbContext<IdbFile>()
 
 // プロバイダーコンポーネント
 const IdbProvider = <T extends IdbFile>({ children }: { children: React.ReactNode }) => {
@@ -546,7 +625,11 @@ const IdbProvider = <T extends IdbFile>({ children }: { children: React.ReactNod
     [state, managers],
   )
 
-  return <DefaultIdbContext.Provider value={contextValue}>{children}</DefaultIdbContext.Provider>
+  return (
+    <DefaultIdbContext.Provider value={contextValue as unknown as IdbContextValue<IdbFile>}>
+      {children}
+    </DefaultIdbContext.Provider>
+  )
 }
 
 // カスタムフック

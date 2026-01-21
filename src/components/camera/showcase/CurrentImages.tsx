@@ -2,7 +2,7 @@ import { Carousel, Modal } from "@/components/atoms"
 import { useImageset, type File } from "@/components/camera"
 import { LoadingSpinner, SyncIcon, useCamera } from "@/components/camera/_utils"
 import { useStorage } from "@/components/storage"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import { useSyncImageset } from "./hooks/useSyncImageset"
 
 const CurrentImages = () => {
@@ -14,7 +14,8 @@ const CurrentImages = () => {
   const [isImageModalOpen, setIsImageModalOpen] = useState<boolean>(false)
   const [carouselIndex, setCarouselIndex] = useState<number | null>(null)
 
-  const isInitializingRef = useRef(false)
+  const isInitializingRef = useRef<string>("")
+  const isAutoPushingRef = useRef<string>("")
 
   const { syncPullFiles, syncPushFile, checkUpdatedAt, isSyncing } = useSyncImageset()
 
@@ -97,7 +98,7 @@ const CurrentImages = () => {
   //   [idb, cloudPutFile, cloudPostFile, cloudDeleteFile, isLoading]
   // );
 
-  const getImages = useCallback(async () => {
+  const onGetImages = useEffectEvent(async () => {
     const currentName = imageset.name
     setIsLoading((prev) => [...prev, currentName])
     try {
@@ -126,31 +127,30 @@ const CurrentImages = () => {
     } finally {
       setIsLoading((prev) => prev.filter((name) => name !== currentName))
     }
-  }, [imageset.name, idb, cloud.state.isConnected, setImageset, checkUpdatedAt, syncPullFiles])
+  })
 
-  const localCleanup = useCallback(
-    async (imagesetName: string) => {
-      const targetFiles = imageset.files.filter(
-        (file) => file.deletedAt && file.updatedAt < file.fetchedAt, // 削除済みかつ取得以降に更新されていないファイル
-      )
-      try {
-        for (const file of targetFiles) {
-          await idb.delete(imagesetName, file.idbId) // IDBの削除済みファイルを削除
-          setImageset((prev) =>
-            prev.name === imagesetName
-              ? {
-                  ...prev,
-                  files: prev.files.filter((file) => !file.deletedAt),
-                }
-              : prev,
-          )
-        }
-      } catch (error) {
-        console.error("Error cleaning up media:", error)
+  const onLocalCleanup = useEffectEvent(async () => {
+    const imagesetName = imageset.name
+    const targetFiles = imageset.files.filter(
+      (file) => file.deletedAt && file.updatedAt < file.fetchedAt, // 削除済みかつ取得以降に更新されていないファイル
+    )
+    if (targetFiles.length === 0) return
+    try {
+      for (const file of targetFiles) {
+        await idb.delete(imagesetName, file.idbId) // IDBの削除済みファイルを削除
       }
-    },
-    [idb, imageset.files, setImageset],
-  )
+      setImageset((prev) =>
+        prev.name === imagesetName
+          ? {
+              ...prev,
+              files: prev.files.filter((f) => !targetFiles.some((tf) => tf.idbId === f.idbId)),
+            }
+          : prev,
+      )
+    } catch (error) {
+      console.error("Error cleaning up media:", error)
+    }
+  })
 
   const handleLocalDelete = useCallback(
     async ({ setName, file }: { setName: string; file: File }) => {
@@ -205,54 +205,65 @@ const CurrentImages = () => {
   )
 
   // debug ---------------------------------------------------------------------
-  useEffect(() => {
-    console.log("cameraState:", cameraState)
-  }, [cameraState])
-  useEffect(() => {
-    console.log("imageset.files:", imageset.files)
-  }, [imageset.files])
-  useEffect(() => {
-    console.log("cloud", cloud.state)
-  }, [cloud.state])
-  useEffect(() => {
-    console.log("idbState:", idb.state)
-  }, [idb.state])
+  // useEffect(() => {
+  //   console.log("cameraState:", cameraState)
+  // }, [cameraState])
+  // useEffect(() => {
+  //   console.log("imageset.files:", imageset.files)
+  // }, [imageset.files])
+  // useEffect(() => {
+  //   console.log("cloud", cloud.state)
+  // }, [cloud.state])
+  // useEffect(() => {
+  //   console.log("idbState:", idb.state)
+  // }, [idb.state])
   // ---------------------------------------------------------------------------
 
-  useEffect(() => {
-    if (isInitializingRef.current) return
-    isInitializingRef.current = true
+  const onInitialize = useEffectEvent(async () => {
+    const setName = imageset.name
+    if (isLoading.includes(setName)) return
 
-    const initialize = async () => {
-      if (!isLoading.includes(imageset.name)) {
-        await getImages()
-        localCleanup(imageset.name)
-      }
-      isInitializingRef.current = false
+    try {
+      isInitializingRef.current = setName
+      await onGetImages()
+      await onLocalCleanup()
+    } finally {
+      isInitializingRef.current = ""
     }
-    initialize()
-  }, [imageset.name, getImages, localCleanup, isLoading])
+  })
 
   useEffect(() => {
-    const autoPush = async () => {
-      if (
-        !cloud.state.isConnected || // オフラインの場合
-        (cameraState.isAvailable && !cameraState.isScanning) || // カメラが使えるのにSCANNING状態でない場合
-        imageset.files.length === 0 || // filesがない場合
-        isLoading.includes(imageset.name) // 同期中の場合
-      )
-        return // 上記条件下では処理しない
+    if (isInitializingRef.current === imageset.name) return
+    onInitialize()
+  }, [imageset.name])
 
+  const onAutoPush = useEffectEvent(async () => {
+    const currentName = imageset.name
+    if (
+      !cloud.state.isConnected ||
+      (cameraState.isAvailable && !cameraState.isScanning) ||
+      imageset.files.length === 0 ||
+      isLoading.includes(currentName) ||
+      isSyncing.includes(currentName)
+    )
+      return
+
+    try {
+      isAutoPushingRef.current = currentName
       await syncPushFile({ set: imageset })
+    } finally {
+      isAutoPushingRef.current = ""
     }
-    autoPush()
+  })
+
+  useEffect(() => {
+    if (isAutoPushingRef.current === imageset.name) return
+    onAutoPush()
   }, [
-    imageset.files,
+    imageset.files.length, // ファイル数変更時はトリガー
+    imageset.name, // 名前変更時はトリガー
     cameraState.isScanning,
     cameraState.isAvailable,
-    imageset,
-    isLoading,
-    syncPushFile,
     cloud.state.isConnected,
   ])
 

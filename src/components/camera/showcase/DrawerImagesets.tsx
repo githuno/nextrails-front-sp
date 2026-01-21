@@ -1,6 +1,7 @@
 import { Carousel } from "@/components/atoms"
-import { ImagesetState, useImageset } from "@/components/camera"
-import { useCallback, useEffect, useState } from "react"
+import { ImagesetState, useImageset, type File } from "@/components/camera"
+import { useStorage } from "@/components/storage"
+import { useCallback, useEffect, useRef } from "react"
 import { useSyncLatests } from "./hooks/useSyncLatests"
 
 const LinesIcon = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => (
@@ -11,6 +12,7 @@ const LinesIcon = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => (
 
 const DrawerImagesets = () => {
   const { imageset, setImageset } = useImageset()
+  const { idb, cloud } = useStorage()
   const { syncPullLatests, latestImagesets } = useSyncLatests()
 
   // const pullLatests = useCallback(async (): Promise<
@@ -101,13 +103,15 @@ const DrawerImagesets = () => {
   // }, [idb, setLatestImagesets, imageset.name]);
 
   const handleCarouselItemClick = useCallback(
-    (name: string) => {
+    async (name: string) => {
       if (name !== imageset.name) {
+        // IDBからfilesを取得して同期的にセット
+        const files = ((await idb.get(name, { date: { key: "updatedAt", order: "desc" } })) as File[]) || []
         setImageset({
           id: BigInt(Date.now()),
           name: name,
           status: ImagesetState.DRAFT,
-          files: [],
+          files: files,
         })
       }
       // ドロワーを閉じる
@@ -116,32 +120,36 @@ const DrawerImagesets = () => {
         drawerToggle.checked = false
       }
     },
-    [imageset.name, setImageset],
+    [imageset.name, setImageset, idb],
   )
 
-  const [requireCloudState, setRequireCloudState] = useState<boolean>(true)
+  const isFetchingRef = useRef<boolean>(false)
 
   useEffect(() => {
+    if (isFetchingRef.current) return
     let timeoutId: NodeJS.Timeout
     const fetchLatests = async () => {
       // 実行前に1秒待つ
       timeoutId = await new Promise((resolve) => setTimeout(resolve, 1000))
-      if (requireCloudState) {
-        syncPullLatests()
-        setRequireCloudState(false)
-      } else {
-        syncPullLatests()
+      if (isFetchingRef.current) return
+      try {
+        isFetchingRef.current = true
+        await syncPullLatests()
+      } catch (error) {
+        console.error("Error fetching latests:", error)
+      } finally {
+        isFetchingRef.current = false
       }
     }
     fetchLatests()
     return () => {
       clearTimeout(timeoutId)
     }
-  }, [imageset.files, requireCloudState, syncPullLatests])
+  }, [cloud.state.isConnected, syncPullLatests])
 
   return (
     // ドロワー
-    latestImagesets.length > 1 && (
+    latestImagesets.length > 0 && (
       <div className="fixed z-10">
         <input type="checkbox" id="drawerToggle" className="peer hidden" />
         <div id="bg" className="fixed top-2 left-0 hidden h-[24vh] w-[90vw] bg-black/50 peer-checked:block" />
@@ -178,6 +186,9 @@ const DrawerImagesets = () => {
                             src={files[0].idbUrl ?? ""}
                             alt={`Image ${files[0].idbId}`}
                             className="h-full w-full object-contain p-0.5"
+                            // onError={(e) => {
+                            //   e.currentTarget.src = ""
+                            // }}
                           />
                         )}
                       </div>

@@ -1,10 +1,12 @@
 import { useImageset, type File, type Imageset } from "@/components/camera"
 import { useStorage } from "@/components/storage"
+import { useCloudActions } from "@/components/storage/cloudProviders/useCloud"
 import { apiFetch } from "@/hooks/useFetch"
 import { useCallback, useState } from "react"
 
 const useSyncImageset = () => {
-  const { idb, cloud } = useStorage()
+  const { idb } = useStorage()
+  const cloud = useCloudActions()
   const { setImageset } = useImageset()
   const [isSyncing, setIsSyncing] = useState<string[]>([]) // file.idbId or imageset.name
 
@@ -47,7 +49,7 @@ const useSyncImageset = () => {
         throw error
       }
     },
-    [cloud, idb, setImageset],
+    [cloud],
   )
 
   const postFile = useCallback(
@@ -105,7 +107,7 @@ const useSyncImageset = () => {
         setIsSyncing((prev) => prev.filter((id) => id !== file.idbId))
       }
     },
-    [cloud, setImageset],
+    [cloud],
   )
 
   const putFile = useCallback(async (imagesetName: string, file: File): Promise<File | undefined> => {
@@ -171,7 +173,7 @@ const useSyncImageset = () => {
         setIsSyncing((prev) => prev.filter((id) => id !== setName))
       }
     },
-    [cloud, idb, setImageset],
+    [idb, setImageset, pullFiles],
   )
 
   const syncPushFile = useCallback(
@@ -223,7 +225,7 @@ const useSyncImageset = () => {
         setIsSyncing((prev) => prev.filter((id) => id !== file.idbId))
       }
     },
-    [idb, postFile, putFile, deleteFile, isSyncing],
+    [idb, postFile, putFile, deleteFile, isSyncing, cloud.storage, setImageset],
   )
 
   const checkUpdatedAt = useCallback((descendedLocalfiles: File[]): number => {

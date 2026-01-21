@@ -1,9 +1,7 @@
-import { useImageset } from "@/components/camera"
 import { LoadingSpinner, useCamera } from "@/components/camera/_utils"
 import { FC, useEffect, useRef } from "react"
 
 const CameraPreview: FC<{ isOpen?: boolean }> = ({ isOpen = true }) => {
-  const { imageset } = useImageset()
   const { cameraState, camera } = useCamera()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -26,7 +24,7 @@ const CameraPreview: FC<{ isOpen?: boolean }> = ({ isOpen = true }) => {
     return () => {
       camera?.cleanup()
     }
-  }, [camera, isOpen, imageset.name])
+  }, [camera, isOpen])
 
   return (
     <>

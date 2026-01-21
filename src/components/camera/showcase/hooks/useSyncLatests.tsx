@@ -1,11 +1,13 @@
 import { ImagesetState, useImageset, type File, type Imageset } from "@/components/camera"
 import { useStorage } from "@/components/storage"
+import { useCloudActions } from "@/components/storage/cloudProviders/useCloud"
 import { apiFetch } from "@/hooks/useFetch"
 import { useCallback, useState } from "react"
 import { useSyncImageset } from "./useSyncImageset"
 
 const useSyncLatests = () => {
-  const { idb, cloud } = useStorage()
+  const { idb } = useStorage()
+  const cloud = useCloudActions()
   const { imageset } = useImageset()
   const { checkUpdatedAt, pullFiles } = useSyncImageset()
 
@@ -121,7 +123,7 @@ const useSyncLatests = () => {
       setIsLoading(false)
       // -----------------------------------------------------------------------
       // 特別. 非同期で各storeのcloudfilesをidbに同期しておく
-      const syncPromises = latestImagesets
+      const syncPromises = updatedSets
         .filter((set) => set.name !== imageset.name)
         .map(async (store) => {
           let params = "deletedAt_null=true&updatedAt_sort=desc"
@@ -150,7 +152,7 @@ const useSyncLatests = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [cloud.provider, cloud.storage, idb, imageset.name, pullImagesets, checkUpdatedAt])
+  }, [idb, imageset.name, pullImagesets, checkUpdatedAt, pullFiles])
 
   return {
     isLoading,

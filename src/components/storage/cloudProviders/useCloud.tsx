@@ -1,5 +1,5 @@
 import { apiFetch } from "@/hooks/useFetch"
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react"
+import React, { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react"
 
 import { useGDrive } from "./gDriveProvider"
 import { useR2 } from "./nativeProvider"
@@ -54,22 +54,25 @@ const contentTypeToExtension: Record<string, { ext: string; class: DirType }> = 
 }
 
 // プロバイダーのコンテキストインターフェース
-interface CloudContextValue {
-  storage: StorageSession | null
+export interface CloudStateContextValue {
   state: CloudState
-  provider: CloudManager | null
-  selectProvider: (session: StorageSession) => void
-  removeProvider: () => Promise<void>
+}
 
+export interface CloudActionsContextValue {
+  storage: StorageSession | null
+  provider: CloudManager | null
+  selectProvider: (session: StorageSession) => Promise<void>
+  removeProvider: () => Promise<void>
   extensionToContentType: typeof extensionToContentType
   contentTypeToExtension: typeof contentTypeToExtension
 }
 
 // コンテキストの作成
-const CloudContext = createContext<CloudContextValue | null>(null)
+const CloudStateContext = createContext<CloudStateContextValue | null>(null)
+const CloudActionsContext = createContext<CloudActionsContextValue | null>(null)
 
 // プロバイダーコンポーネント
-export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const CloudProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<CloudState>({
     isChecking: false,
     isUploading: [],
@@ -85,6 +88,42 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // R2とGDriveのフックを直接コンポーネント内で呼び出す
   const { r2 } = useR2()
   const { gdrive } = useGDrive()
+
+  const checkSession = useCallback(async () => {
+    try {
+      setState((prev) => ({ ...prev, isChecking: true }))
+      const response = await apiFetch<Session>(SESSION_URL)
+      if (response && response.storage) {
+        const storage = response.storage
+        let newProvider: CloudManager | null = null
+        switch (storage.type) {
+          case "NATIVE":
+            newProvider = r2
+            break
+          case "GDRIVE":
+            newProvider = gdrive
+            break
+          default:
+            newProvider = null
+        }
+        if (newProvider) await newProvider.session()
+        setStorage(storage)
+        setProvider(newProvider)
+        setState((prev) => ({ ...prev, isConnected: true }))
+      } else {
+        setProvider(null)
+        setStorage(null)
+        setState((prev) => ({ ...prev, isConnected: false }))
+      }
+    } catch (error) {
+      console.error("Session check failed:", error)
+      setProvider(null)
+      setStorage(null)
+      setState((prev) => ({ ...prev, isConnected: false }))
+    } finally {
+      setState((prev) => ({ ...prev, isChecking: false }))
+    }
+  }, [r2, gdrive])
 
   const selectProvider = useCallback(
     async (storage: StorageSession) => {
@@ -109,7 +148,6 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         // 3. セッション情報を設定
         await checkSession()
-        newProvider = null
       } catch (error) {
         console.error("Provider connection error:", error)
         if (newProvider) {
@@ -124,52 +162,8 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         throw error
       }
     },
-    [r2, gdrive],
+    [r2, gdrive, checkSession],
   )
-
-  const checkSession = async () => {
-    try {
-      setState((prev) => ({ ...prev, isChecking: true }))
-      // 1. クッキーのStorageセッションを確認
-      const response = await apiFetch<Session>(SESSION_URL)
-      if (response && response.storage) {
-        const storage = response.storage
-        let newProvider: CloudManager | null = null
-
-        // 1. プロバイダータイプに応じてmanagerを設定
-        switch (storage.type) {
-          case "NATIVE":
-            newProvider = r2
-            break
-          case "GDRIVE":
-            newProvider = gdrive
-            break
-          default:
-            newProvider = null
-        }
-        // 2. provider固有のセッションcheck処理を実行
-        if (newProvider) await newProvider.session()
-
-        // 3. 共通のセッション情報を設定
-        setStorage(storage)
-
-        // 4. providerをセット
-        setProvider(newProvider)
-        setState((prev) => ({ ...prev, isConnected: true }))
-      } else {
-        setProvider(null)
-        setStorage(null)
-        setState((prev) => ({ ...prev, isConnected: false }))
-      }
-    } catch (error) {
-      console.error("Session check failed:", error)
-      setProvider(null)
-      setStorage(null)
-      setState((prev) => ({ ...prev, isConnected: false }))
-    } finally {
-      setState((prev) => ({ ...prev, isChecking: false }))
-    }
-  }
 
   const disconnect = async () => {
     try {
@@ -180,43 +174,58 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }
 
-  // 接続状態の確認(初回レンダリング時, providerが変更された時)
   useEffect(() => {
     checkSession()
-  }, [])
+  }, [checkSession])
 
-  // 切断処理
   const removeProvider = useCallback(async () => {
     if (!provider) return
-    await provider.disconnect() // プロバイダー固有の切断処理を実行
-    await disconnect() // セッションを削除
+    await provider.disconnect()
+    await disconnect()
     setProvider(null)
     setStorage(null)
     setState((prev) => ({ ...prev, isConnected: false }))
   }, [provider])
 
+  const stateContextValue = React.useMemo(() => ({ state }), [state])
+  const actionsContextValue = React.useMemo(
+    () => ({
+      storage,
+      provider,
+      selectProvider,
+      removeProvider,
+      extensionToContentType,
+      contentTypeToExtension,
+    }),
+    [storage, provider, selectProvider, removeProvider],
+  )
+
   return (
-    <CloudContext.Provider
-      value={{
-        storage,
-        state,
-        provider,
-        selectProvider,
-        removeProvider,
-        extensionToContentType,
-        contentTypeToExtension,
-      }}
-    >
-      {children}
-    </CloudContext.Provider>
+    <CloudStateContext.Provider value={stateContextValue}>
+      <CloudActionsContext.Provider value={actionsContextValue}>{children}</CloudActionsContext.Provider>
+    </CloudStateContext.Provider>
   )
 }
 
 // カスタムフック
-export const useCloud = () => {
-  const context = useContext(CloudContext)
+export const useCloudState = () => {
+  const context = useContext(CloudStateContext)
   if (!context) {
-    throw new Error("useCloud must be used within CloudProvider")
+    throw new Error("useCloudState must be used within CloudProvider")
   }
   return context
+}
+
+export const useCloudActions = () => {
+  const context = useContext(CloudActionsContext)
+  if (!context) {
+    throw new Error("useCloudActions must be used within CloudProvider")
+  }
+  return context
+}
+
+export const useCloud = () => {
+  const { state } = useCloudState()
+  const actions = useCloudActions()
+  return { state, ...actions }
 }
