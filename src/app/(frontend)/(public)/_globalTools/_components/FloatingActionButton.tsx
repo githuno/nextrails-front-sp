@@ -1,20 +1,23 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react"
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { useIsClient } from "../_hooks/atoms/useIsClient"
 
 // --- 型定義 ---
 
-interface FloatingActionButtonContextType {
-  isExpanded: boolean
+interface FloatingActionButtonActionsContextType {
   setIsExpanded: React.Dispatch<React.SetStateAction<boolean>>
   toggle: () => void
-  flickIndex: number | null
   setFlickIndex: (index: number | null) => void
-  isDragging: boolean
   setIsDragging: (value: boolean) => void
   // フリック検知の一貫性を保つための共有設定
   config: ActionListConfig
+}
+
+interface FloatingActionButtonStateContextType {
+  isExpanded: boolean
+  flickIndex: number | null
+  isDragging: boolean
 }
 
 interface FloatingActionButtonProps {
@@ -78,7 +81,8 @@ interface SimplifiedFloatingActionButtonProps {
 
 // --- コンテキスト ---
 
-const FloatingActionButtonContext = createContext<FloatingActionButtonContextType | undefined>(undefined)
+const FloatingActionButtonActionsContext = createContext<FloatingActionButtonActionsContextType | undefined>(undefined)
+const FloatingActionButtonStateContext = createContext<FloatingActionButtonStateContextType | undefined>(undefined)
 
 interface ActionListConfig {
   total: number
@@ -93,9 +97,16 @@ const DEFAULT_CONFIG: ActionListConfig = {
   startAngle: -200,
   sweepAngle: 120,
 }
+const useFloatingActionButtonActions = () => {
+  const context = useContext(FloatingActionButtonActionsContext)
+  if (!context) {
+    throw new Error("FloatingActionButton components must be used within a FloatingActionButton")
+  }
+  return context
+}
 
-const useFloatingActionButton = () => {
-  const context = useContext(FloatingActionButtonContext)
+const useFloatingActionButtonState = () => {
+  const context = useContext(FloatingActionButtonStateContext)
   if (!context) {
     throw new Error("FloatingActionButton components must be used within a FloatingActionButton")
   }
@@ -124,16 +135,24 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> & {
   const [flickIndex, setFlickIndex] = useState<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
 
-  const toggle = () => setIsExpanded((prev) => !prev)
+  const toggle = useCallback(() => setIsExpanded((prev) => !prev), [])
 
   const config = useMemo(() => ({ total, distance, startAngle, sweepAngle }), [total, distance, startAngle, sweepAngle])
 
-  const value = useMemo(
-    () => ({ isExpanded, setIsExpanded, toggle, flickIndex, setFlickIndex, isDragging, setIsDragging, config }),
-    [isExpanded, flickIndex, isDragging, config],
+  const actionsValue = useMemo(
+    () => ({ setIsExpanded, toggle, setFlickIndex, setIsDragging, config }),
+    [setIsExpanded, toggle, setFlickIndex, setIsDragging, config],
   )
 
-  return <FloatingActionButtonContext.Provider value={value}>{children}</FloatingActionButtonContext.Provider>
+  const stateValue = useMemo(() => ({ isExpanded, flickIndex, isDragging }), [isExpanded, flickIndex, isDragging])
+
+  return (
+    <FloatingActionButtonActionsContext.Provider value={actionsValue}>
+      <FloatingActionButtonStateContext.Provider value={stateValue}>
+        {children}
+      </FloatingActionButtonStateContext.Provider>
+    </FloatingActionButtonActionsContext.Provider>
+  )
 }
 
 /**
@@ -141,8 +160,8 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> & {
  * また、上級ユーザー向けのフリックジェスチャーを処理します。
  */
 const Trigger: React.FC<TriggerProps> = ({ children, items }) => {
-  const { isExpanded, toggle, flickIndex, setFlickIndex, isDragging, setIsDragging, setIsExpanded, config } =
-    useFloatingActionButton()
+  const { toggle, setFlickIndex, setIsDragging, setIsExpanded, config } = useFloatingActionButtonActions()
+  const { isExpanded, flickIndex, isDragging } = useFloatingActionButtonState()
 
   const [startPos, setStartPos] = useState({ x: 0, y: 0 })
 
@@ -223,7 +242,7 @@ const Trigger: React.FC<TriggerProps> = ({ children, items }) => {
  * アクションアイテムのコンテナコンポーネント。
  */
 const ActionList: React.FC<ActionListProps> = ({ children, className = "" }) => {
-  const { isExpanded, isDragging } = useFloatingActionButton()
+  const { isExpanded, isDragging } = useFloatingActionButtonState()
   const showOverlay = isExpanded || isDragging
   return (
     <>
@@ -243,7 +262,8 @@ const ActionList: React.FC<ActionListProps> = ({ children, className = "" }) => 
  * 個別のアクションアイテム。位置を計算します。
  */
 const ActionItem: React.FC<ActionItemProps> = ({ index = 0, children }) => {
-  const { isExpanded, flickIndex, isDragging, config, setIsExpanded } = useFloatingActionButton()
+  const { config, setIsExpanded } = useFloatingActionButtonActions()
+  const { isExpanded, isDragging, flickIndex } = useFloatingActionButtonState()
   const { total, distance, startAngle, sweepAngle } = config
   const isFlicked = flickIndex === index
   const { x, y } = useMemo(() => {

@@ -46,14 +46,18 @@ export const getDb = async () => {
       pgInstance = await PGliteWorker.create(pgWorker, workerOptions)
       dbInstance = drizzle(pgInstance as unknown as PGlite, { schema })
 
-      // テーブルの存在チェック (to_regclass は Postgres の高速なカタログ検索関数)
-      const res = await pgInstance.query<{ exists: boolean }>(`
-        SELECT to_regclass('public.captured_files') IS NOT NULL as exists;
+      // カラムまで含めて整合性をチェック (information_schema を使用)
+      const columnCheckRes = await pgInstance.query<{ exists: boolean }>(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'captured_files' AND column_name = 'file_set'
+        ) as exists;
       `)
 
-      if (!res.rows[0]?.exists) {
-        // テーブルが存在しない初回のみ実行
+      if (!columnCheckRes.rows[0]?.exists) {
+        // テーブルを安全に削除して再作成（開発中あるいは内部ツールなので破壊的変更を許容）
         await pgInstance.exec(`
+          DROP TABLE IF EXISTS captured_files;
           CREATE TABLE captured_files (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             session_id TEXT NOT NULL,
@@ -69,6 +73,7 @@ export const getDb = async () => {
           CREATE INDEX idx_captured_files_session_id ON captured_files(session_id);
           CREATE INDEX idx_captured_files_file_set ON captured_files(file_set);
         `)
+        console.log("[PgliteStore] Column mismatch detected, table recreated.")
       }
 
       notify()

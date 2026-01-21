@@ -173,11 +173,15 @@ const setup = async (
 const applyPreviewOrientationFix = (): void => {
   if (!state.videoElement) return
   // 撮影はcanvas側で補正済み。ここではプレビューのみを最小限補正する。
-  // Tailwindのscale等（transform）と干渉しないよう、CSS individual transformのrotateを使う。
   const shouldFlipVertical =
     state.facingMode === "user" && (state.deviceOrientation === 90 || state.deviceOrientation === 270)
-  state.videoElement.style.setProperty("transform-origin", "center")
-  state.videoElement.style.setProperty("rotate", shouldFlipVertical ? "180deg" : "0deg")
+
+  // requestAnimationFrameを用いて、高頻度なセンサーイベントによるスタイル更新をブラウザの描画周期に同期させる
+  requestAnimationFrame(() => {
+    if (!state.videoElement) return
+    state.videoElement.style.setProperty("transform-origin", "center")
+    state.videoElement.style.setProperty("rotate", shouldFlipVertical ? "180deg" : "0deg")
+  })
 }
 
 const getAvailableDevices = async (): Promise<MediaDeviceInfo[]> => {

@@ -348,7 +348,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                           e.stopPropagation()
                           handleBulkDelete()
                         }}
-                        className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 ring-1 ring-white/10 transition-all hover:bg-zinc-800 hover:text-red-400 active:scale-90"
+                        className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 ring-1 ring-white/10 transition-all hover:bg-zinc-800 hover:text-white active:scale-90"
                       >
                         <TrashIcon size="14px" color="currentColor" />
                       </button>

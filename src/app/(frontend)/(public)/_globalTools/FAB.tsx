@@ -1,22 +1,29 @@
 "use client"
 
-import React, { Suspense, useRef, useState } from "react"
+import React, { Suspense, useCallback, useMemo, useRef, useState } from "react"
 import FloatingActionButton from "./_components/FloatingActionButton"
 import { CameraIcon } from "./_components/Icons"
 import { useSessionSync } from "./_hooks/useSessionSync"
-import { useToolActionStore } from "./_hooks/useToolActionStore"
+import { useToolActionStore, type ToolActionState, type ToolActions } from "./_hooks/useToolActionStore"
 import CameraModal from "./camera/Modal.Camera"
 import { useCameraState } from "./camera/cameraStore"
 
 // PGlite関連のimportは開発モード時のみ行う ------------------
-import { Repl } from "@electric-sql/pglite-repl"
+import dynamic from "next/dynamic"
 import { Modal } from "./_components/atoms/Modal"
 import { usePgliteStore } from "./_hooks/db/usePgliteStore"
+const Repl = dynamic(() => import("@electric-sql/pglite-repl").then((m) => m.Repl), { ssr: false })
 // ---------------------------------------------------------
 
 const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
   useSessionSync() // URLとStateのセッション同期を有効化
-  const { isCameraOpen, handleScan, setCameraOpen, handleSelect, handleFileChange } = useToolActionStore()
+
+  const isCameraOpen = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.isCameraOpen, []))
+  const handleScan = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleScan, []))
+  const setCameraOpen = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.setCameraOpen, []))
+  const handleSelect = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleSelect, []))
+  const handleFileChange = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleFileChange, []))
+
   const cameraState = useCameraState()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -25,15 +32,20 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
   const [isPgliteOpen, setPgliteOpen] = useState(false)
   // --------------------------------------------------
 
-  const fabItems = [
-    ...(cameraState.isAvailable
-      ? [{ id: 1, label: "Camera", icon: <CameraIcon />, onClick: () => setCameraOpen(true) }]
-      : []),
-    { id: 2, label: "Text", onClick: () => alert("Text Component") },
-    { id: 3, label: "Voice", onClick: () => alert("Voice Component") },
-    { id: 4, label: "File", onClick: () => handleSelect(fileInputRef) },
-    ...(process.env.NODE_ENV === "development" ? [{ id: 5, label: "PGLite", onClick: () => setPgliteOpen(true) }] : []),
-  ]
+  const fabItems = useMemo(
+    () => [
+      ...(cameraState.isAvailable
+        ? [{ id: 1, label: "Camera", icon: <CameraIcon />, onClick: () => setCameraOpen(true) }]
+        : []),
+      { id: 2, label: "Text", onClick: () => alert("Text Component") },
+      { id: 3, label: "Voice", onClick: () => alert("Voice Component") },
+      { id: 4, label: "File", onClick: () => handleSelect(fileInputRef) },
+      ...(process.env.NODE_ENV === "development"
+        ? [{ id: 5, label: "PGLite", onClick: () => setPgliteOpen(true) }]
+        : []),
+    ],
+    [cameraState.isAvailable, setCameraOpen, handleSelect],
+  )
 
   return (
     <div className="pointer-events-none fixed top-0 z-50 h-svh w-svw overflow-hidden">

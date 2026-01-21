@@ -26,6 +26,20 @@ const emitChange = () => {
   listeners.forEach((l) => l())
 }
 
+// シングルトンとしてのStorageリスナー
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY && e.newValue) {
+      try {
+        memoryState = JSON.parse(e.newValue)
+        emitChange()
+      } catch {
+        /* ignore */
+      }
+    }
+  })
+}
+
 const actions = {
   _loadLatest: (): SessionState => {
     if (typeof window === "undefined") return INITIAL_STATE
@@ -99,20 +113,8 @@ export const getSessionState = () => actions.getState()
 export const sessionStore = {
   subscribe: (callback: () => void) => {
     listeners.add(callback)
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY && e.newValue) {
-        memoryState = JSON.parse(e.newValue)
-        emitChange()
-      }
-    }
-    if (typeof window !== "undefined") {
-      window.addEventListener("storage", onStorage)
-    }
     return () => {
       listeners.delete(callback)
-      if (typeof window !== "undefined") {
-        window.removeEventListener("storage", onStorage)
-      }
     }
   },
   getSnapshot: () => {

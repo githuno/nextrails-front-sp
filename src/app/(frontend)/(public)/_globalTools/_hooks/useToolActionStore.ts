@@ -64,7 +64,7 @@ export interface ToolActions extends Required<CameraExternalActions> {
   deleteFiles: (items: { idbKey: string; id: string }[]) => Promise<void>
 }
 
-interface ToolActionState {
+export interface ToolActionState {
   isReady: boolean // actionsの準備状態
   isDbReady: boolean // DBの準備状態
   files: ToolFile[]
@@ -138,29 +138,60 @@ async function syncData() {
   try {
     const idb = idbStore()
 
-    // hasProcessedQueue（保存処理による再実行）か needsSync（外部からの割り込み）がある限りループする
     let shouldSync = true
     while (shouldSync) {
       shouldSync = false
       needsSync = false
 
       const db = await getDb()
-      const sessionID = getSessionState()?.currentId || "default"
+      const initialSessionID = getSessionState()?.currentId || "default"
+      const initialFileSet = state.currentFileSet
+
+      // 0. バッファされた保存を処理 (セッションやセットが確定してから保存し、その結果もメタデータ取得に含める)
+      if (state.pendingSaves.length > 0) {
+        const queue = [...state.pendingSaves]
+        state = { ...state, pendingSaves: [], syncStatus: "syncing" }
+        notify()
+        try {
+          for (const pending of queue) {
+            const fileName = pending.options?.fileName || `captured_${Date.now()}`
+            const [inserted] = await db
+              .insert(capturedFiles)
+              .values({
+                sessionId: initialSessionID,
+                fileSet: initialFileSet,
+                fileName,
+                mimeType: pending.file.type,
+                size: pending.file.size,
+                idbKey: pending.id,
+              })
+              .returning()
+            pending.resolve(inserted)
+          }
+          state = { ...state, syncStatus: "idle" }
+        } catch (error) {
+          state = { ...state, syncStatus: "error" }
+          queue.forEach((p) => p.reject(error))
+        }
+        notify()
+      }
 
       // 1. セッション内の全ファイルセット情報を取得 (メタデータ: カウントと最新プレビュー)
       // PGlite (Postgres) の ARRAY_AGG を使用して最新の idbKey を取得
-      const res = await db.execute(
-        sql`SELECT 
-           file_set as name, 
-           COUNT(*)::int as count, 
-           (ARRAY_AGG(idb_key ORDER BY created_at DESC))[1] as latest_idb_key 
-         FROM ${capturedFiles} 
-         WHERE ${capturedFiles.sessionId} = ${sessionID}
-         GROUP BY file_set`,
-      )
+      const res = await db
+        .select({
+          name: capturedFiles.fileSet,
+          count: sql<number>`count(*)::int`,
+          latest_idb_key: sql<
+            string | null
+          >`(array_agg(${capturedFiles.idbKey} order by ${capturedFiles.createdAt} desc))[1]`,
+        })
+        .from(capturedFiles)
+        .where(eq(capturedFiles.sessionId, initialSessionID))
+        .groupBy(capturedFiles.fileSet)
 
       // Zodにより実行時型安全性を確保。不正なデータは例外をスローして早期終了させる
-      const rawSetInfos: RawSetInfo[] = z.array(RawSetInfoSchema).parse(res.rows)
+      const rawSetInfos: RawSetInfo[] = z.array(RawSetInfoSchema).parse(res)
       const fileSetNameList = Array.from(new Set([...rawSetInfos.map((s) => s.name), state.currentFileSet])).sort()
       const existingSetInfoMap = new Map(state.fileSetInfo.map((s) => [s.name, s]))
 
@@ -193,7 +224,7 @@ async function syncData() {
       const records = await db
         .select()
         .from(capturedFiles)
-        .where(and(eq(capturedFiles.sessionId, sessionID), eq(capturedFiles.fileSet, state.currentFileSet)))
+        .where(and(eq(capturedFiles.sessionId, initialSessionID), eq(capturedFiles.fileSet, state.currentFileSet)))
         .orderBy(desc(capturedFiles.createdAt))
 
       // 3. 状態更新
@@ -260,40 +291,9 @@ async function syncData() {
         }
       }
 
-      // 5. バッファされた保存を処理
-      if (state.pendingSaves.length > 0) {
-        // 処理を開始する前にキューを空出しして多重実行を防止する
-        const queue = [...state.pendingSaves]
-        state = { ...state, pendingSaves: [], syncStatus: "syncing" }
-        notify()
-        try {
-          for (const pending of queue) {
-            const currentSessionID = getSessionState()?.currentId || "default"
-            const fileName = pending.options?.fileName || `captured_${Date.now()}`
-            const [inserted] = await db
-              .insert(capturedFiles)
-              .values({
-                sessionId: currentSessionID,
-                fileSet: state.currentFileSet,
-                fileName,
-                mimeType: pending.file.type,
-                size: pending.file.size,
-                idbKey: pending.id,
-              })
-              .returning()
-            pending.resolve(inserted)
-          }
-          state = { ...state, syncStatus: "idle" }
-          shouldSync = true // 挿入があったので、再度メタデータをリロードする
-        } catch (error) {
-          state = { ...state, syncStatus: "error" }
-          queue.forEach((p) => p.reject(error))
-        }
-        notify()
-      }
-
-      // 外部からの割り込みがあれば、再度ループする
-      if (needsSync) {
+      // 外部からの割り込み、あるいは同期処理中にセッションやファイルセットが変更された場合は、再度ループする
+      const latestSessionID = getSessionState()?.currentId || "default"
+      if (needsSync || latestSessionID !== initialSessionID || state.currentFileSet !== initialFileSet) {
         shouldSync = true
       }
     }
@@ -347,8 +347,15 @@ export const actions: ToolActions = {
       }
       notify()
     } else {
-      // 既存のプレビューがあればフラグ等を維持しつつURLだけBlob URLに差し替え（もしDataURLなら）
+      // 既存のプレビューがあればフラグ等を維持しつつURLだけBlob URLに差し替え
+      const oldFile = state.files[existingIndex]
       const tempUrl = URL.createObjectURL(file)
+
+      // 重要：以前のURLがBlob URL（DataURL等ではない）ならメモリリーク防止のために解放
+      if (oldFile.url?.startsWith("blob:")) {
+        URL.revokeObjectURL(oldFile.url)
+      }
+
       state = {
         ...state,
         files: state.files.map((f, i) =>
@@ -620,11 +627,14 @@ if (typeof window !== "undefined") {
 /**
  * UIから利用するHook
  */
-export function useToolActionStore() {
-  const store = useExternalStore({
+export function useToolActionStore<T = ToolActionState & ToolActions>(
+  selector?: (state: ToolActionState & ToolActions) => T,
+) {
+  const storeState = useExternalStore({
     subscribe,
     getSnapshot,
     getServerSnapshot: getSnapshot,
   })
-  return { ...store, ...actions }
+  const full = { ...storeState, ...actions }
+  return selector ? selector(full) : (full as unknown as T)
 }
