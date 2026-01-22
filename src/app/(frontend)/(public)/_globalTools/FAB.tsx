@@ -80,7 +80,7 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
 
 export const FAB: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
   return (
-    <Suspense>
+    <Suspense fallback={<div className="pointer-events-none fixed top-0 z-50 h-svh w-svw overflow-hidden" />}>
       <FABContent className={className} />
     </Suspense>
   )

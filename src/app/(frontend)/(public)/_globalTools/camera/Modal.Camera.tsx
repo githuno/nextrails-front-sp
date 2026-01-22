@@ -191,47 +191,20 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
             >
               {cameraState.isScanning && (
                 <>
-                  <div
-                    className="relative h-48 w-48 rounded-lg border"
-                    style={{ borderColor: `rgba(var(--sabi-gold), 0.2)` }}
-                  >
-                    <div
-                      className="absolute inset-0 rounded-lg"
-                      style={{ backgroundColor: `rgba(var(--sabi-gold), 0.05)` }}
-                    />
+                  <div className="relative h-48 w-48 rounded-lg border border-[rgba(var(--sabi-gold),0.2)]">
+                    <div className="absolute inset-0 rounded-lg bg-[rgba(var(--sabi-gold),0.05)]" />
                     {/* Corner accents - subtle wabi-sabi corners */}
-                    <div
-                      className="absolute -top-1 -left-1 h-4 w-4 border-t-2 border-l-2"
-                      style={{ borderColor: `rgba(var(--sabi-gold), 0.6)` }}
-                    />
-                    <div
-                      className="absolute -top-1 -right-1 h-4 w-4 border-t-2 border-r-2"
-                      style={{ borderColor: `rgba(var(--sabi-gold), 0.6)` }}
-                    />
-                    <div
-                      className="absolute -bottom-1 -left-1 h-4 w-4 border-b-2 border-l-2"
-                      style={{ borderColor: `rgba(var(--sabi-gold), 0.6)` }}
-                    />
-                    <div
-                      className="absolute -right-1 -bottom-1 h-4 w-4 border-r-2 border-b-2"
-                      style={{ borderColor: `rgba(var(--sabi-gold), 0.6)` }}
-                    />
+                    <div className="absolute -top-1 -left-1 h-4 w-4 border-t-2 border-l-2 border-[rgba(var(--sabi-gold),0.6)]" />
+                    <div className="absolute -top-1 -right-1 h-4 w-4 border-t-2 border-r-2 border-[rgba(var(--sabi-gold),0.6)]" />
+                    <div className="absolute -bottom-1 -left-1 h-4 w-4 border-b-2 border-l-2 border-[rgba(var(--sabi-gold),0.6)]" />
+                    <div className="absolute -right-1 -bottom-1 h-4 w-4 border-r-2 border-b-2 border-[rgba(var(--sabi-gold),0.6)]" />
                     {/* Scanning line: gentle wabi-sabi movement */}
-                    <div
-                      className="@keyframes-scan:[0%{top:0}100%{top:100%}] absolute left-0 h-0.5 w-full animate-[scan_3s_ease-in-out_infinite] to-transparent"
-                      style={{
-                        backgroundImage: `linear-gradient(to right, transparent, rgba(var(--sabi-gold), 0.4), transparent)`,
-                        boxShadow: `0 0 8px rgba(var(--sabi-gold), 0.2)`,
-                      }}
-                    />
+                    <div className="@keyframes-scan:[0%{top:0}100%{top:100%}] bg-[linear-gradient(to right,transparent,rgba(var(--sabi-gold),0.4),transparent)] absolute left-0 h-0.5 w-full animate-[scan_3s_ease-in-out_infinite] to-transparent shadow-[0_0_8px_rgba(var(--sabi-gold),0.2)]" />
                   </div>
                   {cameraState.scannedData && (
                     <div
-                      className="absolute bottom-10 rounded-lg px-4 py-2 text-xs font-medium shadow-sm backdrop-blur-sm"
-                      style={{
-                        backgroundColor: `rgba(var(--sabi-gold), 0.1)`,
-                        color: SABI_GOLD,
-                      }}
+                      className="absolute bottom-10 rounded-lg bg-[rgba(var(--sabi-gold),0.1)] px-4 py-2 text-xs font-medium shadow-sm backdrop-blur-sm"
+                      style={{ color: SABI_GOLD }}
                     >
                       QR Detected
                     </div>
