@@ -321,6 +321,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                           e.stopPropagation()
                           handleBulkDelete()
                         }}
+                        aria-label={`Delete ${selectedKeys.size} selected images`}
                         className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 ring-1 ring-white/10 transition-all hover:bg-zinc-800 hover:text-white active:scale-90"
                       >
                         <TrashIcon size="14px" color="currentColor" />
@@ -371,6 +372,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                   return (
                     <Carousel.Item key={image.idbKey || index} className="group relative">
                       <button
+                        data-testid="camera-item"
                         onClick={(e) => {
                           e.stopPropagation()
                           setViewingIndex(index)
@@ -409,6 +411,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
                             e.stopPropagation()
                             toggleSelection(image.idbKey!)
                           }}
+                          aria-label={isSelected ? "Deselect image" : "Select image"}
                           className={`absolute -top-1 -right-1 z-10 flex h-7 w-7 items-center justify-center transition-all duration-300 active:scale-75 ${
                             isSelected ? "opacity-100" : "opacity-50 hover:opacity-100"
                           }`}

@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 import { cameraActions, type CameraExternalActions, SavedFileResult } from "../camera/cameraStore"
+import { microphoneActions } from "../microphone/microphoneStore"
 import { useExternalStore } from "./atoms/useExternalStore"
 import { capturedFiles } from "./db/pgliteSchema"
 import { idbStore } from "./db/useIdbStore"
@@ -58,6 +59,7 @@ export interface ToolActions extends Required<CameraExternalActions> {
   switchFileSet: (fileSet: string) => void
   closeWebView: () => void
   setCameraOpen: (isOpen: boolean) => void
+  setMicrophoneOpen: (isOpen: boolean) => void
   addFiles: (files: FileList | File[]) => void
   handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>) => void
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
@@ -72,6 +74,7 @@ export interface ToolActionState {
   fileSetInfo: FileSetInfo[]
   currentFileSet: string
   isCameraOpen: boolean
+  isMicrophoneOpen: boolean
   isWebViewOpen: boolean
   webUrl: string
   error: Error | null
@@ -91,6 +94,7 @@ let state: ToolActionState = {
   fileSetInfo: [],
   currentFileSet: "1",
   isCameraOpen: false,
+  isMicrophoneOpen: false,
   isWebViewOpen: false,
   webUrl: "",
   error: null,
@@ -99,7 +103,7 @@ let state: ToolActionState = {
 }
 
 const listeners = new Set<() => void>()
-const subscribe = (listener: () => void) => {
+const subscribe = (listener: () => void): (() => void) => {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
@@ -564,6 +568,14 @@ export const actions: ToolActions = {
     notify()
   },
 
+  setMicrophoneOpen: (isOpen: boolean): void => {
+    state = {
+      ...state,
+      isMicrophoneOpen: isOpen,
+    }
+    notify()
+  },
+
   /**
    * ファイル選択時の処理（UIから渡されたFile集を直接保存）
    */
@@ -599,6 +611,11 @@ if (typeof window !== "undefined") {
     getFileWithUrl: actions.getFileWithUrl,
     deleteFile: actions.deleteFile,
   })
+  microphoneActions.setExternalActions({
+    saveRecordedAudio: actions.saveCapturedFile,
+    getFileWithUrl: actions.getFileWithUrl,
+    deleteFile: actions.deleteFile,
+  })
   state = { ...state, isReady: true }
   notify()
 
@@ -629,12 +646,12 @@ if (typeof window !== "undefined") {
  */
 export function useToolActionStore<T = ToolActionState & ToolActions>(
   selector?: (state: ToolActionState & ToolActions) => T,
-) {
-  const storeState = useExternalStore({
+): T {
+  const storeState: ToolActionState = useExternalStore({
     subscribe,
     getSnapshot,
     getServerSnapshot: getSnapshot,
   })
-  const full = { ...storeState, ...actions }
+  const full: ToolActionState & ToolActions = { ...storeState, ...actions }
   return selector ? selector(full) : (full as unknown as T)
 }

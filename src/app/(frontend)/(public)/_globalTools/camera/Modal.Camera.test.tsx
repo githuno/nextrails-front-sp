@@ -246,11 +246,11 @@ describe("CameraModal (Integration Test with Real Components)", () => {
         { timeout: 10000 },
       )
       // aria-labelで堅牢に検索
-      const switchTrigger = screen.getByLabelText("Switch Camera")
+      const switchTrigger = screen.getByRole("button", { name: "Switch Camera" })
       await user.click(switchTrigger)
       const listTitle = await screen.findByText(/Select Device/i)
       expect(listTitle).toBeInTheDocument()
-      const backCamera = screen.getByText(/Back Camera/i)
+      const backCamera = screen.getByRole("button", { name: /Back Camera/i })
       await user.click(backCamera)
       expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled()
     })
@@ -268,10 +268,8 @@ describe("CameraModal (Integration Test with Real Components)", () => {
         },
         { timeout: 10000 },
       )
-      const captureButton = screen.getByLabelText("Capture Image")
+      const captureButton = screen.getByRole("button", { name: "Capture Image" })
       await user.click(captureButton)
-      // キャプチャ処理が走ることを確認（storeの中身を見るのが確実）
-      // waitFor(() => expect(cameraActions.getCapturedImages().length).toBeGreaterThan(0))
     })
 
     it("シャッターボタンを長押しして録画を開始できる", async () => {
@@ -281,7 +279,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
       // confirm ダイアログをモック
       vi.spyOn(window, "confirm").mockReturnValue(false)
       render(<CameraModal isOpen={true} onClose={() => {}} />)
-      const captureButton = screen.getByLabelText("Capture Image")
+      const captureButton = screen.getByRole("button", { name: "Capture Image" })
       // PointerDown で長押し開始
       await user.pointer({ target: captureButton, keys: "[MouseLeft>]" })
       // 300ms 以上待機（タイマーで実装）
@@ -363,15 +361,16 @@ describe("CameraModal (Integration Test with Real Components)", () => {
       })
       const { unmount } = render(<CameraModal isOpen={true} onClose={() => {}} />)
       try {
-        const img = await screen.findByAltText("Captured 0", {}, { timeout: 8000 })
-        expect(img).toBeInTheDocument()
+        // data-testid を使用して画像を特定
+        const item = await screen.findByTestId("camera-item", {}, { timeout: 8000 })
+        expect(item).toBeInTheDocument()
       } finally {
         unmount()
       }
     })
 
     it("ギャラリーからファイルが削除可能なこと", async () => {
-      const deleteFileMock = vi.fn()
+      const deleteFilesMock = vi.fn()
       const mockFiles = [
         {
           id: "1",
@@ -388,22 +387,23 @@ describe("CameraModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: mockFiles,
-        deleteFile: deleteFileMock,
+        deleteFiles: deleteFilesMock,
       })
-
+      // confirm をこのテスト用に true を返すように設定
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true)
       const { unmount } = render(<CameraModal isOpen={true} onClose={() => {}} />)
       try {
-        // 画像が表示されるのを待機
-        await screen.findByAltText("Captured 0", {}, { timeout: 8000 })
-        // 詳細表示を開く
-        const item = screen.getByAltText("Captured 0")
         const user = userEvent.setup()
-        await user.click(item)
-
-        // Carousel 内の ImageViewer モーダルが開くのを待つ
-        // ImageViewer 内の削除ボタン（もしあれば）または Bulk 削除の動作をここで行う
-        // 現在の構成ではカメラトップ画面の Bulk 削除が主なのでそれをテストする
+        // 選択トグルボタンをクリック
+        const selectToggleButton = await screen.findByRole("button", { name: "Select image" })
+        await user.click(selectToggleButton)
+        // 削除ボタンをクリック (aria-label を正確にマッチさせる)
+        const deleteButton = await screen.findByRole("button", { name: "Delete 1 selected images" })
+        await user.click(deleteButton)
+        expect(confirmSpy).toHaveBeenCalled()
+        expect(deleteFilesMock).toHaveBeenCalledWith([{ idbKey: "key1", id: "1" }])
       } finally {
+        confirmSpy.mockRestore()
         unmount()
       }
     })

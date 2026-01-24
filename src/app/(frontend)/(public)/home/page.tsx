@@ -1,8 +1,60 @@
+"use client"
+
 import MultiInputFTB from "@/components/MultiInputFTB"
 import Image from "next/image"
+import { ChangeEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { FAB } from "../_globalTools/FAB"
 
+interface FileInputProps {
+  children: (props: { onClick: () => void; buttonText: string; isSelected: boolean }) => ReactNode
+  onChange?: (file: File | null) => void
+}
+
+const FileInput = ({ children, onChange }: FileInputProps) => {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [inputKey, setInputKey] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [openDialogTrigger, setOpenDialogTrigger] = useState(0)
+  useEffect(() => {
+    if (openDialogTrigger > 0) {
+      inputRef.current?.click()
+    }
+  }, [openDialogTrigger])
+
+  const onClick = useCallback(() => {
+    if (selectedFile) {
+      setSelectedFile(null)
+      onChange?.(null)
+      setInputKey((k) => k + 1)
+    } else {
+      setOpenDialogTrigger((t) => t + 1)
+    }
+  }, [onChange, selectedFile])
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null
+    setSelectedFile(file)
+    onChange?.(file)
+  }
+
+  const isSelected = !!selectedFile
+  const buttonText = isSelected ? "Deselect File" : "Select a File"
+
+  return (
+    <div className="file-input-wrapper">
+      <input key={inputKey} ref={inputRef} type="file" onChange={handleChange} style={{ display: "none" }} />
+      {children({ onClick, buttonText, isSelected })}
+    </div>
+  )
+}
+
 export default function Page() {
+  const [fileName, setFileName] = useState<string | null>(null)
+
+  const handleFileChange = useCallback((file: File | null) => {
+    setFileName(file?.name || null)
+  }, [])
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-between overflow-x-hidden p-6 lg:p-24">
       <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
@@ -32,6 +84,19 @@ export default function Page() {
         />
       </div>
       <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
+        <FileInput onChange={handleFileChange}>
+          {({ onClick, buttonText, isSelected }) => (
+            <button
+              className={`cursor-pointer rounded-full px-4 py-2 text-white transition-colors active:scale-95 lg:static ${
+                isSelected ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+              }`}
+              onClick={onClick}
+            >
+              {buttonText}
+            </button>
+          )}
+        </FileInput>
+        {fileName && <p className="mt-4 lg:mt-0">Selected File: {fileName}</p>}
         <a
           href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
           className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
@@ -39,7 +104,7 @@ export default function Page() {
           rel="noopener noreferrer"
         >
           <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{" "}
+            Docs
             <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
               -&gt;
             </span>

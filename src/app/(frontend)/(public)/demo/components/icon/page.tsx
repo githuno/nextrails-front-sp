@@ -6,9 +6,11 @@ import {
   LoadingDot,
   LoadingSpinner,
   MenuIcon,
+  MicIcon,
   NextIcon,
   PenIcon,
   PictureIcon,
+  PlayIcon,
   PrevIcon,
   RecordIcon,
   StopIcon,
@@ -31,6 +33,8 @@ const icons = [
   { name: "StopIcon", component: StopIcon },
   { name: "SwitchCameraIcon", component: SwitchCameraIcon },
   { name: "SyncIcon", component: SyncIcon },
+  { name: "MicIcon", component: MicIcon },
+  { name: "PlayIcon", component: PlayIcon },
 ]
 
 export default function IconDemoPage() {

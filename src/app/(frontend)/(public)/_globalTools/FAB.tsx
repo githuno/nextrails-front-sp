@@ -2,11 +2,13 @@
 
 import React, { Suspense, useCallback, useMemo, useRef, useState } from "react"
 import FloatingActionButton from "./_components/FloatingActionButton"
-import { CameraIcon } from "./_components/Icons"
+import { CameraIcon, MicIcon } from "./_components/Icons"
 import { useSessionSync } from "./_hooks/useSessionSync"
 import { useToolActionStore, type ToolActionState, type ToolActions } from "./_hooks/useToolActionStore"
 import CameraModal from "./camera/Modal.Camera"
 import { useCameraState } from "./camera/cameraStore"
+import MicrophoneModal from "./microphone/Modal.Microphone"
+import { useMicrophoneState } from "./microphone/microphoneStore"
 
 // PGlite関連のimportは開発モード時のみ行う ------------------
 import dynamic from "next/dynamic"
@@ -19,12 +21,17 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
   useSessionSync() // URLとStateのセッション同期を有効化
 
   const isCameraOpen = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.isCameraOpen, []))
+  const isMicrophoneOpen = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.isMicrophoneOpen, []))
   const handleScan = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleScan, []))
   const setCameraOpen = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.setCameraOpen, []))
+  const setMicrophoneOpen = useToolActionStore(
+    useCallback((s: ToolActionState & ToolActions) => s.setMicrophoneOpen, []),
+  )
   const handleSelect = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleSelect, []))
   const handleFileChange = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleFileChange, []))
 
   const cameraState = useCameraState()
+  const microphoneState = useMicrophoneState()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // PGlite関連の状態管理 ------------------------------
@@ -37,14 +44,16 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
       ...(cameraState.isAvailable
         ? [{ id: 1, label: "Camera", icon: <CameraIcon />, onClick: () => setCameraOpen(true) }]
         : []),
-      { id: 2, label: "Text", onClick: () => alert("Text Component") },
-      { id: 3, label: "Voice", onClick: () => alert("Voice Component") },
+      ...(microphoneState.isAvailable
+        ? [{ id: 2, label: "Mic", icon: <MicIcon />, onClick: () => setMicrophoneOpen(true) }]
+        : []),
+      { id: 3, label: "Text", onClick: () => alert("Text Component") },
       { id: 4, label: "File", onClick: () => handleSelect(fileInputRef) },
       ...(process.env.NODE_ENV === "development"
         ? [{ id: 5, label: "PGLite", onClick: () => setPgliteOpen(true) }]
         : []),
     ],
-    [cameraState.isAvailable, setCameraOpen, handleSelect],
+    [cameraState.isAvailable, microphoneState.isAvailable, setCameraOpen, setMicrophoneOpen, handleSelect],
   )
 
   return (
@@ -54,7 +63,7 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
         type="file"
         ref={fileInputRef}
         onChange={(event: React.ChangeEvent<HTMLInputElement>) => handleFileChange(event)}
-        accept="image/*"
+        accept="image/*,audio/*"
         multiple
         className="hidden"
       />
@@ -64,6 +73,11 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
         isOpen={isCameraOpen}
         onClose={() => setCameraOpen(false)}
         onScan={handleScan}
+        onSelect={() => handleSelect(fileInputRef)}
+      />
+      <MicrophoneModal
+        isOpen={isMicrophoneOpen}
+        onClose={() => setMicrophoneOpen(false)}
         onSelect={() => handleSelect(fileInputRef)}
       />
       <Modal
