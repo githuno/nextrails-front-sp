@@ -18,15 +18,13 @@ void worker({
     if (!baseUrlCandidate && !fetchPatched) {
       throw new Error("Missing required __ftbBaseUrl option for PGlite worker fetch patch.")
     }
-
     if (!fetchPatched && baseUrlCandidate) {
       try {
         const parsedBaseUrl = new URL(baseUrlCandidate)
         const baseUrl = parsedBaseUrl.origin === "null" ? parsedBaseUrl.toString() : parsedBaseUrl.origin
         const originalFetch = globalThis.fetch.bind(globalThis)
         const toAbsolute = (url: string) => new URL(url, baseUrl).toString()
-
-        globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
           let urlStr = ""
           if (typeof input === "string") {
             urlStr = input
@@ -35,11 +33,20 @@ void worker({
           } else {
             urlStr = (input as Request).url
           }
-
-          if (isRelativePath(urlStr)) {
-            return originalFetch(toAbsolute(urlStr), init)
+          // 既に http(s) から始まっている、あるいは localhost 指定がある場合はそのまま
+          const isFullUrl = urlStr.startsWith("http") || urlStr.startsWith("//")
+          const targetUrl = isRelativePath(urlStr) && !isFullUrl ? toAbsolute(urlStr) : urlStr
+          try {
+            const response = await originalFetch(targetUrl, init)
+            if (!response.ok) {
+              // console.warn(`[PGliteWorker] Fetch failed: ${targetUrl} (${response.status})`)
+              throw new Error(`Fetch failed with status ${response.status} for: ${targetUrl}`)
+            }
+            return response
+          } catch (err) {
+            console.error(`[PGliteWorker] Fetch error for: ${targetUrl}`, err)
+            throw err
           }
-          return originalFetch(input, init)
         }) as typeof fetch
 
         fetchPatched = true

@@ -197,6 +197,11 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
       // 初期化中はローディングが表示されるはず
       expect(screen.getByText(/initializing/i)).toBeInTheDocument()
+      // テスト終了後に setup() の state 更新が残って act 警告にならないよう、初期化完了まで待つ
+      // （role/label は初期表示でも存在し得るため「enabled になる」ことを条件にする）
+      return waitFor(() => {
+        expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled()
+      })
     })
   })
 
@@ -408,6 +413,10 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
       // Showcase内にファイルが表示される（コンテナの存在を確認）
       expect(screen.getByTestId("audio-item")).toBeInTheDocument()
+      // Microphone の初期化が走るため、更新が残らないよう待機
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled()
+      })
     })
 
     it("ギャラリーからファイルが削除可能なこと", async () => {

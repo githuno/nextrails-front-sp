@@ -76,7 +76,7 @@ const LoadingSpinner: React.FC<IconProps & { dotSize?: string; mode?: "loading" 
           </div>
         ))}
       </div>
-      <style jsx>{`
+      <style>{`
         .animate-spin-linear {
           animation: spin 1s linear infinite;
         }

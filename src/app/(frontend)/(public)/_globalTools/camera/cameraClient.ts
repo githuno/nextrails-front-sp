@@ -1,4 +1,6 @@
-import jsQR from "jsqr"
+import * as jsQRModule from "jsqr"
+const jsQR = ((jsQRModule as unknown as { default: typeof jsQRModule.default }).default ||
+  jsQRModule) as typeof jsQRModule.default
 
 // 【Barcode Detection API】
 // https://developer.mozilla.org/en-US/docs/Web/API/Barcode_Detection_API

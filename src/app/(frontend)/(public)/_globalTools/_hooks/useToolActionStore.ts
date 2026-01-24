@@ -1,3 +1,4 @@
+import { toast } from "@/components/atoms/Toast"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
 import { cameraActions, type CameraExternalActions } from "../camera/cameraStore"
@@ -6,6 +7,7 @@ import { useExternalStore } from "./atoms/useExternalStore"
 import { files as filesTable, type ToolFileRecord } from "./db/pgliteSchema"
 import { idbStore } from "./db/useIdbStore"
 import { getDb, subscribe as subscribePglite } from "./db/usePgliteStore"
+import { captureBridge, type BridgeData } from "./useCaptureBridge"
 import { getSessionState, sessionStore } from "./useSessionSync"
 
 /**
@@ -92,11 +94,7 @@ export interface ToolActionState {
   syncStatus: "idle" | "buffering" | "syncing" | "error"
 }
 
-/**
- * シングルトンとしてのStore実装
- * Reactの外で状態を保持し、副作用（データロードやアクション注入）を中央管理する
- */
-let state: ToolActionState = {
+const initialState: ToolActionState = {
   isReady: false,
   isDbReady: false, // DBの準備状態
   files: [],
@@ -113,17 +111,6 @@ let state: ToolActionState = {
   syncStatus: "idle",
 }
 
-const listeners = new Set<() => void>()
-const subscribe = (listener: () => void): (() => void) => {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-const notify = () => {
-  listeners.forEach((l) => l())
-}
-
-const getSnapshot = () => state
-
 /**
  * プレビューURLのリソース解放
  */
@@ -136,267 +123,329 @@ const revokeUrls = (files: ToolFile[], setInfos: FileSetInfo[] = []) => {
   })
 }
 
-/**
- * データの自動ロードとアクションの依存注入
- * DBの初期化をトリガーに実行される
- */
-let isSyncing = false
-let needsSync = false
-
-async function syncData() {
-  if (isSyncing) {
-    needsSync = true
-    return
-  }
-  isSyncing = true
-
-  try {
-    const idb = idbStore()
-
-    let shouldSync = true
-    while (shouldSync) {
-      shouldSync = false
-      needsSync = false
-
-      const db = await getDb()
-      const initialSessionID = getSessionState()?.currentId || "default"
-      const initialFileSet = state.currentFileSet
-
-      // 0. バッファされた保存を処理
-      if (state.pendingSaves.length > 0) {
-        const queue = [...state.pendingSaves]
-        state = { ...state, pendingSaves: [], syncStatus: "syncing" }
-        notify()
-        try {
-          for (const pending of queue) {
-            const fileName = pending.options?.fileName || `file_${Date.now()}`
-            const category = pending.options?.category || null
-            const [inserted] = await db
-              .insert(filesTable)
-              .values({
-                sessionId: initialSessionID,
-                fileSet: initialFileSet,
-                category,
-                fileName,
-                mimeType: pending.file.type,
-                size: pending.file.size,
-                idbKey: pending.id,
-              })
-              .returning()
-            pending.resolve(inserted)
-          }
-          state = { ...state, syncStatus: "idle" }
-        } catch (error) {
-          state = { ...state, syncStatus: "error" }
-          queue.forEach((p) => p.reject(error))
-        }
-        notify()
-      }
-
-      // 1. セッション内の全ファイルセット情報を取得
-      // PGlite (Postgres) の ARRAY_AGG を使用して最新の idbKey を取得
-      const res = await db
-        .select({
-          name: filesTable.fileSet,
-          count: sql<number>`count(*)::int`,
-          latest_idb_key: sql<
-            string | null
-          >`(array_agg(${filesTable.idbKey} order by ${filesTable.createdAt} desc))[1]`,
-        })
-        .from(filesTable)
-        .where(eq(filesTable.sessionId, initialSessionID))
-        .groupBy(filesTable.fileSet)
-
-      // Zodにより実行時型安全性を確保。不正なデータは例外をスローして早期終了させる
-      const rawSetInfos: RawSetInfo[] = z.array(RawSetInfoSchema).parse(res)
-      const fileSetNameList = Array.from(new Set([...rawSetInfos.map((s) => s.name), state.currentFileSet])).sort()
-      const existingSetInfoMap = new Map(state.fileSetInfo.map((s) => [s.name, s]))
-
-      const fileSetInfo: FileSetInfo[] = await Promise.all(
-        fileSetNameList.map(async (name) => {
-          const info = rawSetInfos.find((s) => s.name === name)
-          const latestIdbKey = info?.latest_idb_key || null
-          // 前回の情報を再利用して、Blobの読み込みとURL生成を最小限にする
-          const existing = existingSetInfoMap.get(name)
-          if (existing && existing.latestIdbKey === latestIdbKey && existing.count === (info?.count || 0)) {
-            return existing
-          }
-          // 新規、または変更があった場合
-          let latestImageUrl = null
-          if (latestIdbKey) {
-            const blob = await idb.get(latestIdbKey)
-            if (blob) latestImageUrl = URL.createObjectURL(blob)
-          }
-          // 古いUrlはあとで一括で解放される
-          return {
-            name,
-            count: info?.count || 0,
-            latestImageUrl,
-            latestIdbKey,
-          }
-        }),
-      )
-
-      // 2. データを取得
-      const baseFilter = and(eq(filesTable.sessionId, initialSessionID), eq(filesTable.fileSet, state.currentFileSet))
-      const [allRecords, cameraRecords, audioRecords] = await Promise.all([
-        db.select().from(filesTable).where(baseFilter).orderBy(desc(filesTable.createdAt)),
-        db
-          .select()
-          .from(filesTable)
-          .where(and(baseFilter, eq(filesTable.category, "camera")))
-          .orderBy(desc(filesTable.createdAt)),
-        db
-          .select()
-          .from(filesTable)
-          .where(and(baseFilter, eq(filesTable.category, "microphone")))
-          .orderBy(desc(filesTable.createdAt)),
-      ])
-
-      // 3. 状態更新
-      const existingFileMap = new Map(state.files.map((f) => [f.idbKey, f]))
-      const processRecords = (records: ToolFileRecord[]): ToolFile[] => {
-        return records.map((r) => {
-          const existingFile = existingFileMap.get(r.idbKey)
-          return {
-            ...r,
-            url: existingFile?.url || null,
-          } as ToolFile
-        })
-      }
-
-      const newFiles = processRecords(allRecords)
-      const nextCameraFiles = processRecords(cameraRecords)
-      const nextAudioFiles = processRecords(audioRecords)
-      const dbIdbKeys = new Set(newFiles.map((f) => f.idbKey))
-      const pendingFiles = state.files.filter((f) => f.isPending && !dbIdbKeys.has(f.idbKey))
-      const nextFiles = [...pendingFiles, ...newFiles]
-      const nextIdbKeys = new Set(nextFiles.map((f) => f.idbKey))
-      const filesToRevoke = state.files.filter((f) => !nextIdbKeys.has(f.idbKey))
-      const setsToRevoke = state.fileSetInfo.filter((s) => {
-        const next = fileSetInfo.find((ns) => ns.name === s.name)
-        return !next || (next.latestImageUrl !== s.latestImageUrl && s.latestImageUrl?.startsWith("blob:"))
-      })
-      revokeUrls(filesToRevoke, setsToRevoke)
-      state = {
-        ...state,
-        files: nextFiles,
-        cameraFiles: nextCameraFiles,
-        audioFiles: nextAudioFiles,
-        fileSets: fileSetNameList,
-        fileSetInfo,
-        isDbReady: true,
-        error: null,
-      }
-      notify()
-
-      // 4. 未取得のURLをバックグラウンドでロード
-      const filesWithoutUrl = nextFiles.filter((f) => !f.url)
-      if (filesWithoutUrl.length > 0) {
-        const CHUNK_SIZE = 5
-        for (let i = 0; i < filesWithoutUrl.length; i += CHUNK_SIZE) {
-          const chunk = filesWithoutUrl.slice(i, i + CHUNK_SIZE)
-          const updatedChunk = await Promise.all(
-            chunk.map(async (f) => {
-              const blob = await idb.get(f.idbKey)
-              return { ...f, url: blob ? URL.createObjectURL(blob) : null }
-            }),
-          )
-          const updatedMap = new Map(updatedChunk.map((up) => [up.idbKey, up]))
-          state = {
-            ...state,
-            files: state.files.map((f) => updatedMap.get(f.idbKey) || f),
-            cameraFiles: state.cameraFiles.map((f) => updatedMap.get(f.idbKey) || f),
-            audioFiles: state.audioFiles.map((f) => updatedMap.get(f.idbKey) || f),
-          }
-          notify()
-          if (needsSync) break
-        }
-      }
-      // 外部からの割り込み、あるいは同期処理中にセッションやファイルセットが変更された場合は、再度ループする
-      const latestSessionID = getSessionState()?.currentId || "default"
-      if (needsSync || latestSessionID !== initialSessionID || state.currentFileSet !== initialFileSet) {
-        shouldSync = true
-      }
-    }
-    notify()
-  } catch (err) {
-    console.error("[ToolActionStore] syncData error:", err)
-    state = {
-      ...state,
-      error: err instanceof Error ? err : new Error(String(err)),
-    }
-    notify()
-  } finally {
-    isSyncing = false
-  }
+type SyncOptions = {
+  hydrateUrls?: boolean
 }
 
-/**
- * 外から呼び出すアクション
- */
-export const actions: ToolActions = {
-  /**
-   * 撮影・選択されたファイルを保存する
-   */
-  saveFile: async (
-    file: Blob | File,
-    options?: { fileName?: string; idbKey?: string; category?: string },
-  ): Promise<SavedToolFileResult> => {
-    const idb = idbStore()
-    const idbKey = options?.idbKey || crypto.randomUUID()
-    const category = options?.category || null
-    // 1. 最適化UI更新
-    // すでに addPreview で追加されている場合はスキップまたは更新
-    const existingIndex = state.files.findIndex((f) => f.idbKey === idbKey)
-    if (existingIndex === -1) {
-      const tempUrl = URL.createObjectURL(file)
-      const tempFile: ToolFile = {
-        id: idbKey,
-        sessionId: getSessionState()?.currentId || "default",
-        fileSet: state.currentFileSet,
-        category,
-        fileName: options?.fileName || `file_${Date.now()}`,
-        mimeType: file.type,
-        size: file.size,
-        idbKey,
-        createdAt: new Date(),
-        url: tempUrl,
-        isPending: true,
-      }
-      state = {
-        ...state,
-        files: [tempFile, ...state.files],
-        cameraFiles: category === "camera" ? [tempFile, ...state.cameraFiles] : state.cameraFiles,
-        audioFiles: category === "microphone" ? [tempFile, ...state.audioFiles] : state.audioFiles,
-      }
-      notify()
-    } else {
-      // 既存のプレビューがあればフラグ等を維持しつつURLだけBlob URLに差し替え
-      const oldFile = state.files[existingIndex]
-      const tempUrl = URL.createObjectURL(file)
-      // 重要：以前のURLがBlob URL（DataURL等ではない）ならメモリリーク防止のために解放
-      if (oldFile.url?.startsWith("blob:")) URL.revokeObjectURL(oldFile.url)
+export type ToolActionStoreInstance = {
+  actions: ToolActions
+  getState: () => ToolActionState
+  subscribe: (listener: () => void) => () => void
+  syncData: (options?: SyncOptions) => Promise<void>
+  start: () => void
+  dispose: () => void
+}
 
-      const updateFile = (f: ToolFile) =>
-        f.idbKey === idbKey ? { ...f, url: tempUrl, size: file.size, isPending: true } : f
-      state = {
-        ...state,
-        files: state.files.map(updateFile),
-        cameraFiles: state.cameraFiles.map(updateFile),
-        audioFiles: state.audioFiles.map(updateFile),
-      }
-      notify()
-    }
-    const MAX_BUFFER_SIZE = 50
-    if (state.pendingSaves.length >= MAX_BUFFER_SIZE) {
-      throw new Error("Buffer full, cannot save more files")
+export function createToolActionStore(options?: { autoStart?: boolean }): ToolActionStoreInstance {
+  let state: ToolActionState = { ...initialState }
+  const listeners = new Set<() => void>()
+  let disposed = false
+  const subscribe = (listener: () => void): (() => void) => {
+    if (disposed) return () => {}
+    listeners.add(listener)
+    return () => listeners.delete(listener)
+  }
+  const notify = () => {
+    if (disposed) return
+    listeners.forEach((l) => l())
+  }
+  const getState = () => state
+  let currentAbortController: AbortController | null = null
+  let needsSync = false
+  let activeSyncPromise: Promise<void> | null = null
+  const runSyncData = async (syncOptions: SyncOptions): Promise<void> => {
+    if (currentAbortController) currentAbortController.abort()
+    currentAbortController = new AbortController()
+    const signal = currentAbortController.signal
+    const isTeardownLikeError = (error: unknown): boolean => {
+      if (disposed) return true
+      if (signal.aborted) return true
+      const message = error instanceof Error ? error.message : String(error)
+      return message.includes("BroadcastChannel") && message.includes("closed")
     }
     try {
-      // 2. IDB保存 (Background)
-      await idb.put(idbKey, file)
-      if (state.isDbReady) {
-        // PGliteがreadyなら非同期でDB保存
+      const idb = idbStore()
+      let shouldSync = true
+      while (shouldSync && !signal.aborted && !disposed) {
+        shouldSync = false
+        needsSync = false
+        const db = await getDb(signal)
+        if (signal.aborted || disposed) break
+        const initialSessionID = getSessionState()?.currentId || "default"
+        const initialFileSet = state.currentFileSet
+        // 0. バッファされた保存を処理
+        if (state.pendingSaves.length > 0) {
+          const queue = [...state.pendingSaves]
+          state = { ...state, pendingSaves: [], syncStatus: "syncing" }
+          notify()
+          try {
+            for (const pending of queue) {
+              if (signal.aborted || disposed) break
+              const fileName = pending.options?.fileName || `file_${Date.now()}`
+              const category = pending.options?.category || null
+              const [inserted] = await db
+                .insert(filesTable)
+                .values({
+                  sessionId: initialSessionID,
+                  fileSet: initialFileSet,
+                  category,
+                  fileName,
+                  mimeType: pending.file.type,
+                  size: pending.file.size,
+                  idbKey: pending.id,
+                })
+                .returning()
+              pending.resolve(inserted)
+            }
+            state = { ...state, syncStatus: "idle" }
+          } catch (error) {
+            state = { ...state, syncStatus: "error" }
+            queue.forEach((p) => p.reject(error))
+          }
+          notify()
+        }
+        if (signal.aborted || disposed) break
+        // 1. セッション内の全ファイルセット情報を取得
+        let rawSetInfos: RawSetInfo[] = []
+        try {
+          const res = await db
+            .select({
+              name: filesTable.fileSet,
+              count: sql<number>`count(*)::int`,
+              latest_idb_key: sql<
+                string | null
+              >`(array_agg(${filesTable.idbKey} order by ${filesTable.createdAt} desc))[1]`,
+            })
+            .from(filesTable)
+            .where(eq(filesTable.sessionId, initialSessionID))
+            .groupBy(filesTable.fileSet)
+          if (signal.aborted || disposed) break
+          rawSetInfos = z.array(RawSetInfoSchema).parse(res)
+        } catch (error) {
+          const BasicSetInfoSchema = z.object({ name: z.string(), count: z.number() })
+          const basicRes = await db
+            .select({
+              name: filesTable.fileSet,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(filesTable)
+            .where(eq(filesTable.sessionId, initialSessionID))
+            .groupBy(filesTable.fileSet)
+          const basicInfos = z.array(BasicSetInfoSchema).parse(basicRes)
+          rawSetInfos = await Promise.all(
+            basicInfos.map(async (info) => {
+              if (signal.aborted || disposed) {
+                return { name: info.name, count: info.count, latest_idb_key: null }
+              }
+              const [latest] = await db
+                .select({ idbKey: filesTable.idbKey })
+                .from(filesTable)
+                .where(and(eq(filesTable.sessionId, initialSessionID), eq(filesTable.fileSet, info.name)))
+                .orderBy(desc(filesTable.createdAt))
+                .limit(1)
+              return {
+                name: info.name,
+                count: info.count,
+                latest_idb_key: latest?.idbKey ?? null,
+              }
+            }),
+          )
+          console.warn("[ToolActionStore] fileSet aggregation fallback used:", error)
+        }
+        const fileSetNameList = Array.from(new Set([...rawSetInfos.map((s) => s.name), state.currentFileSet])).sort()
+        const existingSetInfoMap = new Map(state.fileSetInfo.map((s) => [s.name, s]))
+        const fileSetInfo: FileSetInfo[] = await Promise.all(
+          fileSetNameList.map(async (name) => {
+            const info = rawSetInfos.find((s) => s.name === name)
+            const latestIdbKey = info?.latest_idb_key || null
+            const existing = existingSetInfoMap.get(name)
+            if (existing && existing.latestIdbKey === latestIdbKey && existing.count === (info?.count || 0)) {
+              return existing
+            }
+            let latestImageUrl = null
+            if (syncOptions.hydrateUrls !== false && latestIdbKey) {
+              const blob = await idb.get(latestIdbKey)
+              if (blob) latestImageUrl = URL.createObjectURL(blob)
+            }
+            return {
+              name,
+              count: info?.count || 0,
+              latestImageUrl,
+              latestIdbKey,
+            }
+          }),
+        )
+        if (signal.aborted || disposed) break
+        // 2. データを取得
+        const baseFilter = and(eq(filesTable.sessionId, initialSessionID), eq(filesTable.fileSet, state.currentFileSet))
+        const [allRecords, cameraRecords, audioRecords] = await Promise.all([
+          db.select().from(filesTable).where(baseFilter).orderBy(desc(filesTable.createdAt)),
+          db
+            .select()
+            .from(filesTable)
+            .where(and(baseFilter, eq(filesTable.category, "camera")))
+            .orderBy(desc(filesTable.createdAt)),
+          db
+            .select()
+            .from(filesTable)
+            .where(and(baseFilter, eq(filesTable.category, "microphone")))
+            .orderBy(desc(filesTable.createdAt)),
+        ])
+        // 3. 状態更新
+        const existingFileMap = new Map(state.files.map((f) => [f.idbKey, f]))
+        const processRecords = (records: ToolFileRecord[]): ToolFile[] => {
+          return records.map((r) => {
+            const existingFile = existingFileMap.get(r.idbKey)
+            return {
+              ...r,
+              url: existingFile?.url || null,
+            } as ToolFile
+          })
+        }
+        const newFiles = processRecords(allRecords)
+        const nextCameraFiles = processRecords(cameraRecords)
+        const nextAudioFiles = processRecords(audioRecords)
+        const dbIdbKeys = new Set(newFiles.map((f) => f.idbKey))
+        const pendingFiles = state.files.filter((f) => f.isPending && !dbIdbKeys.has(f.idbKey))
+        const nextFiles = [...pendingFiles, ...newFiles]
+        const nextIdbKeys = new Set(nextFiles.map((f) => f.idbKey))
+        const filesToRevoke = state.files.filter((f) => !nextIdbKeys.has(f.idbKey))
+        const setsToRevoke = state.fileSetInfo.filter((s) => {
+          const next = fileSetInfo.find((ns) => ns.name === s.name)
+          return !next || (next.latestImageUrl !== s.latestImageUrl && s.latestImageUrl?.startsWith("blob:"))
+        })
+        revokeUrls(filesToRevoke, setsToRevoke)
+        state = {
+          ...state,
+          files: nextFiles,
+          cameraFiles: nextCameraFiles,
+          audioFiles: nextAudioFiles,
+          fileSets: fileSetNameList,
+          fileSetInfo,
+          isDbReady: true,
+          error: null,
+        }
+        notify()
+        // 4. 未取得のURLをバックグラウンドでロード
+        if (syncOptions.hydrateUrls !== false) {
+          const filesWithoutUrl = nextFiles.filter((f) => !f.url)
+          if (filesWithoutUrl.length > 0) {
+            const CHUNK_SIZE = 5
+            for (let i = 0; i < filesWithoutUrl.length; i += CHUNK_SIZE) {
+              if (signal.aborted || disposed) break
+              const chunk = filesWithoutUrl.slice(i, i + CHUNK_SIZE)
+              const updatedChunk = await Promise.all(
+                chunk.map(async (f) => {
+                  const blob = await idb.get(f.idbKey)
+                  return { ...f, url: blob ? URL.createObjectURL(blob) : null }
+                }),
+              )
+              const updatedMap = new Map(updatedChunk.map((up) => [up.idbKey, up]))
+              state = {
+                ...state,
+                files: state.files.map((f) => updatedMap.get(f.idbKey) || f),
+                cameraFiles: state.cameraFiles.map((f) => updatedMap.get(f.idbKey) || f),
+                audioFiles: state.audioFiles.map((f) => updatedMap.get(f.idbKey) || f),
+              }
+              notify()
+              if (needsSync) break
+            }
+          }
+        }
+        const latestSessionID = getSessionState()?.currentId || "default"
+        if (needsSync || latestSessionID !== initialSessionID || state.currentFileSet !== initialFileSet) {
+          shouldSync = true
+        }
+      }
+      notify()
+    } catch (err) {
+      if (!isTeardownLikeError(err)) {
+        console.error("[ToolActionStore] syncData error:", err)
+        state = {
+          ...state,
+          error: err instanceof Error ? err : new Error(String(err)),
+        }
+        notify()
+      }
+    }
+  }
+
+  async function syncData(options: SyncOptions = {}): Promise<void> {
+    const merged: SyncOptions = { hydrateUrls: options.hydrateUrls ?? true }
+    if (disposed) return
+    if (activeSyncPromise) {
+      needsSync = true
+      return activeSyncPromise
+    }
+    activeSyncPromise = runSyncData(merged).finally(() => {
+      activeSyncPromise = null
+    })
+    return activeSyncPromise
+  }
+
+  /**
+   * 外から呼び出すアクション
+   */
+  const actions: ToolActions = {
+    /**
+     * 撮影・選択されたファイルを保存する
+     */
+    saveFile: async (
+      file: Blob | File,
+      options?: { fileName?: string; idbKey?: string; category?: string },
+    ): Promise<SavedToolFileResult> => {
+      const idb = idbStore()
+      const idbKey = options?.idbKey || crypto.randomUUID()
+      const category = options?.category || null
+      // 1. 最適化UI更新
+      // すでに addPreview で追加されている場合はスキップまたは更新
+      const existingIndex = state.files.findIndex((f) => f.idbKey === idbKey)
+      if (existingIndex === -1) {
+        const tempUrl = URL.createObjectURL(file)
+        const tempFile: ToolFile = {
+          id: idbKey,
+          sessionId: getSessionState()?.currentId || "default",
+          fileSet: state.currentFileSet,
+          category,
+          fileName: options?.fileName || `file_${Date.now()}`,
+          mimeType: file.type,
+          size: file.size,
+          idbKey,
+          createdAt: new Date(),
+          url: tempUrl,
+          isPending: true,
+        }
+        state = {
+          ...state,
+          files: [tempFile, ...state.files],
+          cameraFiles: category === "camera" ? [tempFile, ...state.cameraFiles] : state.cameraFiles,
+          audioFiles: category === "microphone" ? [tempFile, ...state.audioFiles] : state.audioFiles,
+        }
+        notify()
+      } else {
+        // 既存のプレビューがあればフラグ等を維持しつつURLだけBlob URLに差し替え
+        const oldFile = state.files[existingIndex]
+        const tempUrl = URL.createObjectURL(file)
+        // 重要：以前のURLがBlob URL（DataURL等ではない）ならメモリリーク防止のために解放
+        if (oldFile.url?.startsWith("blob:")) URL.revokeObjectURL(oldFile.url)
+
+        const updateFile = (f: ToolFile) =>
+          f.idbKey === idbKey ? { ...f, url: tempUrl, size: file.size, isPending: true } : f
+        state = {
+          ...state,
+          files: state.files.map(updateFile),
+          cameraFiles: state.cameraFiles.map(updateFile),
+          audioFiles: state.audioFiles.map(updateFile),
+        }
+        notify()
+      }
+      const MAX_BUFFER_SIZE = 50
+      if (state.pendingSaves.length >= MAX_BUFFER_SIZE) {
+        throw new Error("Buffer full, cannot save more files")
+      }
+      try {
+        // 2. IDB保存 (Background)
+        await idb.put(idbKey, file)
         const saveToDb = async () => {
           try {
             const db = await getDb()
@@ -414,27 +463,139 @@ export const actions: ToolActions = {
                 idbKey,
               })
               .returning()
-            // 状態を再同期
-            await syncData()
+            // ここで即座に「保存確定」を反映し、syncData の完了を待たない
+            // （syncData が環境依存で遅延/失敗しても saveFile 自体は成功として返す）
+            const applySaved = (f: ToolFile): ToolFile =>
+              f.idbKey === inserted.idbKey
+                ? {
+                    ...f,
+                    id: inserted.id,
+                    sessionId: inserted.sessionId,
+                    fileSet: inserted.fileSet,
+                    category: inserted.category,
+                    fileName: inserted.fileName,
+                    mimeType: inserted.mimeType,
+                    size: inserted.size,
+                    createdAt: inserted.createdAt,
+                    isPending: false,
+                  }
+                : f
+            state = {
+              ...state,
+              files: state.files.map(applySaved),
+              cameraFiles: state.cameraFiles.map(applySaved),
+              audioFiles: state.audioFiles.map(applySaved),
+            }
+            notify()
+
+            // 後追いで整合性を取る（fileSets / fileSetInfo / url hydration 等）
+            void syncData()
+
+            // ブリッジ経由でトーストを表示
+            const type = category === "microphone" ? "audio" : "image"
+            const target = captureBridge.getActiveTargetFor(type)
+            const label = type === "audio" ? "録音" : "写真"
+            toast.success(`${label}を保存しました`, {
+              description: options?.fileName,
+              action: target
+                ? {
+                    label: `${target.label}に適用`,
+                    onClick: () => {
+                      return idb.get(idbKey).then((blob) => {
+                        if (blob) {
+                          const url = URL.createObjectURL(blob)
+                          target.onApply({ type, blob, url } as BridgeData)
+                        }
+                      })
+                    },
+                  }
+                : undefined,
+            })
             return inserted
           } catch (e) {
             console.error("[ToolActionStore] Async save failed:", e)
-            await syncData()
+            void syncData()
             throw e
           }
         }
-        void saveToDb()
-        return { id: idbKey, idbKey }
-      } else {
-        return new Promise<SavedToolFileResult>((resolve, reject) => {
-          state.pendingSaves.push({ id: idbKey, file, options, resolve, reject })
-          state = { ...state, syncStatus: "buffering" }
-          notify()
-        })
+        // DB準備状態に依存せず、常に実DBへ保存して結果を返す
+        return saveToDb().then((inserted) => ({ id: inserted.id, idbKey: inserted.idbKey }))
+      } catch (error) {
+        await idb.remove(idbKey).catch(() => {})
+        const filterOut = (f: ToolFile) => f.idbKey !== idbKey
+        state = {
+          ...state,
+          files: state.files.filter(filterOut),
+          cameraFiles: state.cameraFiles.filter(filterOut),
+          audioFiles: state.audioFiles.filter(filterOut),
+        }
+        notify()
+        throw new Error("Failed to save file", { cause: error })
       }
-    } catch (error) {
-      await idb.remove(idbKey).catch(() => {})
-      const filterOut = (f: ToolFile) => f.idbKey !== idbKey
+    },
+
+    /**
+     * プレビュー（DataURL）を即座にUIに反映する
+     */
+    addPreview: (url: string, category?: string): string => {
+      const tempId = crypto.randomUUID()
+      const tempFile: ToolFile = {
+        id: tempId,
+        sessionId: getSessionState()?.currentId || "default",
+        fileSet: state.currentFileSet,
+        category: category || null,
+        fileName: `loading_${Date.now()}`,
+        mimeType: category === "microphone" ? "audio/mp3" : "image/jpeg",
+        size: 0,
+        idbKey: tempId,
+        createdAt: new Date(),
+        url: url, // DataURL
+        isPending: true,
+      }
+      state = {
+        ...state,
+        files: [tempFile, ...state.files],
+        cameraFiles: category === "camera" ? [tempFile, ...state.cameraFiles] : state.cameraFiles,
+        audioFiles: category === "microphone" ? [tempFile, ...state.audioFiles] : state.audioFiles,
+      }
+      notify()
+      return tempId
+    },
+
+    /**
+     * ファイル選択時の処理
+     */
+    addFiles: (files: FileList | File[], category?: string): void => {
+      Array.from(files).forEach((file) => {
+        actions.saveFile(file, { category })
+      })
+    },
+
+    /**
+     * ファイル変更時の処理
+     */
+    handleFileChange: (event: React.ChangeEvent<HTMLInputElement>, category?: string): void => {
+      const files = event.target.files
+      if (!files || files.length === 0) return
+      actions.addFiles(files, category)
+      event.target.value = ""
+    },
+
+    /**
+     * ファイルを削除する
+     */
+    deleteFile: async (idbKey: string, dbId: string): Promise<void> => {
+      return actions.deleteFiles([{ idbKey, id: dbId }])
+    },
+
+    /**
+     * 複数のファイルを一括削除する
+     */
+    deleteFiles: async (items: { idbKey: string; id: string }[]): Promise<void> => {
+      if (items.length === 0) return
+      const idbKeysToRemove = new Set(items.map((i) => i.idbKey))
+      const filterOut = (f: ToolFile) => !idbKeysToRemove.has(f.idbKey)
+      // 1. 最適化UI更新: 即座にメモリから消して再描画
       state = {
         ...state,
         files: state.files.filter(filterOut),
@@ -442,227 +603,200 @@ export const actions: ToolActions = {
         audioFiles: state.audioFiles.filter(filterOut),
       }
       notify()
-      throw new Error("Failed to save file", { cause: error })
-    }
-  },
+      // 2. バックグラウンドで残りの処理を行う
+      const processDeletion = async () => {
+        const db = await getDb()
+        const idb = idbStore()
+        try {
+          const validDbIds = items.map((i) => i.id).filter((id) => id && id.length > 10)
+          if (validDbIds.length > 0) {
+            await db.delete(filesTable).where(inArray(filesTable.id, validDbIds))
+          }
+          await Promise.all(items.map((item) => idb.remove(item.idbKey)))
+          void syncData()
+        } catch (error) {
+          console.error("[ToolActionStore] Background delete failed:", error)
+          void syncData()
+        }
+      }
+      return processDeletion()
+    },
 
-  /**
-   * プレビュー（DataURL）を即座にUIに反映する
-   */
-  addPreview: (url: string, category?: string): string => {
-    const tempId = crypto.randomUUID()
-    const tempFile: ToolFile = {
-      id: tempId,
-      sessionId: getSessionState()?.currentId || "default",
-      fileSet: state.currentFileSet,
-      category: category || null,
-      fileName: `loading_${Date.now()}`,
-      mimeType: category === "microphone" ? "audio/mp3" : "image/jpeg",
-      size: 0,
-      idbKey: tempId,
-      createdAt: new Date(),
-      url: url, // DataURL
-      isPending: true,
-    }
-    state = {
-      ...state,
-      files: [tempFile, ...state.files],
-      cameraFiles: category === "camera" ? [tempFile, ...state.cameraFiles] : state.cameraFiles,
-      audioFiles: category === "microphone" ? [tempFile, ...state.audioFiles] : state.audioFiles,
-    }
-    notify()
-    return tempId
-  },
-
-  /**
-   * ファイル選択時の処理
-   */
-  addFiles: (files: FileList | File[], category?: string): void => {
-    Array.from(files).forEach((file) => {
-      actions.saveFile(file, { category })
-    })
-  },
-
-  /**
-   * ファイル変更時の処理
-   */
-  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>, category?: string): void => {
-    const files = event.target.files
-    if (!files || files.length === 0) return
-    actions.addFiles(files, category)
-    event.target.value = ""
-  },
-
-  /**
-   * ファイルを削除する
-   */
-  deleteFile: async (idbKey: string, dbId: string): Promise<void> => {
-    return actions.deleteFiles([{ idbKey, id: dbId }])
-  },
-
-  /**
-   * 複数のファイルを一括削除する
-   */
-  deleteFiles: async (items: { idbKey: string; id: string }[]): Promise<void> => {
-    if (items.length === 0) return
-    const idbKeysToRemove = new Set(items.map((i) => i.idbKey))
-    const filterOut = (f: ToolFile) => !idbKeysToRemove.has(f.idbKey)
-    // 1. 最適化UI更新: 即座にメモリから消して再描画
-    // これにより、重いDB処理を待たずにサムネイルが消える
-    state = {
-      ...state,
-      files: state.files.filter(filterOut),
-      cameraFiles: state.cameraFiles.filter(filterOut),
-      audioFiles: state.audioFiles.filter(filterOut),
-    }
-    notify()
-    // 2. バックグラウンドで残りの処理を行う
-    // async関数自体は即座に終了する（awaitしない）
-    const processDeletion = async () => {
-      const db = await getDb()
+    /**
+     * IDBからBlobのURLを取得するのみ
+     */
+    getFileWithUrl: async (idbKey: string): Promise<string | null> => {
       const idb = idbStore()
+      const blob = await idb.get(idbKey)
+      return blob ? URL.createObjectURL(blob) : null
+    },
+
+    /**
+     * スキャンの処理
+     */
+    handleScan: (data: string): void => {
+      const target = captureBridge.getActiveTargetFor("qr")
+      toast.success("QRコードを検出しました", {
+        description: data.length > 30 ? data.slice(0, 30) + "..." : data,
+        action: target
+          ? {
+              label: `${target.label}に適用`,
+              onClick: () => {
+                target.onApply({ type: "qr", data })
+              },
+            }
+          : undefined,
+      })
       try {
-        const validDbIds = items.map((i) => i.id).filter((id) => id && id.length > 10)
-        if (validDbIds.length > 0) {
-          await db.delete(filesTable).where(inArray(filesTable.id, validDbIds))
+        const url = new URL(data)
+        if (url.protocol === "http:" || url.protocol === "https:") {
+          state = {
+            ...state,
+            webUrl: data,
+            isWebViewOpen: true,
+          }
+        } else {
+          alert(`Detected: ${data}`)
         }
-        // IndexedDBから削除 (並列実行)
-        await Promise.all(items.map((item) => idb.remove(item.idbKey)))
-        // 最後に一回だけデータを同期して整合性を確定させる
-        await syncData()
-      } catch (error) {
-        console.error("[ToolActionStore] Background delete failed:", error)
-        await syncData() // 復旧のために再読み込み
+      } catch {
+        alert(`Detected text: ${data}`)
       }
-    }
-    // 非同期で実行し、この関数自体はすぐにリターンする
-    void processDeletion()
-  },
+      notify()
+    },
 
-  /**
-   * IDBからBlobのURLを取得するのみ
-   */
-  getFileWithUrl: async (idbKey: string): Promise<string | null> => {
-    const idb = idbStore()
-    const blob = await idb.get(idbKey)
-    return blob ? URL.createObjectURL(blob) : null
-  },
-
-  /**
-   * スキャンの処理
-   */
-  handleScan: (data: string): void => {
-    try {
-      const url = new URL(data)
-      if (url.protocol === "http:" || url.protocol === "https:") {
-        state = {
-          ...state,
-          webUrl: data,
-          isWebViewOpen: true,
-        }
-      } else {
-        alert(`Detected: ${data}`)
+    /**
+     * ファイルセットを切り替える
+     */
+    switchFileSet: (fileSet: string): void => {
+      revokeUrls(state.files, state.fileSetInfo)
+      state = {
+        ...state,
+        currentFileSet: fileSet,
+        files: [],
+        cameraFiles: [],
+        audioFiles: [],
       }
-    } catch {
-      alert(`Detected text: ${data}`)
-    }
-    notify()
-  },
+      notify()
+      void syncData()
+    },
 
-  /**
-   * ファイルセットを切り替える
-   */
-  switchFileSet: (fileSet: string): void => {
-    // 即座に既存のファイルをクリアしてUIフィードバックを出す
-    revokeUrls(state.files, state.fileSetInfo)
-    state = {
-      ...state,
-      currentFileSet: fileSet,
-      files: [],
-      cameraFiles: [],
-      audioFiles: [],
-    }
-    notify()
-    syncData()
-  },
-
-  /**
-   * UI状態のリセット
-   */
-  closeWebView: (): void => {
-    state = {
-      ...state,
-      isWebViewOpen: false,
-      webUrl: "",
-    }
-    notify()
-  },
-
-  setActiveTool: (tool: "camera" | "microphone" | null): void => {
-    state = {
-      ...state,
-      activeTool: tool,
-    }
-    notify()
-  },
-
-  /**
-   * ファイル選択ダイアログを開く
-   */
-  handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>): void => {
-    fileInputRef?.current?.click()
-  },
-
-  playAudio: () => {
-    // Microphone store handles audio playback, this is just to satisfy ToolActions interface
-    microphoneActions.playAudio()
-  },
-
-  stopAudio: () => {
-    microphoneActions.stopAudio()
-  },
-
-  setAudioUrl: (url: string | null) => {
-    microphoneActions.setAudioUrl(url)
-  },
-}
-
-if (typeof window !== "undefined") {
-  // PGliteの準備が整う前でも、基本的なアクションは登録しておく
-  cameraActions.setExternalActions({
-    saveFile: (file, options) => actions.saveFile(file, { ...options, category: "camera" }),
-    getFileWithUrl: actions.getFileWithUrl,
-    deleteFile: actions.deleteFile,
-    addPreview: (url) => actions.addPreview(url, "camera"),
-  })
-  microphoneActions.setExternalActions({
-    saveFile: (file, options) => actions.saveFile(file, { ...options, category: "microphone" }),
-    getFileWithUrl: actions.getFileWithUrl,
-    deleteFile: actions.deleteFile,
-  })
-  state = { ...state, isReady: true }
-  notify()
-  // PGliteの準備が整ったら自動で同期を開始
-  subscribePglite(() => {
-    if (!state.isDbReady) syncData()
-  })
-  // セッションが変更された場合も再同期する
-  sessionStore.subscribe(() => {
-    syncData()
-  })
-  // 初期化キック: すでに準備ができている場合も同期を開始するようにする
-  const initStore = async () => {
-    try {
-      const db = await getDb()
-      if (db && !state.isDbReady) {
-        await syncData()
+    /**
+     * UI状態のリセット
+     */
+    closeWebView: (): void => {
+      state = {
+        ...state,
+        isWebViewOpen: false,
+        webUrl: "",
       }
-    } catch (err) {
-      console.error("[ToolActionStore] Initial DB kick failed:", err)
-    }
+      notify()
+    },
+
+    setActiveTool: (tool: "camera" | "microphone" | null): void => {
+      state = {
+        ...state,
+        activeTool: tool,
+      }
+      notify()
+    },
+
+    /**
+     * ファイル選択ダイアログを開く
+     */
+    handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>): void => {
+      fileInputRef?.current?.click()
+    },
+
+    playAudio: () => {
+      microphoneActions.playAudio()
+    },
+
+    stopAudio: () => {
+      microphoneActions.stopAudio()
+    },
+
+    setAudioUrl: (url: string | null) => {
+      microphoneActions.setAudioUrl(url)
+    },
   }
-  initStore()
+
+  let unsubPglite: (() => void) | null = null
+  let unsubSession: (() => void) | null = null
+
+  const start = () => {
+    if (disposed) return
+    if (typeof window === "undefined") return
+    // PGliteの準備が整う前でも、基本的なアクションは登録しておく
+    cameraActions.setExternalActions({
+      saveFile: (file, opts) => actions.saveFile(file, { ...opts, category: "camera" }),
+      getFileWithUrl: actions.getFileWithUrl,
+      deleteFile: actions.deleteFile,
+      addPreview: (url) => actions.addPreview(url, "camera"),
+    })
+    microphoneActions.setExternalActions({
+      saveFile: (file, opts) => actions.saveFile(file, { ...opts, category: "microphone" }),
+      getFileWithUrl: actions.getFileWithUrl,
+      deleteFile: actions.deleteFile,
+    })
+    state = { ...state, isReady: true }
+    notify()
+
+    if (!unsubPglite) {
+      unsubPglite = subscribePglite(() => {
+        if (!state.isDbReady) void syncData()
+      })
+    }
+    if (!unsubSession) {
+      unsubSession = sessionStore.subscribe(() => {
+        void syncData()
+      })
+    }
+
+    // 初期同期キック: DB がすでに準備済みでも取りこぼさない
+    void getDb()
+      .then(() => {
+        if (!state.isDbReady) return syncData()
+      })
+      .catch((err) => {
+        console.error("[ToolActionStore] Initial DB kick failed:", err)
+      })
+  }
+
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    try {
+      revokeUrls(state.files, state.fileSetInfo)
+    } catch {
+      /* noop */
+    }
+    if (currentAbortController) {
+      currentAbortController.abort()
+      currentAbortController = null
+    }
+    try {
+      unsubPglite?.()
+    } catch {
+      /* noop */
+    }
+    unsubPglite = null
+    try {
+      unsubSession?.()
+    } catch {
+      /* noop */
+    }
+    unsubSession = null
+    listeners.clear()
+  }
+
+  if (options?.autoStart) start()
+
+  return { actions, getState, subscribe, syncData, start, dispose }
 }
+
+const singleton = createToolActionStore({ autoStart: typeof window !== "undefined" })
+
+export const actions: ToolActions = singleton.actions
 
 /**
  * UIから利用するHook
@@ -671,10 +805,10 @@ export function useToolActionStore<T = ToolActionState & ToolActions>(
   selector?: (state: ToolActionState & ToolActions) => T,
 ): T {
   const storeState: ToolActionState = useExternalStore({
-    subscribe,
-    getSnapshot,
-    getServerSnapshot: getSnapshot,
+    subscribe: singleton.subscribe,
+    getSnapshot: singleton.getState,
+    getServerSnapshot: singleton.getState,
   })
-  const full: ToolActionState & ToolActions = { ...storeState, ...actions }
+  const full: ToolActionState & ToolActions = { ...storeState, ...singleton.actions }
   return selector ? selector(full) : (full as unknown as T)
 }

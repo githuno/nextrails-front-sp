@@ -2,9 +2,10 @@
 
 import MultiInputFTB from "@/components/MultiInputFTB"
 import Image from "next/image"
-import { ChangeEvent, ReactNode, useCallback, useEffect, useRef, useState } from "react"
+import { ChangeEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FAB } from "../_globalTools/FAB"
 import { FlickInput, type FlickCaptureData } from "../_globalTools/FlickInput"
+import { useCaptureTarget } from "../_globalTools/_hooks/useCaptureBridge"
 
 interface FileInputProps {
   children: (props: { onClick: () => void; buttonText: string; isSelected: boolean }) => ReactNode
@@ -53,6 +54,87 @@ export default function Page() {
   const [fileName, setFileName] = useState<string | null>(null)
   const [capturedData, setCapturedData] = useState<FlickCaptureData | null>(null)
   const [capturedDataWithShowcase, setCapturedDataWithShowcase] = useState<FlickCaptureData | null>(null)
+  const [bridgeTargetFile, setBridgeTargetFile] = useState<{ url: string; name: string } | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [apiResponse, setApiResponse] = useState<string | null>(null)
+
+  // 1. Input Target
+  const bridgeInput = useCaptureTarget(
+    useMemo(
+      () => ({
+        id: "input-target",
+        label: "入力欄",
+        accepts: ["image", "file"],
+        onApply: (data) => {
+          if (data.type === "image") {
+            setBridgeTargetFile({ url: data.url, name: "captured_image.jpg" })
+          } else if (data.type === "file") {
+            setBridgeTargetFile({ url: "", name: `${data.files.length} files selected` })
+          }
+        },
+      }),
+      [],
+    ),
+  )
+
+  // 2. Canvas Target
+  const bridgeCanvas = useCaptureTarget(
+    useMemo(
+      () => ({
+        id: "canvas-target",
+        label: "キャンバス",
+        accepts: ["image"],
+        onApply: (data) => {
+          if (data.type !== "image") return
+          const canvas = canvasRef.current
+          if (!canvas) return
+          const ctx = canvas.getContext("2d")
+          if (!ctx) return
+          const img = new window.Image()
+          img.onload = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+          }
+          img.src = data.url
+        },
+      }),
+      [],
+    ),
+  )
+
+  // 3. API Target
+  const bridgeApi = useCaptureTarget(
+    useMemo(
+      () => ({
+        id: "api-target",
+        label: "API送信",
+        accepts: ["qr", "image", "audio"],
+        onApply: async (data) => {
+          setApiResponse("Sending...")
+          // 疑似APIリクエスト
+          await new Promise((r) => setTimeout(r, 1000))
+          setApiResponse(`Success: Received ${data.type} at ${new Date().toLocaleTimeString()}`)
+        },
+      }),
+      [],
+    ),
+  )
+
+  // コンポーネントマウント時にデフォルトターゲットを登録
+  const { register: regInput, unregister: unregInput } = bridgeInput
+  const { register: regCanvas, unregister: unregCanvas } = bridgeCanvas
+  const { register: regApi, unregister: unregApi } = bridgeApi
+
+  useEffect(() => {
+    regInput()
+    regCanvas()
+    regApi()
+    return () => {
+      unregInput()
+      unregCanvas()
+      unregApi()
+    }
+  }, [regInput, unregInput, regCanvas, unregCanvas, regApi, unregApi])
 
   const handleFileChange = useCallback((file: File | null) => {
     setFileName(file?.name || null)
@@ -168,6 +250,79 @@ export default function Page() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Capture Bridge Examples */}
+        <div className="flex w-full flex-col gap-4">
+          <h3 className="text-center text-xl font-bold text-zinc-800">Global Capture Bridge</h3>
+          <div className="flex flex-wrap gap-4">
+            {/* 1. Input Target */}
+            <div
+              onClick={() => bridgeInput.setActive()}
+              className={`flex min-w-60 flex-1 cursor-pointer flex-col items-center gap-4 rounded-3xl border p-6 shadow-xl backdrop-blur-md transition-all ${
+                bridgeInput.isActive
+                  ? "border-blue-500 bg-blue-50/50 ring-2 ring-blue-200"
+                  : "border-zinc-200 bg-white/50"
+              }`}
+            >
+              <div className="text-sm font-bold text-zinc-800">入力欄ターゲット</div>
+              {!bridgeTargetFile ? (
+                <div className="flex h-32 w-full items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 p-4 text-center text-[10px] text-zinc-400">
+                  写真を撮ってトーストのボタンを押してください
+                </div>
+              ) : (
+                <div className="relative h-32 w-full overflow-hidden rounded-xl border">
+                  {bridgeTargetFile.url ? (
+                    <Image src={bridgeTargetFile.url} alt="Target" fill className="object-cover" unoptimized />
+                  ) : (
+                    <div className="flex h-full items-center justify-center bg-zinc-100 text-[10px] font-bold">
+                      {bridgeTargetFile.name}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 2. Canvas Target */}
+            <div
+              onClick={() => bridgeCanvas.setActive()}
+              className={`flex min-w-60 flex-1 cursor-pointer flex-col items-center gap-4 rounded-3xl border p-6 shadow-xl backdrop-blur-md transition-all ${
+                bridgeCanvas.isActive
+                  ? "border-blue-500 bg-blue-50/50 ring-2 ring-blue-200"
+                  : "border-zinc-200 bg-white/50"
+              }`}
+            >
+              <div className="text-sm font-bold text-zinc-800">キャンバス描画</div>
+              <canvas
+                ref={canvasRef}
+                width={200}
+                height={150}
+                className="h-32 w-full rounded-xl border bg-zinc-950 shadow-inner"
+              />
+              <div className="text-[9px] text-zinc-400 italic">※撮影データが直接Canvasに描画されます</div>
+            </div>
+
+            {/* 3. API Target */}
+            <div
+              onClick={() => bridgeApi.setActive()}
+              className={`flex min-w-60 flex-1 cursor-pointer flex-col items-center gap-4 rounded-3xl border p-6 shadow-xl backdrop-blur-md transition-all ${
+                bridgeApi.isActive
+                  ? "border-blue-500 bg-blue-50/50 ring-2 ring-blue-200"
+                  : "border-zinc-200 bg-white/50"
+              }`}
+            >
+              <div className="text-sm font-bold text-zinc-800">疑似API送信 (QR/音声可)</div>
+              <div className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border bg-zinc-900 p-4 text-center">
+                <div className="font-mono text-[10px] text-zinc-500">Server Response:</div>
+                <div className="line-clamp-3 font-mono text-xs font-bold break-all text-emerald-400">
+                  {apiResponse || "Waiting for signal..."}
+                </div>
+              </div>
+              <div className="text-center text-[9px] text-zinc-400 italic">
+                ※QRコードを読み取るとトーストから送信できます
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

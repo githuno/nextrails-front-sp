@@ -88,14 +88,21 @@ const CameraModal: React.FC<CameraModalProps> = ({
       cameraActions.cleanup()
       return
     }
+    let cancelled = false
     const setupCamera = async () => {
       if (videoRef.current && canvasRef.current) {
         await cameraActions.setup(videoRef.current, canvasRef.current)
+        if (cancelled) return
         cameraActions.startQrScan()
         cameraActions.startOrientationTracking()
       }
     }
-    setupCamera()
+    void setupCamera().catch(() => {
+      // cameraActions.setup 内で state.error を更新しているため、ここでは未処理rejectionを防ぐだけに留める
+    })
+    return () => {
+      cancelled = true
+    }
   }, [isOpen])
 
   // ImageViewer表示中はスキャンを止めてUI応答性を優先
@@ -112,8 +119,12 @@ const CameraModal: React.FC<CameraModalProps> = ({
 
   const handleSwitchDevice = async (deviceId?: string) => {
     setShowDeviceList(false)
-    await cameraActions.switchDevice(deviceId)
-    cameraActions.startQrScan()
+    try {
+      await cameraActions.switchDevice(deviceId)
+      cameraActions.startQrScan()
+    } catch {
+      // switchDevice 内で error state を更新し得るため、未処理rejectionを防ぐ
+    }
   }
 
   const handleMainActionPointerDown = () => {
@@ -249,7 +260,11 @@ const CameraModal: React.FC<CameraModalProps> = ({
                 <h3 className="mb-2 text-lg font-bold text-white">Camera Error</h3>
                 <p className="mb-6 text-sm text-zinc-400">{cameraState.error.message}</p>
                 <button
-                  onClick={() => cameraActions.setup(videoRef.current!, canvasRef.current!)}
+                  onClick={() => {
+                    void cameraActions.setup(videoRef.current!, canvasRef.current!).catch(() => {
+                      // setup 内で error state を更新しているため、未処理rejectionを防ぐのみ
+                    })
+                  }}
                   className="rounded-full bg-zinc-800 px-6 py-2 text-xs font-bold text-white hover:bg-zinc-700"
                 >
                   Retry

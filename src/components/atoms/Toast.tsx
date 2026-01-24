@@ -149,6 +149,10 @@ export interface ToastData {
   createdAt: number
   remainingTime: number
   lastStartedAt: number
+  action?: {
+    label: string
+    onClick: () => void
+  }
 }
 
 interface ToastState {
@@ -447,6 +451,23 @@ export const Toast = {
       </button>
     )
   },
+
+  Action: () => {
+    const { toast: t } = useToastContext()
+    if (!t.action) return null
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          t.action?.onClick()
+          toastStore.remove(t.id)
+        }}
+        className="ml-auto shrink-0 rounded-md bg-neutral-900 px-3 py-1.5 text-[12px] font-bold text-white transition-colors hover:bg-neutral-800 active:scale-95"
+      >
+        {t.action.label}
+      </button>
+    )
+  },
 }
 
 /**
@@ -454,7 +475,13 @@ export const Toast = {
  * ORCHESTRATOR
  * ==========================================
  */
-export const Toaster = ({ children }: { children?: (data: ToastData) => React.ReactNode }) => {
+export const Toaster = ({
+  portal = true,
+  children,
+}: {
+  portal?: boolean
+  children?: (data: ToastData) => React.ReactNode
+}) => {
   const { toasts, expanded } = useSyncExternalStore(
     toastStore.subscribe,
     toastStore.getSnapshot,
@@ -511,6 +538,7 @@ export const Toaster = ({ children }: { children?: (data: ToastData) => React.Re
               <Toast.Root>
                 <Toast.Icon />
                 <Toast.Content />
+                <Toast.Action />
                 <Toast.Close />
               </Toast.Root>
             )}
@@ -519,6 +547,8 @@ export const Toaster = ({ children }: { children?: (data: ToastData) => React.Re
       })}
     </div>
   )
+
+  if (!portal) return content
 
   return createPortal(content, document.body)
 }

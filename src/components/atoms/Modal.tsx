@@ -1,3 +1,4 @@
+import { Toaster } from "@/components/atoms/Toast"
 import { FC, HTMLAttributes, ReactNode } from "react"
 
 // https://codepen.io/tak-dcxi/pen/RNPvmQr
@@ -117,6 +118,7 @@ const Modal: FC<ModalProps> = ({
             </button>
           )}
           {children}
+          <Toaster portal={false} />
         </div>
       </dialog>
     </>

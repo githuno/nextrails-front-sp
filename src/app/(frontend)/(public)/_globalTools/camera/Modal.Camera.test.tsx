@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { useToolActionStore } from "../_hooks/useToolActionStore"
@@ -254,7 +254,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
       expect(listTitle).toBeInTheDocument()
       const backCamera = screen.getByRole("button", { name: /Back Camera/i })
       await user.click(backCamera)
-      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled()
+      await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled())
     })
 
     it("シャッターボタンをクリックしてキャプチャを実行できる", async () => {
@@ -277,15 +277,18 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     it("シャッターボタンを長押しして録画を開始できる", async () => {
       vi.mocked(useToolActionStore).mockReturnValue(defaultToolActionState)
       vi.useFakeTimers({ shouldAdvanceTime: true })
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      const user = userEvent.setup()
       // confirm ダイアログをモック
       vi.spyOn(window, "confirm").mockReturnValue(false)
       render(<CameraModal isOpen={true} onClose={() => {}} />)
       const captureButton = screen.getByRole("button", { name: "Capture Image" })
       // PointerDown で長押し開始
       await user.pointer({ target: captureButton, keys: "[MouseLeft>]" })
-      // 300ms 以上待機（タイマーで実装）
-      vi.advanceTimersByTime(350)
+      // 300ms 以上待機（タイマー起因の state update を act でラップ）
+      await act(async () => {
+        vi.advanceTimersByTime(350)
+        await Promise.resolve()
+      })
       // Recording インジケータが表示されるのを待機
       await waitFor(() => {
         expect(screen.getByText("Recording")).toBeInTheDocument()
@@ -315,11 +318,6 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     it("カメラの初期化に失敗した際にエラー画面が表示される", async () => {
       // このテスト用に一度 cleanup して状態をクリア
       cameraActions.cleanup()
-      // Unhandled Rejection を防ぐため、rejection を catch するハンドラーを設定
-      const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-        event.preventDefault() // rejection の報告を抑制
-      }
-      window.addEventListener("unhandledrejection", handleUnhandledRejection)
       // このテスト内で getUserMedia を常に reject するようにセットアップ
       vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementation(async () => {
         throw new Error("Permission Denied")
@@ -336,7 +334,6 @@ describe("CameraModal (Integration Test with Real Components)", () => {
         )
         expect(screen.getByText("Permission Denied")).toBeInTheDocument()
       } finally {
-        window.removeEventListener("unhandledrejection", handleUnhandledRejection)
         unmount()
       }
     })
