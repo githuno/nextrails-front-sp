@@ -4,6 +4,7 @@ export const files = pgTable("files", {
   id: uuid("id").primaryKey().defaultRandom(),
   sessionId: text("session_id").notNull(),
   fileSet: text("file_set").notNull(),
+  category: text("category"), // 'camera', 'microphone', etc.
   fileName: text("file_name").notNull(),
   mimeType: text("mime_type").notNull(),
   size: integer("size").notNull(),

@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { useIsClient } from "../_hooks/atoms/useIsClient"
+import { useFlickGesture } from "../_hooks/useFlickGesture"
 
 // --- 型定義 ---
 
@@ -163,74 +164,45 @@ const Trigger: React.FC<TriggerProps> = ({ children, items }) => {
   const { toggle, setFlickIndex, setIsDragging, setIsExpanded, config } = useFloatingActionButtonActions()
   const { isExpanded, flickIndex, isDragging } = useFloatingActionButtonState()
 
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 })
+  const gesture = useFlickGesture(
+    {
+      total: config.total,
+      distance: config.distance,
+      startAngle: config.startAngle,
+      sweepAngle: config.sweepAngle,
+    },
+    (expanded) => {
+      if (expanded && !isExpanded) setIsExpanded(true)
+    },
+  )
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    setStartPos({ x: touch.clientX, y: touch.clientY })
-    setFlickIndex(null)
-    setIsDragging(true)
-    // 注意: クリックとフリックの区別を可能にするため、ここで即座にisExpandedを設定しない
-  }
+  // 同期：hookの状態をcontextの状態に反映
+  useEffect(() => {
+    setFlickIndex(gesture.flickIndex)
+  }, [gesture.flickIndex, setFlickIndex])
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!setIsExpanded || !config) return
-    const touch = e.touches[0]
-    const dx = touch.clientX - startPos.x
-    const dy = touch.clientY - startPos.y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    // マイクロジッターを無視するのに十分な閾値
-    if (dist > 50) {
-      if (!isExpanded) setIsExpanded(true)
-      // 角度を度数で計算
-      const angle = (Math.atan2(dy, dx) * 180) / Math.PI
-      const { total, startAngle, sweepAngle } = config
-      if (total === 0) return
-      const step = total > 1 ? sweepAngle / (total - 1) : 0
-      let normalizedAngle = angle
-      if (normalizedAngle > 0 && startAngle < 0) {
-        normalizedAngle -= 360
-      }
-      let closestIndex = -1
-      let minDiff = Infinity
-      for (let i = 0; i < total; i++) {
-        const itemAngle = startAngle + i * step
-        const diff = Math.abs(normalizedAngle - itemAngle)
-        if (diff < minDiff) {
-          minDiff = diff
-          closestIndex = i
-        }
-      }
-      // 選択が意図的であることを確実にするために角度許容範囲を狭くする（30度）
-      if (minDiff < 30) {
-        setFlickIndex(closestIndex)
-      } else {
-        setFlickIndex(null)
-      }
-    } else {
-      setFlickIndex(null)
-    }
-  }
+  useEffect(() => {
+    setIsDragging(gesture.isDragging)
+  }, [gesture.isDragging, setIsDragging])
 
   const handleTouchEnd = () => {
-    if (flickIndex !== null && items) {
-      const itemId = items[flickIndex]?.id
-      if (itemId !== undefined) {
-        // indexではなくidを使用することで、複数のFABが同じページに存在しても、意図したFABのアクションのみを実行できる
-        const event = new CustomEvent("fab-flick-execute", { detail: { id: itemId } })
-        window.dispatchEvent(event)
-        setIsExpanded(false)
+    gesture.handleTouchEnd((index) => {
+      if (items) {
+        const itemId = items[index]?.id
+        if (itemId !== undefined) {
+          const event = new CustomEvent("fab-flick-execute", { detail: { id: itemId } })
+          window.dispatchEvent(event)
+          setIsExpanded(false)
+        }
       }
-    }
-    setIsDragging(false)
-    setFlickIndex(null)
+    })
   }
 
   return (
     <div
       className="relative z-10 transition-transform duration-500 active:scale-90"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
+      onTouchStart={gesture.handleTouchStart}
+      onTouchMove={gesture.handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {children({ isExpanded, toggle, isDragging, flickIndex, items })}

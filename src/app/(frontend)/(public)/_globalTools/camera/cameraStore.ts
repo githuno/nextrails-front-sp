@@ -19,7 +19,10 @@ interface CameraState {
 
 export interface CameraExternalActions {
   addPreview?: (url: string) => string
-  saveFile?: (file: Blob | File, options?: { fileName?: string; idbKey?: string }) => Promise<SavedToolFileResult>
+  saveFile?: (
+    file: Blob | File,
+    options?: { fileName?: string; idbKey?: string; category?: string },
+  ) => Promise<SavedToolFileResult>
   getFileWithUrl?: (idbKey: string) => Promise<string | null>
   deleteFile?: (idbKey: string, dbId: string) => Promise<void>
 }
@@ -264,9 +267,12 @@ const stopQrScan = (): void => {
   notify()
 }
 
-const capture = async (onComplete?: (url: string | null) => void): Promise<void> => {
+const capture = async (
+  onComplete?: (url: string | null, blob?: Blob | null) => void,
+  options?: { skipSave?: boolean },
+): Promise<void> => {
   if (!state.videoElement || !state.canvasElement) {
-    onComplete?.(null)
+    onComplete?.(null, null)
     return
   }
   // 撮影中はスキャンを停止してキャンバスの競合を防ぐ
@@ -287,24 +293,25 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
     state.deviceOrientation,
     async (url, blob) => {
       if (!url) {
-        onComplete?.(null)
+        onComplete?.(null, null)
         return
       }
       // 1. プレビュー通知（blob=null）の場合
       if (!blob) {
         // UI側のToolActionStore側で楽観的更新を行う
-        if (state.externalActions.addPreview) {
+        if (!options?.skipSave && state.externalActions.addPreview) {
           tempId = state.externalActions.addPreview(url)
         }
+        onComplete?.(url, null)
         return
       }
       // 2. 本番通知（blobあり）の場合
-      if (state.externalActions.saveFile) {
+      if (!options?.skipSave && state.externalActions.saveFile) {
         state.externalActions.saveFile(blob, { idbKey: tempId }).catch((e) => {
           console.error("Failed to persist captured image:", e)
         })
       }
-      onComplete?.(url)
+      onComplete?.(url, blob)
     },
   )
   // キャンバスが解放されるのを待ってからスキャンを再開

@@ -50,7 +50,7 @@ export const getDb = async () => {
       const columnCheckRes = await pgInstance.query<{ exists: boolean }>(`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'files' AND column_name = 'file_set'
+          WHERE table_name = 'files' AND column_name = 'category'
         ) as exists;
       `)
 
@@ -62,6 +62,7 @@ export const getDb = async () => {
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             session_id TEXT NOT NULL,
             file_set TEXT NOT NULL,
+            category TEXT,
             file_name TEXT NOT NULL,
             mime_type TEXT NOT NULL,
             size INTEGER NOT NULL,
@@ -72,8 +73,9 @@ export const getDb = async () => {
           );
           CREATE INDEX idx_files_session_id ON files(session_id);
           CREATE INDEX idx_files_file_set ON files(file_set);
+          CREATE INDEX idx_files_category ON files(category);
         `)
-        console.log("[PgliteStore] Column mismatch detected, table recreated.")
+        console.log("[PgliteStore] Column mismatch detected (missing category), table recreated.")
       }
 
       notify()

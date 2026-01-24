@@ -163,6 +163,8 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     isReady: true,
     isDbReady: true,
     files: [],
+    cameraFiles: [],
+    audioFiles: [],
     fileSets: ["Default"],
     fileSetInfo: [{ name: "Default", count: 0, latestImageUrl: null, latestIdbKey: null }],
     currentFileSet: "Default",
@@ -358,6 +360,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: mockFiles,
+        cameraFiles: mockFiles,
       })
       const { unmount } = render(<CameraModal isOpen={true} onClose={() => {}} />)
       try {
@@ -387,6 +390,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: mockFiles,
+        cameraFiles: mockFiles,
         deleteFiles: deleteFilesMock,
       })
       // confirm をこのテスト用に true を返すように設定

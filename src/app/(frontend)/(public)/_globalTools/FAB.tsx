@@ -59,7 +59,7 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
         type="file"
         ref={fileInputRef}
         onChange={(event: React.ChangeEvent<HTMLInputElement>) => handleFileChange(event)}
-        accept="image/*,audio/*"
+        accept="image/*,audio/*,video/*"
         multiple
         className="hidden"
       />

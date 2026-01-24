@@ -18,10 +18,26 @@ interface CameraModalProps {
   isOpen: boolean
   onClose: () => void
   onScan?: (data: string) => void
-  onSelect?: () => void
+  onSelect?: (accept?: string) => void
+  standalone?: boolean
+  showShowcase?: boolean
+  onCapture?: (
+    result:
+      | { type: "image" | "video"; blob: Blob; url: string }
+      | { type: "qr"; data: string }
+      | { type: "file"; files: File[] },
+  ) => void
 }
 
-const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSelect }) => {
+const CameraModal: React.FC<CameraModalProps> = ({
+  isOpen,
+  onClose,
+  onScan,
+  onSelect,
+  standalone,
+  showShowcase,
+  onCapture,
+}) => {
   const {
     isDbReady,
     isWebViewOpen,
@@ -30,7 +46,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
     currentFileSet,
     fileSetInfo,
     switchFileSet,
-    files,
+    cameraFiles: files, // Destructure as 'files' to minimize downstream changes
     deleteFiles,
   } = useToolActionStore()
   const cameraState = useCameraState()
@@ -53,8 +69,18 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
 
   // アクション（コールバック）の登録
   useEffect(() => {
-    cameraActions.setCallbacks({ onScan, onSelect })
-  }, [onScan, onSelect])
+    if (!isOpen) return // 閉じている時は登録しない
+    const wrappedOnScan = (data: string) => {
+      if (standalone && onCapture) {
+        // スタンドアロンモード（入力用途）なら、スキャン成功時に即座に閉じる
+        onCapture({ type: "qr", data })
+        onClose()
+        return // ここで終了
+      }
+      onScan?.(data)
+    }
+    cameraActions.setCallbacks({ onScan: wrappedOnScan, onSelect })
+  }, [isOpen, onScan, onSelect, standalone, onCapture, onClose])
 
   // モーダル開閉時の初期化・クリーンアップ
   useEffect(() => {
@@ -111,11 +137,32 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
   const handleMainActionClick = async () => {
     if (cameraState.isRecording) {
       cameraActions.stopRecord((blob) => {
-        confirm(`Save recorded video (${(blob.size / 1024).toFixed(2)} KB)?`) // && cameraActions.saveFile(blob)
-        cameraActions.startQrScan()
+        if (standalone && onCapture) {
+          const url = URL.createObjectURL(blob)
+          onCapture({ type: "video", blob, url: url ?? undefined })
+          onClose()
+        } else {
+          confirm(`Save recorded video (${(blob.size / 1024).toFixed(2)} KB)?`) // && cameraActions.saveFile(blob)
+          cameraActions.startQrScan()
+        }
       })
     } else {
-      await cameraActions.capture()
+      if (standalone) {
+        // 2重発火防止
+        let isCaptured = false
+        await cameraActions.capture(
+          (url, blob) => {
+            if (blob && url && onCapture && !isCaptured) {
+              isCaptured = true
+              onCapture({ type: "image", blob, url })
+              onClose()
+            }
+          },
+          { skipSave: true },
+        )
+      } else {
+        await cameraActions.capture()
+      }
     }
   }
 
@@ -147,9 +194,43 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
     }
   }
 
+  const handleDecision = async () => {
+    if (selectedKeys.size === 0 || !onCapture) return
+    const count = selectedKeys.size
+    if (confirm(`Select ${count} items and set to input?`)) {
+      const fileMap = new Map(files.map((f) => [f.idbKey, f]))
+      const selectedIdbKeys = Array.from(selectedKeys)
+      const { idbStore } = await import("../_hooks/db/useIdbStore")
+      const store = idbStore()
+      const results = await Promise.all(
+        selectedIdbKeys.map(async (key) => {
+          const fileInfo = fileMap.get(key)
+          if (!fileInfo) return null
+          const blob = await store.get(key)
+          if (!blob) return null
+          return { blob, info: fileInfo }
+        }),
+      )
+      const validResults = results.filter((r): r is { blob: Blob; info: (typeof files)[0] } => r !== null)
+      if (validResults.length === 0) return
+      if (validResults.length === 1) {
+        // 1つの場合は元のタイプ（image）で返却
+        const { blob, info } = validResults[0]
+        if (info.url) {
+          onCapture({ type: "image", blob, url: info.url })
+        }
+      } else {
+        // 複数の場合は "file" タイプとして File オブジェクトの配列を返却
+        const filesArray = validResults.map((r) => new File([r.blob], r.info.fileName, { type: r.info.mimeType }))
+        onCapture({ type: "file", files: filesArray })
+      }
+      onClose()
+    }
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="h-full w-full p-0">
-      <Tool className="bg-transparent" enableBackgroundTap onBackgroundTap={() => console.log("maximize")}>
+      <Tool className="bg-transparent" enableBackgroundTap onBackgroundTap={() => console.log("expand")}>
         {/* Main Viewer: プレビュー */}
         <Tool.Main className="relative overflow-hidden">
           <>
@@ -297,7 +378,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                onSelect?.()
+                onSelect?.("image/*")
               }}
               aria-label="Open Gallery Select"
               className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
@@ -308,143 +389,157 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
         </Tool.Controller>
 
         {/* Showcase: 撮影済み画像一覧 */}
-        <Tool.Showcase>
-          <div className="grid grid-rows-[auto_1fr] gap-2">
-            <div className="flex items-center justify-between px-2">
-              {/* Left Side: Delete Action with Numeric Badge */}
-              <div className="flex h-5 items-center gap-3">
-                {selectedKeys.size > 0 && (
-                  <div className="animate-in fade-in slide-in-from-left-2 flex items-center gap-3">
-                    <div className="relative">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleBulkDelete()
-                        }}
-                        aria-label={`Delete ${selectedKeys.size} selected images`}
-                        className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 ring-1 ring-white/10 transition-all hover:bg-zinc-800 hover:text-white active:scale-90"
-                      >
-                        <TrashIcon size="14px" color="currentColor" />
-                      </button>
-                      {/* Numeric Badge */}
-                      <div
-                        style={{ backgroundColor: SABI_GOLD }}
-                        className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black text-white shadow-sm ring-1 ring-zinc-950"
-                      >
-                        {selectedKeys.size}
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedKeys(new Set())
-                      }}
-                      className="text-[9px] font-black tracking-widest text-zinc-600 uppercase transition-colors hover:text-zinc-400"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Right Side: FileSet Navigation (Minimal Text) */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setIsLibraryOpen(true)
-                }}
-                aria-label="Open FileSet Library"
-                className="group relative -top-2 -right-2 float-right flex flex-col items-end rounded-2xl bg-white/50 shadow-lg transition-all hover:scale-110"
-              >
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-6 max-w-64 min-w-12 cursor-pointer items-center justify-center-safe truncate px-2 text-sm font-bold text-zinc-800">
-                    {currentFileSet}
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            {/* ギャラリー */}
-            {files.length > 0 ? (
-              <Carousel containerClassName="gap-x-2 h-16">
-                {files.map((image, index) => {
-                  const isSelected = !!image.idbKey && selectedKeys.has(image.idbKey)
-                  return (
-                    <Carousel.Item key={image.idbKey || index} className="group relative">
-                      <button
-                        data-testid="camera-item"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setViewingIndex(index)
-                        }}
-                        className={`h-full overflow-hidden transition-all duration-500 ease-out sm:rounded-none ${
-                          isSelected
-                            ? "scale-[0.88] bg-black/40 shadow-none ring-1 ring-yellow-200/10"
-                            : "scale-100 border-white/5 bg-black/20 shadow-xl"
-                        }`}
-                      >
-                        {image.url ? (
-                          <Image
-                            src={image.url}
-                            alt={`Captured ${index}`}
-                            width={96}
-                            height={54}
-                            unoptimized
-                            className={`h-full w-auto object-contain transition-all group-hover:brightness-110 ${image.isPending ? "grayscale" : ""}`}
-                          />
-                        ) : (
-                          <div className="flex h-full w-16 items-center justify-center bg-zinc-900/50">
-                            <LoadingSpinner size="10px" color="rgba(255,255,255,0.1)" />
-                          </div>
-                        )}
-                        {image.isPending && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <LoadingSpinner size="10px" color="#666" />
-                          </div>
-                        )}
-                      </button>
-
-                      {/* Select Toggle (Top Right Corner Indicator) */}
-                      {image.idbKey && (
+        {(!standalone || showShowcase) && (
+          <Tool.Showcase>
+            <div className="grid grid-rows-[auto_1fr] gap-2">
+              <div className="flex items-center justify-between px-2">
+                {/* Left Side: Delete Action with Numeric Badge */}
+                <div className="flex h-5 items-center gap-3">
+                  {selectedKeys.size > 0 && (
+                    <div className="animate-in fade-in slide-in-from-left-2 flex items-center gap-3">
+                      <div className="relative">
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            toggleSelection(image.idbKey!)
+                            if (standalone) {
+                              handleDecision()
+                            } else {
+                              handleBulkDelete()
+                            }
                           }}
-                          aria-label={isSelected ? "Deselect image" : "Select image"}
-                          className={`absolute -top-1 -right-1 z-10 flex h-7 w-7 items-center justify-center transition-all duration-300 active:scale-75 ${
-                            isSelected ? "opacity-100" : "opacity-50 hover:opacity-100"
+                          aria-label={
+                            standalone
+                              ? `Select ${selectedKeys.size} items`
+                              : `Delete ${selectedKeys.size} selected images`
+                          }
+                          className={`flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 ring-1 ring-white/10 transition-all hover:bg-zinc-800 hover:text-white active:scale-90 ${standalone ? "text-green-500" : ""}`}
+                        >
+                          {standalone ? (
+                            <CheckIcon size="14px" color="currentColor" />
+                          ) : (
+                            <TrashIcon size="14px" color="currentColor" />
+                          )}
+                        </button>
+                        {/* Numeric Badge */}
+                        <div
+                          style={{ backgroundColor: SABI_GOLD }}
+                          className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black text-white shadow-sm ring-1 ring-zinc-950"
+                        >
+                          {selectedKeys.size}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedKeys(new Set())
+                        }}
+                        className="text-[9px] font-black tracking-widest text-zinc-600 uppercase transition-colors hover:text-zinc-400"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Side: FileSet Navigation (Minimal Text) */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsLibraryOpen(true)
+                  }}
+                  aria-label="Open FileSet Library"
+                  className="group relative -top-2 -right-2 float-right flex flex-col items-end rounded-2xl bg-white/50 shadow-lg transition-all hover:scale-110"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex h-6 max-w-64 min-w-12 cursor-pointer items-center justify-center-safe truncate px-2 text-sm font-bold text-zinc-800">
+                      {currentFileSet}
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* ギャラリー */}
+              {files.length > 0 ? (
+                <Carousel containerClassName="gap-x-2 h-16">
+                  {files.map((image, index) => {
+                    const isSelected = !!image.idbKey && selectedKeys.has(image.idbKey)
+                    return (
+                      <Carousel.Item key={image.idbKey || index} className="group relative">
+                        <button
+                          data-testid="camera-item"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setViewingIndex(index)
+                          }}
+                          className={`h-full overflow-hidden transition-all duration-500 ease-out sm:rounded-none ${
+                            isSelected
+                              ? "scale-[0.88] bg-black/40 shadow-none ring-1 ring-yellow-200/10"
+                              : "scale-100 border-white/5 bg-black/20 shadow-xl"
                           }`}
                         >
-                          <div
-                            style={{
-                              backgroundColor: isSelected ? SABI_GOLD : "rgba(255,255,255,250)",
-                              borderColor: isSelected ? SABI_GOLD : "rgba(0,0,0,0.6)",
+                          {image.url ? (
+                            <Image
+                              src={image.url}
+                              alt={`Captured ${index}`}
+                              width={96}
+                              height={54}
+                              unoptimized
+                              className={`h-full w-auto object-contain transition-all group-hover:brightness-110 ${image.isPending ? "grayscale" : ""}`}
+                            />
+                          ) : (
+                            <div className="flex h-full w-16 items-center justify-center bg-zinc-900/50">
+                              <LoadingSpinner size="10px" color="rgba(255,255,255,0.1)" />
+                            </div>
+                          )}
+                          {image.isPending && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <LoadingSpinner size="10px" color="#666" />
+                            </div>
+                          )}
+                        </button>
+
+                        {/* Select Toggle (Top Right Corner Indicator) */}
+                        {image.idbKey && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleSelection(image.idbKey!)
                             }}
-                            className={`flex h-4.5 w-4.5 items-center justify-center rounded-full border shadow-sm transition-all ${
-                              !isSelected && "hover:border-white/60"
+                            aria-label={isSelected ? "Deselect image" : "Select image"}
+                            className={`absolute -top-1 -right-1 z-10 flex h-7 w-7 items-center justify-center transition-all duration-300 active:scale-75 ${
+                              isSelected ? "opacity-100" : "opacity-50 hover:opacity-100"
                             }`}
                           >
-                            <CheckIcon size="10px" color={isSelected ? "#fff" : "rgba(0,0,0,0.6)"} />
-                          </div>
-                        </button>
-                      )}
-                    </Carousel.Item>
-                  )
-                })}
-              </Carousel>
-            ) : !isDbReady ? (
-              <div className="flex h-16 w-full items-center justify-center gap-2 text-[8px] font-bold tracking-[0.2em] text-zinc-600 uppercase italic">
-                <LoadingSpinner size="12px" color="rgba(255,255,255,0.2)" />
-                Loading Database...
-              </div>
-            ) : (
-              <div className="flex h-16 w-full items-center justify-center text-[10px] font-bold tracking-widest text-zinc-600 uppercase italic">
-                No captures yet
-              </div>
-            )}
-          </div>
-        </Tool.Showcase>
+                            <div
+                              style={{
+                                backgroundColor: isSelected ? SABI_GOLD : "rgba(255,255,255,250)",
+                                borderColor: isSelected ? SABI_GOLD : "rgba(0,0,0,0.6)",
+                              }}
+                              className={`flex h-4.5 w-4.5 items-center justify-center rounded-full border shadow-sm transition-all ${
+                                !isSelected && "hover:border-white/60"
+                              }`}
+                            >
+                              <CheckIcon size="10px" color={isSelected ? "#fff" : "rgba(0,0,0,0.6)"} />
+                            </div>
+                          </button>
+                        )}
+                      </Carousel.Item>
+                    )
+                  })}
+                </Carousel>
+              ) : !isDbReady ? (
+                <div className="flex h-16 w-full items-center justify-center gap-2 text-[8px] font-bold tracking-[0.2em] text-zinc-600 uppercase italic">
+                  <LoadingSpinner size="12px" color="rgba(255,255,255,0.2)" />
+                  Loading Database...
+                </div>
+              ) : (
+                <div className="flex h-16 w-full items-center justify-center text-[10px] font-bold tracking-widest text-zinc-600 uppercase italic">
+                  No captures yet
+                </div>
+              )}
+            </div>
+          </Tool.Showcase>
+        )}
       </Tool>
 
       {/* ImageViewer using Modal and Carousel */}

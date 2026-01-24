@@ -17,12 +17,30 @@ const hexToRgb = (hex: string): string => {
 interface MicrophoneModalProps {
   isOpen: boolean
   onClose: () => void
-  onSelect?: () => void
+  onSelect?: (accept?: string) => void
+  standalone?: boolean
+  showShowcase?: boolean
+  onCapture?: (result: { type: "audio"; blob: Blob; url: string } | { type: "file"; files: File[] }) => void
 }
 
-const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSelect }) => {
-  const { currentFileSet, files, deleteFiles, saveFile, getFileWithUrl, fileSetInfo, switchFileSet, isDbReady } =
-    useToolActionStore()
+const MicrophoneModal: React.FC<MicrophoneModalProps> = ({
+  isOpen,
+  onClose,
+  onSelect,
+  standalone,
+  showShowcase,
+  onCapture,
+}) => {
+  const {
+    currentFileSet,
+    audioFiles: files, // Destructure as 'files' to minimize downstream changes
+    deleteFiles,
+    saveFile,
+    getFileWithUrl,
+    fileSetInfo,
+    switchFileSet,
+    isDbReady,
+  } = useToolActionStore()
   const microphoneState = useMicrophoneState()
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [selectedIdbKey, setSelectedIdbKey] = useState<string | null>(null)
@@ -46,6 +64,7 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
 
   // アクション（コールバック）の登録
   useEffect(() => {
+    if (!isOpen) return // 閉じている時は登録しない
     microphoneActions.setCallbacks({
       onSelect,
       onRecordComplete: (result) => {
@@ -63,11 +82,11 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
       await deleteFiles([{ idbKey, id: dbId }])
     }
     microphoneActions.setExternalActions({
-      saveFile: saveFile,
+      saveFile: (file, options) => saveFile(file, { ...options, category: "microphone" }),
       getFileWithUrl,
       deleteFile,
     })
-  }, [onSelect, saveFile, getFileWithUrl, deleteFiles, files])
+  }, [isOpen, onSelect, saveFile, getFileWithUrl, deleteFiles, files])
 
   // モーダル開閉時の初期化・クリーンアップ
   useEffect(() => {
@@ -86,6 +105,11 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
       // 非選択状態: 録音操作
       if (microphoneState.isRecording) {
         await microphoneActions.stopRecord(async (blob) => {
+          if (standalone && onCapture) {
+            onCapture({ type: "audio", blob, url: URL.createObjectURL(blob) })
+            onClose()
+            return { id: "standalone", idbKey: "standalone" }
+          }
           const res = await microphoneActions.saveFile(blob, { fileName: `recording_${Date.now()}.mp3` })
           return res
         })
@@ -128,6 +152,37 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
       await deleteFiles(itemsToDelete)
       setSelectedKeys(new Set())
       setSelectedIdbKey(null)
+    }
+  }
+
+  const handleDecision = async () => {
+    if (selectedKeys.size === 0 || !onCapture) return
+    const count = selectedKeys.size
+    if (confirm(`Select ${count} audio files and set to input?`)) {
+      const fileMap = new Map(files.map((f) => [f.idbKey, f]))
+      const selectedIdbKeys = Array.from(selectedKeys)
+      const { idbStore } = await import("../_hooks/db/useIdbStore")
+      const store = idbStore()
+      const results = await Promise.all(
+        selectedIdbKeys.map(async (key) => {
+          const fileInfo = fileMap.get(key)
+          if (!fileInfo) return null
+          const blob = await store.get(key)
+          if (!blob) return null
+          return { blob, info: fileInfo }
+        }),
+      )
+      const validResults = results.filter((r): r is { blob: Blob; info: (typeof files)[0] } => r !== null)
+      if (validResults.length === 0) return
+      if (validResults.length === 1) {
+        const { blob, info } = validResults[0]
+        const finalUrl = info.url || URL.createObjectURL(blob)
+        onCapture({ type: "audio", blob, url: finalUrl })
+      } else {
+        const filesArray = validResults.map((r) => new File([r.blob], r.info.fileName, { type: r.info.mimeType }))
+        onCapture({ type: "file", files: filesArray })
+      }
+      onClose()
     }
   }
 
@@ -257,7 +312,11 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
               style={{
                 backgroundColor: SABI_GOLD,
                 height: `${20 + ((i % 3) + 1) * 15}px`, // 決定論的高さ
-                animation: `pulse ${0.5 + (i % 5) * 0.1}s ease-in-out infinite alternate`, // 決定論的アニメーション
+                animationName: "pulse",
+                animationDuration: `${0.5 + (i % 5) * 0.1}s`,
+                animationTimingFunction: "ease-in-out",
+                animationIterationCount: "infinite",
+                animationDirection: "alternate",
                 animationDelay: `${i * 0.1}s`,
                 opacity: 0.8,
               }}
@@ -271,7 +330,7 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="h-full w-full p-0">
-      <Tool className="bg-transparent" enableBackgroundTap onBackgroundTap={() => console.log("maximize")}>
+      <Tool className="bg-transparent" enableBackgroundTap onBackgroundTap={() => console.log("expand")}>
         {/* Main Viewer: Audio Status & Visualizer */}
         <Tool.Main className="relative flex flex-col items-center justify-center text-white">
           {microphoneState.isAvailable === null && !microphoneState.error && (
@@ -316,7 +375,11 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
                             className="w-1 rounded-full bg-zinc-700"
                             style={{
                               height: isPlaying ? `${10 + ((i % 3) + 1) * 5}px` : "10px",
-                              animation: isPlaying ? `pulse 0.5s ease-in-out infinite alternate` : "none",
+                              animationName: isPlaying ? "pulse" : "none",
+                              animationDuration: "0.5s",
+                              animationTimingFunction: "ease-in-out",
+                              animationIterationCount: "infinite",
+                              animationDirection: "alternate",
                               animationDelay: `${i * 0.1}s`,
                             }}
                           />
@@ -442,7 +505,7 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  onSelect?.()
+                  onSelect?.("audio/*")
                 }}
                 aria-label="Select File"
                 className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
@@ -454,68 +517,79 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
         </Tool.Controller>
 
         {/* Showcase: Audio Files Gallery */}
-        <Tool.Showcase>
-          <div className="grid grid-rows-[auto_1fr] gap-2">
-            <div className="flex items-center justify-between px-2">
-              {/* Left Side: Delete Action with Numeric Badge */}
-              <div className="flex h-5 items-center gap-3">
-                {selectedKeys.size > 0 && (
-                  <div className="animate-in fade-in slide-in-from-left-2 flex items-center gap-3">
-                    <div className="relative">
+        {(!standalone || showShowcase) && (
+          <Tool.Showcase>
+            <div className="grid grid-rows-[auto_1fr] gap-2">
+              <div className="flex items-center justify-between px-2">
+                {/* Left Side: Delete Action with Numeric Badge */}
+                <div className="flex h-5 items-center gap-3">
+                  {selectedKeys.size > 0 && (
+                    <div className="animate-in fade-in slide-in-from-left-2 flex items-center gap-3">
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (standalone) {
+                              handleDecision()
+                            } else {
+                              handleBulkDelete()
+                            }
+                          }}
+                          aria-label={
+                            standalone
+                              ? `Select ${selectedKeys.size} audio files`
+                              : `Delete ${selectedKeys.size} selected audio files`
+                          }
+                          className={`flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 ring-1 ring-white/10 transition-all hover:bg-zinc-800 hover:text-white active:scale-90 ${standalone ? "text-green-500" : ""}`}
+                        >
+                          {standalone ? (
+                            <CheckIcon size="14px" color="currentColor" />
+                          ) : (
+                            <TrashIcon size="14px" color="currentColor" />
+                          )}
+                        </button>
+                        {/* Numeric Badge */}
+                        <div
+                          style={{ backgroundColor: SABI_GOLD }}
+                          className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black text-white shadow-sm ring-1 ring-zinc-950"
+                        >
+                          {selectedKeys.size}
+                        </div>
+                      </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleBulkDelete()
+                          setSelectedKeys(new Set())
                         }}
-                        aria-label={`Delete ${selectedKeys.size} selected audio files`}
-                        className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-900 text-zinc-400 ring-1 ring-white/10 transition-all hover:bg-zinc-800 hover:text-white active:scale-90"
+                        className="text-[9px] font-black tracking-widest text-zinc-600 uppercase transition-colors hover:text-zinc-400"
                       >
-                        <TrashIcon size="14px" color="currentColor" />
+                        Clear
                       </button>
-                      {/* Numeric Badge */}
-                      <div
-                        style={{ backgroundColor: SABI_GOLD }}
-                        className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-black text-white shadow-sm ring-1 ring-zinc-950"
-                      >
-                        {selectedKeys.size}
-                      </div>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedKeys(new Set())
-                      }}
-                      className="text-[9px] font-black tracking-widest text-zinc-600 uppercase transition-colors hover:text-zinc-400"
-                    >
-                      Clear
-                    </button>
+                  )}
+                </div>
+
+                {/* Right Side: FileSet Navigation */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsLibraryOpen(true)
+                  }}
+                  aria-label="Open FileSet Library"
+                  className="group relative -top-2 -right-2 float-right flex flex-col items-end rounded-2xl bg-white/50 shadow-lg transition-all hover:scale-110"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex h-6 max-w-64 min-w-12 cursor-pointer items-center justify-center-safe truncate px-2 text-sm font-bold text-zinc-800">
+                      {currentFileSet}
+                    </div>
                   </div>
-                )}
+                </button>
               </div>
 
-              {/* Right Side: FileSet Navigation */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setIsLibraryOpen(true)
-                }}
-                aria-label="Open FileSet Library"
-                className="group relative -top-2 -right-2 float-right flex flex-col items-end rounded-2xl bg-white/50 shadow-lg transition-all hover:scale-110"
-              >
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-6 max-w-64 min-w-12 cursor-pointer items-center justify-center-safe truncate px-2 text-sm font-bold text-zinc-800">
-                    {currentFileSet}
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            {/* Gallery */}
-            {files.length > 0 ? (
-              <Carousel containerClassName="gap-x-2 h-16">
-                {files
-                  .filter((file) => file.mimeType.startsWith("audio/"))
-                  .map((file, index) => {
+              {/* Gallery */}
+              {files.length > 0 ? (
+                <Carousel containerClassName="gap-x-2 h-16">
+                  {files.map((file, index) => {
                     const isSelected = !!file.idbKey && selectedKeys.has(file.idbKey)
                     const isCurrent = selectedIdbKey === file.idbKey
                     return (
@@ -578,19 +652,20 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
                       </Carousel.Item>
                     )
                   })}
-              </Carousel>
-            ) : !isDbReady ? (
-              <div className="flex h-16 w-full items-center justify-center gap-2 text-[8px] font-bold tracking-[0.2em] text-zinc-600 uppercase italic">
-                <LoadingSpinner size="12px" color="rgba(255,255,255,0.2)" />
-                Loading Database...
-              </div>
-            ) : (
-              <div className="flex h-16 w-full items-center justify-center text-[10px] font-bold tracking-widest text-zinc-600 uppercase italic">
-                No recordings yet
-              </div>
-            )}
-          </div>
-        </Tool.Showcase>
+                </Carousel>
+              ) : !isDbReady ? (
+                <div className="flex h-16 w-full items-center justify-center gap-2 text-[8px] font-bold tracking-[0.2em] text-zinc-600 uppercase italic">
+                  <LoadingSpinner size="12px" color="rgba(255,255,255,0.2)" />
+                  Loading Database...
+                </div>
+              ) : (
+                <div className="flex h-16 w-full items-center justify-center text-[10px] font-bold tracking-widest text-zinc-600 uppercase italic">
+                  No recordings yet
+                </div>
+              )}
+            </div>
+          </Tool.Showcase>
+        )}
       </Tool>
 
       {/* FileSet Library Modal - Identical to CameraModal for consistency */}

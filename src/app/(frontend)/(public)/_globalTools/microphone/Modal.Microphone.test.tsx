@@ -145,6 +145,8 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
   const defaultToolActionState = {
     currentFileSet: "test-set",
     files: [] as MockFile[],
+    cameraFiles: [] as MockFile[],
+    audioFiles: [] as MockFile[],
     fileSetInfo: [{ name: "test-set", count: 0, latestImageUrl: null, latestIdbKey: null }],
     deleteFiles: vi.fn(),
     saveFile: vi.fn(),
@@ -156,6 +158,8 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
   beforeEach(() => {
     // 各テストでモックを設定
     defaultToolActionState.files = [] as MockFile[]
+    defaultToolActionState.audioFiles = [] as MockFile[]
+    defaultToolActionState.cameraFiles = [] as MockFile[]
     vi.mocked(useToolActionStore).mockReturnValue(defaultToolActionState)
   })
 
@@ -219,7 +223,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
     it("録音停止ボタンをクリックすると録音が停止され、自動的に保存されて再生可能状態になる", async () => {
       const saveFileMock = vi.fn().mockImplementation(async (blob: Blob, options?: { fileName?: string }) => {
         const result = { idbKey: "new-key", id: "new-id" }
-        defaultToolActionState.files.push({
+        const newFile = {
           id: result.id,
           idbKey: result.idbKey,
           url: "data:audio/wav;base64,xxx",
@@ -229,7 +233,9 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
           size: blob.size,
           createdAt: new Date(),
           sessionId: "default",
-        })
+        }
+        defaultToolActionState.files.push(newFile)
+        defaultToolActionState.audioFiles.push(newFile)
         return result
       })
       vi.mocked(useToolActionStore).mockReturnValue({
@@ -268,6 +274,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: [mockFile],
+        audioFiles: [mockFile],
       })
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
       // Showcaseのアイテムをクリック
@@ -294,6 +301,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: [mockFile],
+        audioFiles: [mockFile],
       })
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
       // ファイルをクリックして選択
@@ -324,6 +332,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: [mockFile],
+        audioFiles: [mockFile],
       })
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
       // ファイルをクリックして選択
@@ -360,6 +369,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: [mockFile],
+        audioFiles: [mockFile],
       })
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
       // ファイルをクリックして選択
@@ -393,6 +403,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: mockFiles,
+        audioFiles: mockFiles,
       })
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
       // Showcase内にファイルが表示される（コンテナの存在を確認）
@@ -417,6 +428,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: mockFiles,
+        audioFiles: mockFiles,
         deleteFiles: deleteFilesMock,
       })
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
@@ -447,6 +459,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: [mockFile],
+        audioFiles: [mockFile],
         deleteFiles: deleteFilesMock,
       })
       const { rerender } = render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
@@ -469,6 +482,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
         files: [],
+        audioFiles: [],
         deleteFiles: deleteFilesMock,
       })
       // 再レンダリング

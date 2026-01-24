@@ -16,7 +16,10 @@ interface MicrophoneState {
 }
 
 export interface MicrophoneExternalActions {
-  saveFile?: (file: Blob | File, options?: { fileName?: string; idbKey?: string }) => Promise<SavedToolFileResult>
+  saveFile?: (
+    file: Blob | File,
+    options?: { fileName?: string; idbKey?: string; category?: string },
+  ) => Promise<SavedToolFileResult>
   getFileWithUrl?: (idbKey: string) => Promise<string | null>
   deleteFile?: (idbKey: string, dbId: string) => Promise<void>
 }
