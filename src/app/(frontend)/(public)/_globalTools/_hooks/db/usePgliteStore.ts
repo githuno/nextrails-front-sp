@@ -50,15 +50,15 @@ export const getDb = async () => {
       const columnCheckRes = await pgInstance.query<{ exists: boolean }>(`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'captured_files' AND column_name = 'file_set'
+          WHERE table_name = 'files' AND column_name = 'file_set'
         ) as exists;
       `)
 
       if (!columnCheckRes.rows[0]?.exists) {
         // テーブルを安全に削除して再作成（開発中あるいは内部ツールなので破壊的変更を許容）
         await pgInstance.exec(`
-          DROP TABLE IF EXISTS captured_files;
-          CREATE TABLE captured_files (
+          DROP TABLE IF EXISTS files;
+          CREATE TABLE files (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             session_id TEXT NOT NULL,
             file_set TEXT NOT NULL,
@@ -70,8 +70,8 @@ export const getDb = async () => {
             updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
             deleted_at TIMESTAMP
           );
-          CREATE INDEX idx_captured_files_session_id ON captured_files(session_id);
-          CREATE INDEX idx_captured_files_file_set ON captured_files(file_set);
+          CREATE INDEX idx_files_session_id ON files(session_id);
+          CREATE INDEX idx_files_file_set ON files(file_set);
         `)
         console.log("[PgliteStore] Column mismatch detected, table recreated.")
       }

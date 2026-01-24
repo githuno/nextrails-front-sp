@@ -180,7 +180,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     addFiles: vi.fn(),
     handleSelect: vi.fn(),
     handleFileChange: vi.fn(),
-    saveCapturedFile: vi.fn().mockResolvedValue({ idbKey: "key", id: "1" }),
+    saveFile: vi.fn().mockResolvedValue({ idbKey: "key", id: "1" }),
     getFileWithUrl: vi.fn(),
     deleteFile: vi.fn(),
     deleteFiles: vi.fn(),

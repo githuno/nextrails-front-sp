@@ -21,16 +21,8 @@ interface MicrophoneModalProps {
 }
 
 const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSelect }) => {
-  const {
-    currentFileSet,
-    files,
-    deleteFiles,
-    saveCapturedFile,
-    getFileWithUrl,
-    fileSetInfo,
-    switchFileSet,
-    isDbReady,
-  } = useToolActionStore()
+  const { currentFileSet, files, deleteFiles, saveFile, getFileWithUrl, fileSetInfo, switchFileSet, isDbReady } =
+    useToolActionStore()
   const microphoneState = useMicrophoneState()
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [selectedIdbKey, setSelectedIdbKey] = useState<string | null>(null)
@@ -71,11 +63,11 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
       await deleteFiles([{ idbKey, id: dbId }])
     }
     microphoneActions.setExternalActions({
-      saveRecordedAudio: saveCapturedFile,
+      saveFile: saveFile,
       getFileWithUrl,
       deleteFile,
     })
-  }, [onSelect, saveCapturedFile, getFileWithUrl, deleteFiles, files])
+  }, [onSelect, saveFile, getFileWithUrl, deleteFiles, files])
 
   // モーダル開閉時の初期化・クリーンアップ
   useEffect(() => {
@@ -94,7 +86,7 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
       // 非選択状態: 録音操作
       if (microphoneState.isRecording) {
         await microphoneActions.stopRecord(async (blob) => {
-          const res = await microphoneActions.saveRecordedAudio(blob, { fileName: `recording_${Date.now()}.mp3` })
+          const res = await microphoneActions.saveFile(blob, { fileName: `recording_${Date.now()}.mp3` })
           return res
         })
       } else {
@@ -176,11 +168,9 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
       }
       return
     }
-
     const canvas = canvasRef.current
     const ctx = canvas.getContext("2d")
     if (!ctx) return
-
     // 必要に応じてオーディオコンテキストを初期化
     if (!audioContextRef.current) {
       const AudioContextClass =
@@ -188,68 +178,50 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
       audioContextRef.current = new AudioContextClass()
     }
     const audioCtx = audioContextRef.current
-
     // ブラウザポリシーにより中断された場合、コンテキストを再開
     if (audioCtx.state === "suspended") {
       audioCtx.resume()
     }
-
     // アナライザーをセットアップ
     if (!analyserRef.current) {
       analyserRef.current = audioCtx.createAnalyser()
       analyserRef.current.fftSize = 256 // 解像度
     }
     const analyser = analyserRef.current
-
     // ストリームを接続
     if (!sourceRef.current || sourceRef.current.mediaStream !== microphoneState.stream) {
       if (sourceRef.current) {
         sourceRef.current.disconnect()
       }
-      // try {
       sourceRef.current = audioCtx.createMediaStreamSource(microphoneState.stream)
       sourceRef.current.connect(analyser)
-      // } catch (err) {
-      //   console.warn("Failed to create media stream source:", err)
-      // }
     }
-
     const bufferLength = analyser.frequencyBinCount
     const dataArray = new Uint8Array(bufferLength)
-
     const draw = () => {
       animationRef.current = requestAnimationFrame(draw)
-
       // クラシックで最小限の波形ラインに時間ドメインデータを使用
       analyser.getByteTimeDomainData(dataArray)
-
       const width = canvas.width
       const height = canvas.height
-
       ctx.clearRect(0, 0, width, height)
-
       ctx.beginPath()
       ctx.strokeStyle = SABI_GOLD
       ctx.lineWidth = 2
       ctx.lineCap = "round"
       ctx.globalAlpha = 0.9
-
       const sliceWidth = width / bufferLength
       let x = 0
-
       for (let i = 0; i < bufferLength; i++) {
         const v = dataArray[i] / 128.0 // 128 is the neutral center for time domain data
         const y = v * (height / 2)
-
         if (i === 0) {
           ctx.moveTo(x, y)
         } else {
           ctx.lineTo(x, y)
         }
-
         x += sliceWidth
       }
-
       ctx.lineTo(width, height / 2)
       ctx.stroke()
     }
@@ -301,7 +273,7 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
     <Modal isOpen={isOpen} onClose={onClose} className="h-full w-full p-0">
       <Tool className="bg-transparent" enableBackgroundTap onBackgroundTap={() => console.log("maximize")}>
         {/* Main Viewer: Audio Status & Visualizer */}
-        <Tool.Main className="relative flex flex-col items-center justify-center bg-zinc-950 text-white">
+        <Tool.Main className="relative flex flex-col items-center justify-center text-white">
           {microphoneState.isAvailable === null && !microphoneState.error && (
             <div className="flex flex-col items-center justify-center">
               <LoadingSpinner size="48px" color="#3b82f6" />
@@ -326,7 +298,7 @@ const MicrophoneModal: React.FC<MicrophoneModalProps> = ({ isOpen, onClose, onSe
           )}
 
           {microphoneState.isAvailable && (
-            <div className="flex flex-col items-center space-y-8">
+            <div className="flex flex-col items-center space-y-8 p-4">
               {/* Visualizer Area or Audio Player */}
               {selectedFile ? (
                 // 再生状態UI

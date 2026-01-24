@@ -1,6 +1,6 @@
 import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
-export const capturedFiles = pgTable("captured_files", {
+export const files = pgTable("files", {
   id: uuid("id").primaryKey().defaultRandom(),
   sessionId: text("session_id").notNull(),
   fileSet: text("file_set").notNull(),
@@ -13,5 +13,5 @@ export const capturedFiles = pgTable("captured_files", {
   deletedAt: timestamp("deleted_at"),
 })
 
-export type CapturedFile = typeof capturedFiles.$inferSelect
-export type NewCapturedFile = typeof capturedFiles.$inferInsert
+export type ToolFileRecord = typeof files.$inferSelect
+export type NewToolFileRecord = typeof files.$inferInsert

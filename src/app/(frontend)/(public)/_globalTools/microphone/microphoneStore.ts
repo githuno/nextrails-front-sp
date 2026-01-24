@@ -1,5 +1,6 @@
 import { useExternalStore } from "../_hooks/atoms/useExternalStore"
 import { idbStore } from "../_hooks/db/useIdbStore"
+import { type SavedToolFileResult } from "../_hooks/useToolActionStore"
 import { createMicrophoneClient, type MicrophoneConfig } from "./microphoneClient"
 
 interface MicrophoneState {
@@ -14,13 +15,8 @@ interface MicrophoneState {
   stream: MediaStream | null // Added for visualization
 }
 
-export interface SavedAudioResult {
-  idbKey: string
-  id: string
-}
-
 export interface MicrophoneExternalActions {
-  saveRecordedAudio?: (file: Blob | File, options?: { fileName?: string; idbKey?: string }) => Promise<SavedAudioResult>
+  saveFile?: (file: Blob | File, options?: { fileName?: string; idbKey?: string }) => Promise<SavedToolFileResult>
   getFileWithUrl?: (idbKey: string) => Promise<string | null>
   deleteFile?: (idbKey: string, dbId: string) => Promise<void>
 }
@@ -32,14 +28,14 @@ interface MicrophoneStateInternal extends MicrophoneState {
   recordedChunks: string[] // チャンクキーの配列
   externalActions: MicrophoneExternalActions
   callbacks: {
-    onRecordComplete?: (result: SavedAudioResult) => void
+    onRecordComplete?: (result: SavedToolFileResult) => void
     onSelect?: () => void
   }
 }
 
 let microphoneClient: ReturnType<typeof createMicrophoneClient> | null = null
 const state: MicrophoneStateInternal = {
-  isAvailable: null,
+  isAvailable: true, // Optimistic display
   isRecording: false,
   isPlaying: false,
   recordedBlob: null,
@@ -204,8 +200,8 @@ const actions = {
   },
 
   stopRecord: (
-    onComplete?: (blob: Blob) => Promise<SavedAudioResult | undefined>,
-  ): Promise<SavedAudioResult | undefined> => {
+    onComplete?: (blob: Blob) => Promise<SavedToolFileResult | undefined>,
+  ): Promise<SavedToolFileResult | undefined> => {
     if (!state.mediaRecorder || !state.isRecording) return Promise.resolve(undefined)
     state.isRecording = false
     state.error = null
@@ -263,10 +259,10 @@ const actions = {
     updateState({ isPlaying: false, currentTime: 0 })
   },
 
-  saveRecordedAudio: async (blob: Blob, options?: { fileName?: string }) => {
-    if (!state.externalActions.saveRecordedAudio) return
+  saveFile: async (blob: Blob, options?: { fileName?: string }) => {
+    if (!state.externalActions.saveFile) return
     try {
-      const result = await state.externalActions.saveRecordedAudio(blob, {
+      const result = await state.externalActions.saveFile(blob, {
         fileName: options?.fileName || `recording_${Date.now()}.mp3`,
       })
       // 保存後に録音されたblobをクリア

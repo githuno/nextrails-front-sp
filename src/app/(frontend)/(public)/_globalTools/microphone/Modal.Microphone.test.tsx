@@ -147,7 +147,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
     files: [] as MockFile[],
     fileSetInfo: [{ name: "test-set", count: 0, latestImageUrl: null, latestIdbKey: null }],
     deleteFiles: vi.fn(),
-    saveCapturedFile: vi.fn(),
+    saveFile: vi.fn(),
     switchFileSet: vi.fn(),
     getFileWithUrl: vi.fn(),
     isDbReady: true,
@@ -217,7 +217,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
     })
 
     it("録音停止ボタンをクリックすると録音が停止され、自動的に保存されて再生可能状態になる", async () => {
-      const saveCapturedFileMock = vi.fn().mockImplementation(async (blob: Blob, options?: { fileName?: string }) => {
+      const saveFileMock = vi.fn().mockImplementation(async (blob: Blob, options?: { fileName?: string }) => {
         const result = { idbKey: "new-key", id: "new-id" }
         defaultToolActionState.files.push({
           id: result.id,
@@ -234,7 +234,7 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       })
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultToolActionState,
-        saveCapturedFile: saveCapturedFileMock,
+        saveFile: saveFileMock,
       })
       render(<MicrophoneModal isOpen={true} onClose={() => {}} />)
       const startButton = await screen.findByRole("button", { name: "Start recording" })
@@ -243,9 +243,9 @@ describe("MicrophoneModal (Integration Test with Real Components)", () => {
       await user.click(stopButton)
       // 保存確認ダイアログは表示されず、そのまま保存される
       expect(window.confirm).not.toHaveBeenCalled()
-      // 保存処理が開始されることを確認（実装で saveRecordedAudio が呼ばれる）
+      // 保存処理が開始されることを確認（実装で saveFile が呼ばれる）
       await waitFor(() => {
-        expect(saveCapturedFileMock).toHaveBeenCalled()
+        expect(saveFileMock).toHaveBeenCalled()
         // 再生ボタンが表示される（選択状態）
         expect(screen.getByRole("button", { name: "Play recording" })).toBeInTheDocument()
       })

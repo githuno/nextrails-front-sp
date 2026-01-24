@@ -1,9 +1,9 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { z } from "zod"
-import { cameraActions, type CameraExternalActions, SavedFileResult } from "../camera/cameraStore"
+import { cameraActions, type CameraExternalActions } from "../camera/cameraStore"
 import { microphoneActions } from "../microphone/microphoneStore"
 import { useExternalStore } from "./atoms/useExternalStore"
-import { capturedFiles } from "./db/pgliteSchema"
+import { files as filesTable } from "./db/pgliteSchema"
 import { idbStore } from "./db/useIdbStore"
 import { getDb, subscribe as subscribePglite } from "./db/usePgliteStore"
 import { getSessionState, sessionStore } from "./useSessionSync"
@@ -36,6 +36,11 @@ export interface FileSetInfo {
   latestIdbKey: string | null
 }
 
+export interface SavedToolFileResult {
+  idbKey: string
+  id: string
+}
+
 interface RawSetInfo {
   name: string
   count: number
@@ -46,7 +51,7 @@ interface PendingSave {
   id: string
   file: Blob | File
   options?: { fileName?: string }
-  resolve: (value: SavedFileResult) => void
+  resolve: (value: SavedToolFileResult) => void
   reject: (reason?: unknown) => void
 }
 
@@ -54,12 +59,11 @@ interface PendingSave {
  * アクションの型定義
  */
 export interface ToolActions extends Required<CameraExternalActions> {
-  addPreviewFile: (url: string) => string
+  addPreview: (url: string) => string
   handleScan: (data: string) => void
   switchFileSet: (fileSet: string) => void
   closeWebView: () => void
-  setCameraOpen: (isOpen: boolean) => void
-  setMicrophoneOpen: (isOpen: boolean) => void
+  setActiveTool: (tool: "camera" | "microphone" | null) => void
   addFiles: (files: FileList | File[]) => void
   handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>) => void
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
@@ -73,8 +77,7 @@ export interface ToolActionState {
   fileSets: string[]
   fileSetInfo: FileSetInfo[]
   currentFileSet: string
-  isCameraOpen: boolean
-  isMicrophoneOpen: boolean
+  activeTool: "camera" | "microphone" | null
   isWebViewOpen: boolean
   webUrl: string
   error: Error | null
@@ -93,8 +96,7 @@ let state: ToolActionState = {
   fileSets: ["1"],
   fileSetInfo: [],
   currentFileSet: "1",
-  isCameraOpen: false,
-  isMicrophoneOpen: false,
+  activeTool: null,
   isWebViewOpen: false,
   webUrl: "",
   error: null,
@@ -158,9 +160,9 @@ async function syncData() {
         notify()
         try {
           for (const pending of queue) {
-            const fileName = pending.options?.fileName || `captured_${Date.now()}`
+            const fileName = pending.options?.fileName || `file_${Date.now()}`
             const [inserted] = await db
-              .insert(capturedFiles)
+              .insert(filesTable)
               .values({
                 sessionId: initialSessionID,
                 fileSet: initialFileSet,
@@ -184,15 +186,15 @@ async function syncData() {
       // PGlite (Postgres) の ARRAY_AGG を使用して最新の idbKey を取得
       const res = await db
         .select({
-          name: capturedFiles.fileSet,
+          name: filesTable.fileSet,
           count: sql<number>`count(*)::int`,
           latest_idb_key: sql<
             string | null
-          >`(array_agg(${capturedFiles.idbKey} order by ${capturedFiles.createdAt} desc))[1]`,
+          >`(array_agg(${filesTable.idbKey} order by ${filesTable.createdAt} desc))[1]`,
         })
-        .from(capturedFiles)
-        .where(eq(capturedFiles.sessionId, initialSessionID))
-        .groupBy(capturedFiles.fileSet)
+        .from(filesTable)
+        .where(eq(filesTable.sessionId, initialSessionID))
+        .groupBy(filesTable.fileSet)
 
       // Zodにより実行時型安全性を確保。不正なデータは例外をスローして早期終了させる
       const rawSetInfos: RawSetInfo[] = z.array(RawSetInfoSchema).parse(res)
@@ -227,9 +229,9 @@ async function syncData() {
       // 2. 現在のファイルセットのメタデータを取得
       const records = await db
         .select()
-        .from(capturedFiles)
-        .where(and(eq(capturedFiles.sessionId, initialSessionID), eq(capturedFiles.fileSet, state.currentFileSet)))
-        .orderBy(desc(capturedFiles.createdAt))
+        .from(filesTable)
+        .where(and(eq(filesTable.sessionId, initialSessionID), eq(filesTable.fileSet, state.currentFileSet)))
+        .orderBy(desc(filesTable.createdAt))
 
       // 3. 状態更新
       const existingFileMap = new Map(state.files.map((f) => [f.idbKey, f]))
@@ -322,22 +324,22 @@ export const actions: ToolActions = {
   /**
    * 撮影・選択されたファイルを保存する
    */
-  saveCapturedFile: async (
+  saveFile: async (
     file: Blob | File,
     options?: { fileName?: string; idbKey?: string },
-  ): Promise<SavedFileResult> => {
+  ): Promise<SavedToolFileResult> => {
     const idb = idbStore()
     const idbKey = options?.idbKey || crypto.randomUUID()
 
     // 1. 最適化UI更新 (Reflection fix)
-    // すでに addPreviewFile で追加されている場合はスキップまたは更新
+    // すでに addPreview で追加されている場合はスキップまたは更新
     const existingIndex = state.files.findIndex((f) => f.idbKey === idbKey)
     if (existingIndex === -1) {
       const tempUrl = URL.createObjectURL(file)
       const tempFile: ToolFile = {
         id: idbKey,
         sessionId: getSessionState()?.currentId || "default",
-        fileName: options?.fileName || `captured_${Date.now()}`,
+        fileName: options?.fileName || `file_${Date.now()}`,
         mimeType: file.type,
         size: file.size,
         idbKey,
@@ -381,9 +383,9 @@ export const actions: ToolActions = {
           try {
             const db = await getDb()
             const sessionID = getSessionState()?.currentId || "default"
-            const fileName = options?.fileName || `captured_${Date.now()}`
+            const fileName = options?.fileName || `file_${Date.now()}`
             const [inserted] = await db
-              .insert(capturedFiles)
+              .insert(filesTable)
               .values({
                 sessionId: sessionID,
                 fileSet: state.currentFileSet,
@@ -413,7 +415,7 @@ export const actions: ToolActions = {
         }
         notify()
 
-        return new Promise<SavedFileResult>((resolve, reject) => {
+        return new Promise<SavedToolFileResult>((resolve, reject) => {
           state.pendingSaves.push({
             id: idbKey,
             file,
@@ -432,19 +434,19 @@ export const actions: ToolActions = {
         files: state.files.filter((f) => f.idbKey !== idbKey),
       }
       notify()
-      throw new Error("Failed to save captured file", { cause: error })
+      throw new Error("Failed to save file", { cause: error })
     }
   },
 
   /**
    * プレビュー（DataURL）を即座にUIに反映する
    */
-  addPreviewFile: (url: string): string => {
+  addPreview: (url: string): string => {
     const tempId = crypto.randomUUID()
     const tempFile: ToolFile = {
       id: tempId,
       sessionId: getSessionState()?.currentId || "default",
-      fileName: `capturing_${Date.now()}`,
+      fileName: `loading_${Date.now()}`,
       mimeType: "image/jpeg",
       size: 0,
       idbKey: tempId,
@@ -488,7 +490,7 @@ export const actions: ToolActions = {
       try {
         const validDbIds = items.map((i) => i.id).filter((id) => id && id.length > 10)
         if (validDbIds.length > 0) {
-          await db.delete(capturedFiles).where(inArray(capturedFiles.id, validDbIds))
+          await db.delete(filesTable).where(inArray(filesTable.id, validDbIds))
         }
         // IndexedDBから削除 (並列実行)
         await Promise.all(items.map((item) => idb.remove(item.idbKey)))
@@ -560,18 +562,10 @@ export const actions: ToolActions = {
     notify()
   },
 
-  setCameraOpen: (isOpen: boolean): void => {
+  setActiveTool: (tool: "camera" | "microphone" | null): void => {
     state = {
       ...state,
-      isCameraOpen: isOpen,
-    }
-    notify()
-  },
-
-  setMicrophoneOpen: (isOpen: boolean): void => {
-    state = {
-      ...state,
-      isMicrophoneOpen: isOpen,
+      activeTool: tool,
     }
     notify()
   },
@@ -581,7 +575,7 @@ export const actions: ToolActions = {
    */
   addFiles: (files: FileList | File[]): void => {
     Array.from(files).forEach((file) => {
-      actions.saveCapturedFile(file)
+      actions.saveFile(file)
     })
   },
 
@@ -607,12 +601,13 @@ export const actions: ToolActions = {
 if (typeof window !== "undefined") {
   // PGliteの準備が整う前でも、基本的なアクションは登録しておく
   cameraActions.setExternalActions({
-    saveCapturedFile: actions.saveCapturedFile,
+    saveFile: actions.saveFile,
     getFileWithUrl: actions.getFileWithUrl,
     deleteFile: actions.deleteFile,
+    addPreview: actions.addPreview,
   })
   microphoneActions.setExternalActions({
-    saveRecordedAudio: actions.saveCapturedFile,
+    saveFile: actions.saveFile,
     getFileWithUrl: actions.getFileWithUrl,
     deleteFile: actions.deleteFile,
   })

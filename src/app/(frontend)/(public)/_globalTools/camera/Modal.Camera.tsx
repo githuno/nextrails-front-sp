@@ -111,7 +111,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onScan, onSe
   const handleMainActionClick = async () => {
     if (cameraState.isRecording) {
       cameraActions.stopRecord((blob) => {
-        confirm(`Save recorded video (${(blob.size / 1024).toFixed(2)} KB)?`) // && cameraActions.saveCapturedFile(blob)
+        confirm(`Save recorded video (${(blob.size / 1024).toFixed(2)} KB)?`) // && cameraActions.saveFile(blob)
         cameraActions.startQrScan()
       })
     } else {

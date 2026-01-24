@@ -1,4 +1,5 @@
 import { useExternalStore } from "../_hooks/atoms/useExternalStore"
+import { type SavedToolFileResult } from "../_hooks/useToolActionStore"
 import { createCameraClient, type CameraConfig } from "./cameraClient"
 
 interface CameraState {
@@ -16,14 +17,9 @@ interface CameraState {
   deviceOrientation: number // デバイスの物理的な向き 0, 90, 180, 270
 }
 
-export interface SavedFileResult {
-  idbKey: string
-  id: string
-}
-
 export interface CameraExternalActions {
-  addPreviewFile?: (url: string) => string
-  saveCapturedFile?: (file: Blob | File, options?: { fileName?: string; idbKey?: string }) => Promise<SavedFileResult>
+  addPreview?: (url: string) => string
+  saveFile?: (file: Blob | File, options?: { fileName?: string; idbKey?: string }) => Promise<SavedToolFileResult>
   getFileWithUrl?: (idbKey: string) => Promise<string | null>
   deleteFile?: (idbKey: string, dbId: string) => Promise<void>
 }
@@ -47,7 +43,7 @@ interface CameraStateInternal extends CameraState {
 
 let cameraClient: ReturnType<typeof createCameraClient> | null = null
 const state: CameraStateInternal = {
-  isAvailable: null,
+  isAvailable: true, // Optimistic display
   isScanning: false,
   isRecording: false,
   isCapturing: false,
@@ -297,14 +293,14 @@ const capture = async (onComplete?: (url: string | null) => void): Promise<void>
       // 1. プレビュー通知（blob=null）の場合
       if (!blob) {
         // UI側のToolActionStore側で楽観的更新を行う
-        if (state.externalActions.addPreviewFile) {
-          tempId = state.externalActions.addPreviewFile(url)
+        if (state.externalActions.addPreview) {
+          tempId = state.externalActions.addPreview(url)
         }
         return
       }
       // 2. 本番通知（blobあり）の場合
-      if (state.externalActions.saveCapturedFile) {
-        state.externalActions.saveCapturedFile(blob, { idbKey: tempId }).catch((e) => {
+      if (state.externalActions.saveFile) {
+        state.externalActions.saveFile(blob, { idbKey: tempId }).catch((e) => {
           console.error("Failed to persist captured image:", e)
         })
       }

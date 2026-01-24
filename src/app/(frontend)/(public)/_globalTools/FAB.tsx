@@ -20,13 +20,9 @@ const Repl = dynamic(() => import("@electric-sql/pglite-repl").then((m) => m.Rep
 const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ className }) => {
   useSessionSync() // URLとStateのセッション同期を有効化
 
-  const isCameraOpen = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.isCameraOpen, []))
-  const isMicrophoneOpen = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.isMicrophoneOpen, []))
+  const activeTool = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.activeTool, []))
+  const setActiveTool = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.setActiveTool, []))
   const handleScan = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleScan, []))
-  const setCameraOpen = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.setCameraOpen, []))
-  const setMicrophoneOpen = useToolActionStore(
-    useCallback((s: ToolActionState & ToolActions) => s.setMicrophoneOpen, []),
-  )
   const handleSelect = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleSelect, []))
   const handleFileChange = useToolActionStore(useCallback((s: ToolActionState & ToolActions) => s.handleFileChange, []))
 
@@ -41,11 +37,11 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
 
   const fabItems = useMemo(
     () => [
-      ...(cameraState.isAvailable
-        ? [{ id: 1, label: "Camera", icon: <CameraIcon />, onClick: () => setCameraOpen(true) }]
+      ...(cameraState.isAvailable !== false
+        ? [{ id: 1, label: "Camera", icon: <CameraIcon />, onClick: () => setActiveTool("camera") }]
         : []),
-      ...(microphoneState.isAvailable
-        ? [{ id: 2, label: "Mic", icon: <MicIcon />, onClick: () => setMicrophoneOpen(true) }]
+      ...(microphoneState.isAvailable !== false
+        ? [{ id: 2, label: "Mic", icon: <MicIcon />, onClick: () => setActiveTool("microphone") }]
         : []),
       { id: 3, label: "Text", onClick: () => alert("Text Component") },
       { id: 4, label: "File", onClick: () => handleSelect(fileInputRef) },
@@ -53,7 +49,7 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
         ? [{ id: 5, label: "PGLite", onClick: () => setPgliteOpen(true) }]
         : []),
     ],
-    [cameraState.isAvailable, microphoneState.isAvailable, setCameraOpen, setMicrophoneOpen, handleSelect],
+    [cameraState.isAvailable, microphoneState.isAvailable, setActiveTool, handleSelect],
   )
 
   return (
@@ -70,14 +66,14 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
       <FloatingActionButton.Simple items={fabItems} className={className} />
 
       <CameraModal
-        isOpen={isCameraOpen}
-        onClose={() => setCameraOpen(false)}
+        isOpen={activeTool === "camera"}
+        onClose={() => setActiveTool(null)}
         onScan={handleScan}
         onSelect={() => handleSelect(fileInputRef)}
       />
       <MicrophoneModal
-        isOpen={isMicrophoneOpen}
-        onClose={() => setMicrophoneOpen(false)}
+        isOpen={activeTool === "microphone"}
+        onClose={() => setActiveTool(null)}
         onSelect={() => handleSelect(fileInputRef)}
       />
       <Modal
