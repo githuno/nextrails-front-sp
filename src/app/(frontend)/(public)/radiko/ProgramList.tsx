@@ -82,7 +82,7 @@ export const ProgramList: React.FC<ProgramListProps> = ({
 
   return (
     <div id="list">
-      <div className="mb-4 flex overflow-x-auto border-b" ref={tabsRef}>
+      <div className="flex overflow-x-auto border-b" ref={tabsRef}>
         {dates.map((date, index) => {
           const isToday = date.toDateString() === new Date().toDateString()
           const playingDateKey = state.currentProgram?.startTime.substring(0, 8)

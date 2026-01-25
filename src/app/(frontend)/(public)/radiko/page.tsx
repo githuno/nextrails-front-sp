@@ -268,51 +268,11 @@ export default function Page() {
   if (!isClient) return null
 
   return (
-    <div className="container mx-auto p-4 pb-32">
+    <div className="container mx-auto p-4 pt-18 pb-32">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Radiko Player</h1>
-        <button
-          onClick={() => setHistoryDrawerOpen(!isHistoryDrawerOpen)}
-          className="fixed right-4 bottom-20 z-60 rounded-full bg-blue-600 p-3 text-white shadow-lg hover:bg-blue-700"
-          aria-label="視聴履歴"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-        </button>
-      </div>
-
-      {state.error && !state.playingType && (
-        <div className="mb-4 rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700">{state.error}</div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 pb-16 md:grid-cols-2">
-        <div id="info">
-          <AreaSelect
-            radikoClient={RadikoClient}
-            currentAreaName={state.currentAreaName}
-            onAreaChange={handleAreaChange}
-          />
-
-          <h2 className="mb-2 text-xl font-semibold">放送局</h2>
-          <StationList stations={state.stations} selectedStation={state.selectedStation} />
-
-          <NowOnAirCard nowOnAir={state.nowOnAir} selectedStation={state.selectedStation} />
-        </div>
-
-        {/* データエクスポート/インポート */}
-        <div className="mt-4 flex gap-4">
+        <div className="flex items-center gap-2">
+          {/* データエクスポート/インポート */}
           <button
             onClick={() => {
               const data = RadikoClient.exportData()
@@ -350,6 +310,43 @@ export default function Page() {
               }}
             />
           </label>
+          <button
+            onClick={() => setHistoryDrawerOpen(!isHistoryDrawerOpen)}
+            className="fixed right-4 bottom-20 z-60 rounded-full bg-blue-600 p-3 text-white shadow-lg hover:bg-blue-700"
+            aria-label="視聴履歴"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {state.error && !state.playingType && (
+        <div className="mb-4 rounded border border-red-400 bg-red-100 px-4 py-3 text-red-700">{state.error}</div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 pb-18 md:grid-cols-2">
+        <div id="info">
+          <AreaSelect
+            radikoClient={RadikoClient}
+            currentAreaName={state.currentAreaName}
+            onAreaChange={handleAreaChange}
+          />
+          <h2 className="mb-2 text-xl font-semibold">放送局</h2>
+          <StationList stations={state.stations} selectedStation={state.selectedStation} />
+          <NowOnAirCard nowOnAir={state.nowOnAir} selectedStation={state.selectedStation} />
         </div>
 
         <div id="list">
@@ -357,7 +354,6 @@ export default function Page() {
             番組表：
             {state.stations.find((s) => s.id === state.selectedStation)?.name || "未選択"}
           </h2>
-
           <ProgramList
             programs={currentTabPrograms}
             dates={programDates}
