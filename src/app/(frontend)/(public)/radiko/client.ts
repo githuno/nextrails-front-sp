@@ -436,6 +436,11 @@ function createRadikoStateManager() {
     setState: (newState: Partial<RadikoState>): void => {
       state = { ...state, ...newState }
       listeners.forEach((listener) => listener())
+
+      // speedが変更されたらlocalStorageに保存
+      if (newState.speed !== undefined && typeof window !== "undefined") {
+        localStorage.setItem(PLAYBACK_SPEED_KEY, newState.speed.toString())
+      }
     },
     subscribe: (listener: Listener): (() => void) => {
       listeners.push(listener)
@@ -854,6 +859,44 @@ const RadikoClient = {
   // 再生停止
   stopPlayback: () => {
     stateManager.setState({ currentProgram: null, playingType: null })
+  },
+
+  // データエクスポート
+  exportData: (): string => {
+    if (typeof window === "undefined") return "{}"
+    const data = {
+      radiko_auth: localStorage.getItem(RADIKO_AUTH_KEY),
+      radiko_playback_programs: localStorage.getItem(PLAYBACK_PROGRAMS_KEY),
+      radiko_playback_speed: localStorage.getItem(PLAYBACK_SPEED_KEY),
+      radiko_favorites: localStorage.getItem(FAVORITES_KEY),
+    }
+    return JSON.stringify(data, null, 2)
+  },
+
+  // データインポート
+  importData: (jsonData: string): void => {
+    if (typeof window === "undefined") return
+    try {
+      const data = JSON.parse(jsonData)
+      if (data.radiko_auth) localStorage.setItem(RADIKO_AUTH_KEY, data.radiko_auth)
+      if (data.radiko_playback_programs) localStorage.setItem(PLAYBACK_PROGRAMS_KEY, data.radiko_playback_programs)
+      if (data.radiko_playback_speed) localStorage.setItem(PLAYBACK_SPEED_KEY, data.radiko_playback_speed)
+      if (data.radiko_favorites) localStorage.setItem(FAVORITES_KEY, data.radiko_favorites)
+      // stateを更新
+      const authInfo = getStoredAuthInfo()
+      const savedPrograms = RadikoClient.getSavedPlaybackPrograms()
+      const savedSpeed = localStorage.getItem(PLAYBACK_SPEED_KEY)
+      const favorites = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]")
+      stateManager.setState({
+        auth: authInfo,
+        currentAreaName: getStoredAuthName(),
+        favorites,
+        speed: savedSpeed ? parseFloat(savedSpeed) : 1.0,
+        history: savedPrograms,
+      })
+    } catch (error) {
+      console.error("Failed to import data", error)
+    }
   },
 }
 

@@ -311,6 +311,47 @@ export default function Page() {
           <NowOnAirCard nowOnAir={state.nowOnAir} selectedStation={state.selectedStation} />
         </div>
 
+        {/* データエクスポート/インポート */}
+        <div className="mt-4 flex gap-4">
+          <button
+            onClick={() => {
+              const data = RadikoClient.exportData()
+              const blob = new Blob([data], { type: "application/json" })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement("a")
+              a.href = url
+              a.download = "radiko-data.json"
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+          >
+            データエクスポート
+          </button>
+          <label className="cursor-pointer rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+            データインポート
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) {
+                  const reader = new FileReader()
+                  reader.onload = (e) => {
+                    const content = e.target?.result as string
+                    if (content) {
+                      RadikoClient.importData(content)
+                      alert("データをインポートしました")
+                    }
+                  }
+                  reader.readAsText(file)
+                }
+              }}
+            />
+          </label>
+        </div>
+
         <div id="list">
           <h2 className="mb-2 text-xl font-semibold">
             番組表：
