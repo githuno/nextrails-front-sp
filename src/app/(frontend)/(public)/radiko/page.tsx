@@ -324,12 +324,12 @@ export default function Page() {
               a.click()
               URL.revokeObjectURL(url)
             }}
-            className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+            className="rounded bg-yellow-800 px-4 py-2 text-white hover:bg-yellow-600"
           >
-            データエクスポート
+            export
           </button>
-          <label className="cursor-pointer rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-            データインポート
+          <label className="cursor-pointer rounded bg-lime-800 px-4 py-2 text-white hover:bg-lime-600">
+            import
             <input
               type="file"
               accept=".json"
