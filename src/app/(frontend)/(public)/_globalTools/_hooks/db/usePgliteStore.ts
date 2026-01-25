@@ -9,7 +9,7 @@ let pgWorker: Worker | null = null
 let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null
 let initPromise: Promise<ReturnType<typeof drizzle<typeof schema>>> | null = null
 let lastError: Error | null = null
-let DATA_DIR = "idb://ftb-global-database"
+let DATA_DIR = "opfs-ahp://ftb-global-database" // "idb://ftb-global-database"
 
 /**
  * DBを破棄して再初期化するための内部関数（破壊的）
@@ -17,7 +17,7 @@ let DATA_DIR = "idb://ftb-global-database"
  * 注意: 呼び出すと Worker / 接続を閉じ、dataDir を差し替えます。
  * テストやデータ初期化用途のためのAPIであり、環境判定による分岐は行いません。
  */
-export const _internal_reset_pglite_store = async (dir: string = "idb://test-ftb-global-database") => {
+export const _internal_reset_pglite_store = async (dir: string = "opfs-ahp://test-ftb-global-database") => {
   if (initPromise) {
     try {
       await initPromise
