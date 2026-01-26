@@ -316,7 +316,7 @@ export default function Page() {
           </label>
           <button
             onClick={() => setHistoryDrawerOpen(!isHistoryDrawerOpen)}
-            className="fixed right-4 bottom-20 z-60 rounded-full bg-blue-600 p-3 text-white shadow-lg hover:bg-blue-700"
+            className="fixed right-4 bottom-36 z-60 rounded-full bg-blue-600 p-3 text-white shadow-lg hover:bg-blue-700"
             aria-label="視聴履歴"
           >
             <svg
