@@ -11,9 +11,9 @@ export const url = {
   // programsWeekly: `${RadikoApi}/programs?type=weekly&stationId={stationId}&ip={ip}` as const,
   programsWeekly: `${RadikoApi}/programs/weekly?stationId={stationId}&token={token}` as const,
   // liveStreaming: `${RadikoApi}/stream/{stationId}/l?ft={ft}&to={to}&ip={ip}` as const,
-  liveStreaming: `${RadikoApi}/stream/{stationId}/l?token={token}` as const,
+  liveStreaming: `${RadikoApi}/stream/{stationId}/l?token={token}&areaId={areaId}` as const,
   // timeFreeStreaming: `${RadikoApi}/stream/{stationId}/t?ft={ft}&to={to}&ip={ip}` as const,
-  timeFreeStreaming: `${RadikoApi}/stream/{stationId}/t?ft={ft}&to={to}&token={token}` as const,
+  timeFreeStreaming: `${RadikoApi}/stream/{stationId}/t?ft={ft}&to={to}&token={token}&areaId={areaId}` as const,
   // カスタム
   customAuth: `${RadikoApi}/custom/auth` as const,
 } as const

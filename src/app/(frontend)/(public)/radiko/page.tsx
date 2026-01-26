@@ -108,13 +108,17 @@ export default function Page() {
     let streamUrl = ""
 
     if (state.playingType === "live") {
-      streamUrl = url.liveStreaming.replace("{stationId}", program.station_id).replace("{token}", state.auth.token)
+      streamUrl = url.liveStreaming
+        .replace("{stationId}", program.station_id)
+        .replace("{token}", state.auth.token)
+        .replace("{areaId}", state.auth.areaId)
     } else {
       streamUrl = url.timeFreeStreaming
         .replace("{stationId}", program.station_id)
         .replace("{ft}", program.startTime)
         .replace("{to}", program.endTime)
         .replace("{token}", state.auth.token)
+        .replace("{areaId}", state.auth.areaId)
     }
 
     initializeHLS(streamUrl)
