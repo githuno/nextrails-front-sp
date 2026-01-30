@@ -266,6 +266,53 @@ const PenIcon: React.FC<IconProps> = ({ size = "16px", color = "#4B4B4B" }) => {
   )
 }
 
+const TextIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) => {
+  const { width, height } = parseSize(size)
+  const fontSize = parseInt(height) * 0.8 + "px"
+  return (
+    <div
+      style={{
+        width,
+        height,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "serif",
+        fontSize,
+        color,
+        fontWeight: "bold",
+        lineHeight: 1,
+      }}
+    >
+      T
+    </div>
+  )
+}
+
+const DocumentIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) => {
+  const { width, height } = parseSize(size)
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={width}
+      height={height}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14,2 14,8 20,8" />
+      <path d="M9 15h6" />
+      <path d="M9 11h6" />
+      <path d="M9 19h6" />
+      <path d="M12 15v4" />
+    </svg>
+  )
+}
+
 const CameraIcon: React.FC<IconProps> = ({ size = "40px", color = "#4B4B4B" }) => {
   const { width, height } = parseSize(size)
   return (
@@ -503,6 +550,7 @@ export {
   CameraIcon,
   CheckIcon,
   CloseIcon,
+  DocumentIcon,
   LoadingDot,
   LoadingSpinner,
   MenuIcon,
@@ -516,5 +564,6 @@ export {
   StopIcon,
   SwitchCameraIcon,
   SyncIcon,
+  TextIcon,
   TrashIcon,
 }

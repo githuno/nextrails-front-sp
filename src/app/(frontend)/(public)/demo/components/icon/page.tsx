@@ -2,7 +2,9 @@
 
 import {
   CameraIcon,
+  CheckIcon,
   CloseIcon,
+  DocumentIcon,
   LoadingDot,
   LoadingSpinner,
   MenuIcon,
@@ -16,6 +18,8 @@ import {
   StopIcon,
   SwitchCameraIcon,
   SyncIcon,
+  TextIcon,
+  TrashIcon,
 } from "@/app/(frontend)/(public)/_globalTools/_components/Icons"
 import { useState } from "react"
 
@@ -35,6 +39,10 @@ const icons = [
   { name: "SyncIcon", component: SyncIcon },
   { name: "MicIcon", component: MicIcon },
   { name: "PlayIcon", component: PlayIcon },
+  { name: "TextIcon", component: TextIcon },
+  { name: "DocumentIcon", component: DocumentIcon },
+  { name: "CheckIcon", component: CheckIcon },
+  { name: "TrashIcon", component: TrashIcon },
 ]
 
 export default function IconDemoPage() {

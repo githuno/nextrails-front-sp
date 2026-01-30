@@ -2,13 +2,14 @@
 
 import React, { Suspense, useCallback, useMemo, useRef, useState } from "react"
 import FloatingActionButton from "./_components/FloatingActionButton"
-import { CameraIcon, MicIcon } from "./_components/Icons"
+import { CameraIcon, MicIcon, TextIcon } from "./_components/Icons"
 import { useSessionSync } from "./_hooks/useSessionSync"
 import { useToolActionStore, type ToolActionState, type ToolActions } from "./_hooks/useToolActionStore"
 import CameraModal from "./camera/Modal.Camera"
 import { useCameraState } from "./camera/cameraStore"
 import MicrophoneModal from "./microphone/Modal.Microphone"
 import { useMicrophoneState } from "./microphone/microphoneStore"
+import TextModal from "./text/Modal.Text"
 
 // PGlite関連のimportは開発モード時のみ行う ------------------
 import dynamic from "next/dynamic"
@@ -43,7 +44,7 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
       ...(microphoneState.isAvailable !== false
         ? [{ id: 2, label: "Mic", icon: <MicIcon />, onClick: () => setActiveTool("microphone") }]
         : []),
-      { id: 3, label: "Text", onClick: () => alert("Text Component") },
+      { id: 3, label: "Text", icon: <TextIcon />, onClick: () => setActiveTool("text") },
       { id: 4, label: "File", onClick: () => handleSelect(fileInputRef) },
       ...(process.env.NODE_ENV === "development"
         ? [{ id: 5, label: "PGLite", onClick: () => setPgliteOpen(true) }]
@@ -76,6 +77,7 @@ const FABContent: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ c
         onClose={() => setActiveTool(null)}
         onSelect={() => handleSelect(fileInputRef)}
       />
+      <TextModal isOpen={activeTool === "text"} onClose={() => setActiveTool(null)} />
       <Modal
         isOpen={isPgliteOpen}
         onClose={() => setPgliteOpen(false)}
