@@ -146,14 +146,15 @@ beforeAll(() => {
 
 afterEach(async () => {
   cleanup()
-  // シングルトンのStoreをクリーンアップ
-  cameraActions.cleanup()
+  // シングルトンのStoreを完全リセット
+  cameraActions._internal_reset()
   // vi.clearAllMocks() は実行しない - mock インスタンスの参照を保持する必要がある
   // 代わりに、mock の実装のみをリセット
   vi.mocked(navigator.mediaDevices.getUserMedia).mockReset()
   // 前のテストの mockImplementation（throw）の影響を受けないよう、明示的にデフォルト実装に戻す
   vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementation(async () => createMockStream())
   vi.mocked(useToolActionStore).mockReset()
+  vi.useRealTimers()
   // pending な rejection を待機（unhandled rejection エラーを回避）
   await new Promise((resolve) => setTimeout(resolve, 0))
 })
@@ -277,14 +278,16 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     it("シャッターボタンを長押しして録画を開始できる", async () => {
       vi.mocked(useToolActionStore).mockReturnValue(defaultToolActionState)
       vi.useFakeTimers({ shouldAdvanceTime: true })
-      const user = userEvent.setup()
+      // advanceTimers で userEvent が自動的にタイマーを進める
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) })
       // confirm ダイアログをモック
       vi.spyOn(window, "confirm").mockReturnValue(false)
       render(<CameraModal isOpen={true} onClose={() => {}} />)
       const captureButton = screen.getByRole("button", { name: "Capture Image" })
       // PointerDown で長押し開始
       await user.pointer({ target: captureButton, keys: "[MouseLeft>]" })
-      // 300ms 以上待機（タイマー起因の state update を act でラップ）
+      // FakeTimers使用時は vi.advanceTimersByTime がトリガーする「同期的な状態更新」を
+      // 明示的に act で包んで反映させる必要がある（通常の非同期 waitFor とは異なる制御が必要なため）
       await act(async () => {
         vi.advanceTimersByTime(350)
         await Promise.resolve()

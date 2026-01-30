@@ -224,7 +224,8 @@ const switchDevice = async (deviceId?: string): Promise<void> => {
 
 const startQrScan = (): void => {
   if (!state.videoElement || !state.canvasElement) {
-    throw new Error("Video or canvas element not set")
+    // クリーンアップ済み、または初期化前の場合はスキャンを開始しない
+    return
   }
   const client = getCameraClient()
   state.isScanning = true
@@ -316,6 +317,7 @@ const capture = async (
   )
   // キャンバスが解放されるのを待ってからスキャンを再開
   await capturePromise
+  if (!state.videoElement || !state.canvasElement) return
   clearTimeout(shutterTimer)
   state.isCapturing = false // 念のため
   if (wasScanning) startQrScan()
@@ -407,6 +409,30 @@ const cleanup = (): void => {
   notify()
 }
 
+/**
+ * テスト用: 全状態を初期値にリセット
+ */
+const _internal_reset = (): void => {
+  cleanup()
+  state.isAvailable = true
+  state.isMirror = true
+  state.deviceId = null
+  state.facingMode = "environment"
+  state.availableDevices = []
+  state.scannedData = null
+  state.error = null
+  state.videoElement = null
+  state.canvasElement = null
+  state.mediaRecorder = null
+  state.recordedBlob = null
+  state.deviceOrientation = 0
+  state.externalActions = {}
+  // バージョンをリセットして新しいスナップショットを生成
+  currentVersion++
+  snapshotVersion = -1
+  notify()
+}
+
 const cameraActions = {
   checkAvailability,
   setup,
@@ -421,6 +447,7 @@ const cameraActions = {
   setExternalActions,
   startOrientationTracking,
   cleanup,
+  _internal_reset,
   getSnapshot,
 }
 
