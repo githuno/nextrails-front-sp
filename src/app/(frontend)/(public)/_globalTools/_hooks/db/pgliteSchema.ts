@@ -8,7 +8,7 @@ export const files = pgTable("files", {
   fileName: text("file_name").notNull(),
   mimeType: text("mime_type").notNull(),
   size: integer("size").notNull(),
-  idbKey: text("idb_key").notNull(), // IndexedDBのキー (Local S3 reference)
+  idbKey: text("idb_key").notNull().unique(), // IndexedDBのキー (Local S3 reference)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
