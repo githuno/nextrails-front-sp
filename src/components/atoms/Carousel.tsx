@@ -362,7 +362,7 @@ const CarouselRoot = ({
       </div>
 
       {/* Layer 3: Dots (スクローラーの外、下部に固定配置) */}
-      {!marquee && childItems.length > 1 && (
+      {!marquee && childItems.length > 1 ? (
         <div className="relative flex justify-center py-0.5">
           <div
             className={`flex items-center space-x-1.5 rounded-full px-3 py-1 blur-[0.3px] backdrop-blur-sm transition-colors ${fade ? "bg-black/70" : "bg-black/30"}`}
@@ -394,6 +394,8 @@ const CarouselRoot = ({
             ))}
           </div>
         </div>
+      ) : (
+        <div className="h-1" />
       )}
     </div>
   )
