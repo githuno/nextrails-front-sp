@@ -67,7 +67,7 @@ export interface ToolActions extends Required<CameraExternalActions & Microphone
   handleScan: (data: string) => void
   switchFileSet: (fileSet: string) => void
   closeWebView: () => void
-  setActiveTool: (tool: "camera" | "microphone" | null) => void
+  setActiveTool: (tool: "camera" | "microphone" | "text" | null) => void
   addFiles: (files: FileList | File[], category?: string) => void
   handleSelect: (fileInputRef: React.RefObject<HTMLInputElement | null>) => void
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>, category?: string) => void
@@ -83,10 +83,11 @@ export interface ToolActionState {
   files: ToolFile[]
   cameraFiles: ToolFile[]
   audioFiles: ToolFile[]
+  textFiles: ToolFile[]
   fileSets: string[]
   fileSetInfo: FileSetInfo[]
   currentFileSet: string
-  activeTool: "camera" | "microphone" | null
+  activeTool: "camera" | "microphone" | "text" | null
   isWebViewOpen: boolean
   webUrl: string
   error: Error | null
@@ -100,6 +101,7 @@ const initialState: ToolActionState = {
   files: [],
   cameraFiles: [],
   audioFiles: [],
+  textFiles: [],
   fileSets: ["Default"],
   fileSetInfo: [],
   currentFileSet: "Default",
@@ -278,7 +280,7 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
         if (signal.aborted || disposed) break
         // 2. データを取得
         const baseFilter = and(eq(filesTable.sessionId, initialSessionID), eq(filesTable.fileSet, state.currentFileSet))
-        const [allRecords, cameraRecords, audioRecords] = await Promise.all([
+        const [allRecords, cameraRecords, audioRecords, textRecords] = await Promise.all([
           db.select().from(filesTable).where(baseFilter).orderBy(desc(filesTable.createdAt)),
           db
             .select()
@@ -289,6 +291,11 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
             .select()
             .from(filesTable)
             .where(and(baseFilter, eq(filesTable.category, "microphone")))
+            .orderBy(desc(filesTable.createdAt)),
+          db
+            .select()
+            .from(filesTable)
+            .where(and(baseFilter, eq(filesTable.category, "text")))
             .orderBy(desc(filesTable.createdAt)),
         ])
         // 3. 状態更新
@@ -305,6 +312,7 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
         const newFiles = processRecords(allRecords)
         const nextCameraFiles = processRecords(cameraRecords)
         const nextAudioFiles = processRecords(audioRecords)
+        const nextTextFiles = processRecords(textRecords)
         const dbIdbKeys = new Set(newFiles.map((f) => f.idbKey))
         const pendingFiles = state.files.filter((f) => f.isPending && !dbIdbKeys.has(f.idbKey))
         const nextFiles = [...pendingFiles, ...newFiles]
@@ -320,6 +328,7 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
           files: nextFiles,
           cameraFiles: nextCameraFiles,
           audioFiles: nextAudioFiles,
+          textFiles: nextTextFiles,
           fileSets: fileSetNameList,
           fileSetInfo,
           isDbReady: true,
@@ -346,6 +355,7 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
                 files: state.files.map((f) => updatedMap.get(f.idbKey) || f),
                 cameraFiles: state.cameraFiles.map((f) => updatedMap.get(f.idbKey) || f),
                 audioFiles: state.audioFiles.map((f) => updatedMap.get(f.idbKey) || f),
+                textFiles: state.textFiles.map((f) => updatedMap.get(f.idbKey) || f),
               }
               notify()
               if (needsSync) break
@@ -451,7 +461,8 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
             const db = await getDb()
             const sessionID = getSessionState()?.currentId || "default"
             const fileName = options?.fileName || `file_${Date.now()}`
-            const [inserted] = await db
+            // upsert: idbKey が既存なら UPDATE、なければ INSERT
+            const [result] = await db
               .insert(filesTable)
               .values({
                 sessionId: sessionID,
@@ -462,21 +473,33 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
                 size: file.size,
                 idbKey,
               })
+              .onConflictDoUpdate({
+                target: filesTable.idbKey,
+                set: {
+                  sessionId: sessionID,
+                  fileSet: state.currentFileSet,
+                  category: category || undefined,
+                  fileName,
+                  mimeType: file.type,
+                  size: file.size,
+                  updatedAt: new Date(),
+                },
+              })
               .returning()
             // ここで即座に「保存確定」を反映し、syncData の完了を待たない
             // （syncData が環境依存で遅延/失敗しても saveFile 自体は成功として返す）
             const applySaved = (f: ToolFile): ToolFile =>
-              f.idbKey === inserted.idbKey
+              f.idbKey === result.idbKey
                 ? {
                     ...f,
-                    id: inserted.id,
-                    sessionId: inserted.sessionId,
-                    fileSet: inserted.fileSet,
-                    category: inserted.category,
-                    fileName: inserted.fileName,
-                    mimeType: inserted.mimeType,
-                    size: inserted.size,
-                    createdAt: inserted.createdAt,
+                    id: result.id,
+                    sessionId: result.sessionId,
+                    fileSet: result.fileSet,
+                    category: result.category,
+                    fileName: result.fileName,
+                    mimeType: result.mimeType,
+                    size: result.size,
+                    createdAt: result.createdAt,
                     isPending: false,
                   }
                 : f
@@ -511,7 +534,7 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
                   }
                 : undefined,
             })
-            return inserted
+            return result
           } catch (e) {
             console.error("[ToolActionStore] Async save failed:", e)
             void syncData()
@@ -692,7 +715,7 @@ export function createToolActionStore(options?: { autoStart?: boolean }): ToolAc
       notify()
     },
 
-    setActiveTool: (tool: "camera" | "microphone" | null): void => {
+    setActiveTool: (tool: "camera" | "microphone" | "text" | null): void => {
       state = {
         ...state,
         activeTool: tool,

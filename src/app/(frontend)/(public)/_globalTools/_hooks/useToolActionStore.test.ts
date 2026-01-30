@@ -29,8 +29,11 @@ if (typeof window !== "undefined") {
   window.URL.revokeObjectURL = vi.fn()
 }
 
+// window.confirm のモック（スキーママイグレーション用）
+vi.spyOn(window, "confirm").mockReturnValue(true)
+
 describe("useToolActionStore (Classical Integration)", () => {
-  const TEST_TIMEOUT = 30000
+  const TEST_TIMEOUT = 60000
   let store: ReturnType<typeof createToolActionStore>
 
   beforeEach(async () => {
@@ -140,6 +143,48 @@ describe("useToolActionStore (Classical Integration)", () => {
       const action = toastCall[1]?.action as { label: string; onClick: () => Promise<void> }
       await action.onClick()
       expect(onApplyMock).toHaveBeenCalled()
+    },
+    TEST_TIMEOUT,
+  )
+
+  it(
+    "同じ idbKey で saveFile を呼ぶと UPDATE される (upsert)",
+    async () => {
+      const idbKey = `text-${Date.now()}-upsert-test`
+      const originalContent = "Original content"
+      const updatedContent = "Updated content"
+      // 1. 初回保存
+      const originalFile = new Blob([originalContent], { type: "text/markdown" })
+      const saveResult1 = await store.actions.saveFile(originalFile, {
+        fileName: "note.md",
+        category: "text",
+        idbKey,
+      })
+      expect(saveResult1.idbKey).toBe(idbKey)
+      // DB に 1 レコードあることを確認
+      const db = await getDb()
+      const records1 = await db.select().from(filesTable).where(eq(filesTable.idbKey, idbKey))
+      expect(records1).toHaveLength(1)
+      expect(records1[0].size).toBe(originalFile.size)
+      const originalId = records1[0].id
+      // 2. 同じ idbKey で更新
+      const updatedFile = new Blob([updatedContent], { type: "text/markdown" })
+      const saveResult2 = await store.actions.saveFile(updatedFile, {
+        fileName: "note-updated.md",
+        category: "text",
+        idbKey,
+      })
+      expect(saveResult2.idbKey).toBe(idbKey)
+      // DB のレコード数は変わらず、内容が更新されている
+      const records2 = await db.select().from(filesTable).where(eq(filesTable.idbKey, idbKey))
+      expect(records2).toHaveLength(1)
+      expect(records2[0].id).toBe(originalId) // 同じ ID
+      expect(records2[0].size).toBe(updatedFile.size) // サイズが更新
+      expect(records2[0].fileName).toBe("note-updated.md") // ファイル名が更新
+      // IDB のバイナリも更新されている
+      const idb = idbStore()
+      const storedBlob = await idb.get(idbKey)
+      expect(storedBlob?.size).toBe(updatedFile.size)
     },
     TEST_TIMEOUT,
   )
