@@ -3,7 +3,15 @@ import React, { useEffect, useRef, useState } from "react"
 import { Carousel } from "../_components/atoms/Carousel"
 import { Modal } from "../_components/atoms/Modal"
 import { Tool } from "../_components/GlobalTool"
-import { CheckIcon, LoadingSpinner, PictureIcon, StopIcon, SwitchCameraIcon, TrashIcon } from "../_components/Icons"
+import {
+  CheckIcon,
+  LoadingSpinner,
+  PictureIcon,
+  QrIcon,
+  StopIcon,
+  SwitchCameraIcon,
+  TrashIcon,
+} from "../_components/Icons"
 import { useToolActionStore } from "../_hooks/useToolActionStore"
 import { cameraActions, useCameraState } from "./cameraStore"
 
@@ -108,14 +116,21 @@ const CameraModal: React.FC<CameraModalProps> = ({
   // ImageViewer表示中はスキャンを止めてUI応答性を優先
   useEffect(() => {
     if (!isOpen) return
-    if (viewingIndex !== null) {
+    if (viewingIndex !== null || !cameraState.isQrEnabled) {
       if (cameraState.isScanning) cameraActions.stopQrScan()
       return
     }
     if (cameraState.isAvailable && !cameraState.isRecording && !cameraState.isScanning) {
       cameraActions.startQrScan()
     }
-  }, [isOpen, viewingIndex, cameraState.isAvailable, cameraState.isRecording, cameraState.isScanning])
+  }, [
+    isOpen,
+    viewingIndex,
+    cameraState.isAvailable,
+    cameraState.isRecording,
+    cameraState.isScanning,
+    cameraState.isQrEnabled,
+  ])
 
   const handleSwitchDevice = async (deviceId?: string) => {
     setShowDeviceList(false)
@@ -245,7 +260,6 @@ const CameraModal: React.FC<CameraModalProps> = ({
         {/* Main Viewer: プレビュー */}
         <Tool.Main className="relative overflow-hidden">
           <>
-            <input id="qr-toggle" type="checkbox" className="peer hidden" />
             {cameraState.isAvailable === null && !cameraState.error && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-zinc-950">
                 <LoadingSpinner size="48px" color="#3b82f6" />
@@ -278,14 +292,13 @@ const CameraModal: React.FC<CameraModalProps> = ({
               muted
               className={`${cameraState.isCapturing ? "scale-[0.98] brightness-50" : "scale-100 brightness-100"} ${cameraState.isAvailable ? "opacity-100" : "opacity-0"}`}
             />
-            <label htmlFor="qr-toggle" className="absolute inset-0 cursor-pointer" />
             <canvas ref={canvasRef} className="hidden" />
             {/* QR Overlay */}
             <div
-              className="pointer-events-none absolute inset-0 flex items-center justify-center peer-checked:hidden"
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
               style={{ "--sabi-gold": hexToRgb(SABI_GOLD) } as React.CSSProperties}
             >
-              {cameraState.isScanning && (
+              {cameraState.isScanning && cameraState.isQrEnabled && (
                 <>
                   <div className="relative h-48 w-48 rounded-lg border border-[rgba(var(--sabi-gold),0.2)]">
                     <div className="absolute inset-0 rounded-lg bg-[rgba(var(--sabi-gold),0.05)]" />
@@ -320,44 +333,71 @@ const CameraModal: React.FC<CameraModalProps> = ({
 
         {/* Controller: 操作系 */}
         <Tool.Controller>
-          <div className="flex items-center justify-around gap-4 px-4">
-            {/* Device Switch */}
-            <div className="relative">
+          <div className="mx-auto flex max-w-2xl items-center justify-between gap-2 px-2 sm:px-12">
+            {/* Left Group: Secondary Actions */}
+            <div className="flex flex-1 items-center justify-start gap-3 sm:gap-10">
+              {/* Device Switch */}
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowDeviceList(!showDeviceList)
+                  }}
+                  aria-label="Switch Camera"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-400 transition-all hover:bg-zinc-800 hover:text-zinc-100 active:scale-90"
+                >
+                  <SwitchCameraIcon size="28px" color="currentColor" />
+                </button>
+                {showDeviceList && (
+                  <div className="animate-in fade-in slide-in-from-bottom-2 absolute bottom-14 left-0 z-50 w-48 rounded-2xl border border-zinc-800 bg-zinc-950/90 p-2 shadow-2xl backdrop-blur-2xl">
+                    <div className="mb-2 px-2 py-1 text-[9px] font-black tracking-widest text-zinc-600 uppercase">
+                      Sensors
+                    </div>
+                    {cameraState.availableDevices.map((device) => (
+                      <button
+                        key={device.deviceId}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleSwitchDevice(device.deviceId)
+                        }}
+                        className={`w-full rounded-xl px-3 py-2 text-left text-[10px] font-bold transition-colors ${
+                          cameraState.deviceId === device.deviceId
+                            ? "bg-zinc-100 text-zinc-950"
+                            : "text-zinc-400 hover:bg-zinc-900"
+                        }`}
+                      >
+                        {device.label || `Sensor ${device.deviceId.slice(0, 5)}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* QR Toggle */}
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  setShowDeviceList(!showDeviceList)
+                  cameraActions.setQrEnabled(!cameraState.isQrEnabled)
                 }}
-                aria-label="Switch Camera"
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
+                aria-label={cameraState.isQrEnabled ? "Disable QR Scan" : "Enable QR Scan"}
+                className={`group relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-500 active:scale-90 ${
+                  cameraState.isQrEnabled
+                    ? "bg-zinc-100 text-zinc-950 shadow-[0_0_15px_rgba(255,255,255,0.2)]"
+                    : "bg-zinc-900/80 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400"
+                }`}
               >
-                <SwitchCameraIcon size="36px" color="#fff" />
+                <QrIcon size="20px" color="currentColor" />
+                {cameraState.isQrEnabled && (
+                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+                  </span>
+                )}
               </button>
-              {showDeviceList && (
-                <div className="absolute bottom-16 left-0 w-48 rounded-2xl border border-zinc-800 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur-xl">
-                  <div className="mb-2 px-2 py-1 text-[10px] font-bold text-zinc-500 uppercase">Select Device</div>
-                  {cameraState.availableDevices.map((device) => (
-                    <button
-                      key={device.deviceId}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleSwitchDevice(device.deviceId)
-                      }}
-                      className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-colors ${
-                        cameraState.deviceId === device.deviceId
-                          ? "bg-blue-600 text-white"
-                          : "text-zinc-300 hover:bg-zinc-800"
-                      }`}
-                    >
-                      {device.label || `Camera ${device.deviceId.slice(0, 5)}`}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
-            {/* Main Action: Capture or Stop Record */}
-            <div className="relative flex items-center justify-center">
+            {/* Center Group: Primary Action (The Anchor) */}
+            <div className="flex items-center justify-center">
               {cameraState.isRecording ? (
                 <button
                   onClick={(e) => {
@@ -365,9 +405,10 @@ const CameraModal: React.FC<CameraModalProps> = ({
                     handleMainActionClick()
                   }}
                   aria-label="Stop Recording"
-                  className="hover:shadow-3xl flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 hover:ring-2 active:scale-95"
+                  className="relative flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-[0_0_30px_rgba(255,255,255,0.2)] transition-all duration-300 active:scale-95"
                 >
-                  <StopIcon size="h-8 w-8" color="bg-red-500" />
+                  <StopIcon size="h-10 w-10" color="bg-red-600" />
+                  <div className="absolute -inset-1 animate-pulse rounded-full border border-red-500/50" />
                 </button>
               ) : (
                 <button
@@ -380,26 +421,30 @@ const CameraModal: React.FC<CameraModalProps> = ({
                     handleMainActionClick()
                   }}
                   aria-label="Capture Image"
-                  className={`group hover:shadow-3xl relative flex h-12 w-12 touch-none items-center justify-center rounded-full bg-linear-to-br from-white to-gray-100 shadow-2xl ring-0 ring-white/20 transition-all duration-300 select-none hover:ring-2 active:scale-95 ${isLongPressing ? "ring-4 ring-red-500" : ""}`}
+                  className={`group relative flex h-16 w-16 touch-none items-center justify-center rounded-full bg-white shadow-2xl transition-all duration-500 select-none active:scale-90 ${isLongPressing ? "ring-4 ring-red-500/50" : "hover:scale-105"}`}
                 >
-                  <div className="relative flex h-12 w-12 items-center justify-center rounded-full border-2 border-zinc-200 transition-transform group-hover:scale-110">
-                    <div className="h-8 w-8 rounded-full border border-zinc-300/50"></div>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-zinc-100 transition-transform group-hover:scale-95">
+                    <div
+                      className={`h-8 w-8 rounded-full border transition-all duration-700 ${isLongPressing ? "scale-110 border-transparent bg-red-500" : "border-zinc-200"}`}
+                    ></div>
                   </div>
                 </button>
               )}
             </div>
 
-            {/* Select Image (Gallery) */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onSelect?.("image/*")
-              }}
-              aria-label="Open Gallery Select"
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800/80 transition-all hover:bg-zinc-700 active:scale-90"
-            >
-              <PictureIcon size="28px" color="#fff" />
-            </button>
+            {/* Right Group: Library Access */}
+            <div className="flex flex-1 items-center justify-end">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelect?.("image/*")
+                }}
+                aria-label="Open Gallery Select"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900/80 text-zinc-400 transition-all hover:bg-zinc-800 hover:text-zinc-100 active:scale-90"
+              >
+                <PictureIcon size="24px" color="currentColor" />
+              </button>
+            </div>
           </div>
         </Tool.Controller>
 

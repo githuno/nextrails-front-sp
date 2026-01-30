@@ -5,6 +5,7 @@ import { createCameraClient, type CameraConfig } from "./cameraClient"
 interface CameraState {
   isAvailable: boolean | null // null:初期化中、true:利用可能、false:利用不可
   isScanning: boolean
+  isQrEnabled: boolean
   isRecording: boolean
   isCapturing: boolean
   isMirror: boolean
@@ -48,6 +49,7 @@ let cameraClient: ReturnType<typeof createCameraClient> | null = null
 const state: CameraStateInternal = {
   isAvailable: true, // Optimistic display
   isScanning: false,
+  isQrEnabled: true,
   isRecording: false,
   isCapturing: false,
   isMirror: true,
@@ -74,6 +76,7 @@ const listeners: Set<() => void> = new Set()
 const serverSnapshot: CameraState = {
   isAvailable: false,
   isScanning: false,
+  isQrEnabled: false,
   isRecording: false,
   isCapturing: false,
   isMirror: false,
@@ -113,6 +116,7 @@ const getSnapshot = (): CameraState => {
     snapshotCache = {
       isAvailable: state.isAvailable,
       isScanning: state.isScanning,
+      isQrEnabled: state.isQrEnabled,
       isRecording: state.isRecording,
       isCapturing: state.isCapturing,
       isMirror: state.isMirror,
@@ -223,8 +227,8 @@ const switchDevice = async (deviceId?: string): Promise<void> => {
 }
 
 const startQrScan = (): void => {
-  if (!state.videoElement || !state.canvasElement) {
-    // クリーンアップ済み、または初期化前の場合はスキャンを開始しない
+  if (!state.videoElement || !state.canvasElement || !state.isQrEnabled) {
+    // クリーンアップ済み、初期化前、またはQR無効時はスキャンを開始しない
     return
   }
   const client = getCameraClient()
@@ -265,6 +269,18 @@ const stopQrScan = (): void => {
   }
   state.isScanning = false
   state.scannedData = null
+  notify()
+}
+
+const setQrEnabled = (enabled: boolean): void => {
+  state.isQrEnabled = enabled
+  if (enabled) {
+    if (!state.isScanning && !state.isRecording && !state.mediaRecorder) {
+      startQrScan()
+    }
+  } else {
+    stopQrScan()
+  }
   notify()
 }
 
@@ -402,6 +418,7 @@ const cleanup = (): void => {
   }
   // state.isAvailable はリセットしない（ハードウェアの有無は基本変わらないため）
   state.isScanning = false
+  state.isQrEnabled = true // デフォルトに戻す
   state.isRecording = false
   state.isCapturing = false
   state.aspectRatio = null
@@ -439,6 +456,7 @@ const cameraActions = {
   switchDevice,
   startQrScan,
   stopQrScan,
+  setQrEnabled,
   clearScannedData,
   capture,
   startRecord,

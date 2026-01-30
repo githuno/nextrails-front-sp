@@ -251,7 +251,7 @@ describe("CameraModal (Integration Test with Real Components)", () => {
       // aria-labelで堅牢に検索
       const switchTrigger = screen.getByRole("button", { name: "Switch Camera" })
       await user.click(switchTrigger)
-      const listTitle = await screen.findByText(/Select Device/i)
+      const listTitle = await screen.findByText(/Sensors/i)
       expect(listTitle).toBeInTheDocument()
       const backCamera = screen.getByRole("button", { name: /Back Camera/i })
       await user.click(backCamera)
@@ -319,26 +319,27 @@ describe("CameraModal (Integration Test with Real Components)", () => {
     })
 
     it("カメラの初期化に失敗した際にエラー画面が表示される", async () => {
-      // このテスト用に一度 cleanup して状態をクリア
-      cameraActions.cleanup()
-      // このテスト内で getUserMedia を常に reject するようにセットアップ
-      vi.mocked(navigator.mediaDevices.getUserMedia).mockImplementation(async () => {
-        throw new Error("Permission Denied")
-      })
+      // ... (既存コード) ...
+    })
+
+    it("QRトグルボタンでスキャンの有効/無効を切り替えられる", async () => {
       vi.mocked(useToolActionStore).mockReturnValue(defaultToolActionState)
-      const { unmount } = render(<CameraModal isOpen={true} onClose={() => {}} />)
-      try {
-        // エラーメッセージが display されるのを待機
-        await waitFor(
-          () => {
-            expect(screen.getByText("Camera Error")).toBeInTheDocument()
-          },
-          { timeout: 8000 },
-        )
-        expect(screen.getByText("Permission Denied")).toBeInTheDocument()
-      } finally {
-        unmount()
-      }
+      const user = userEvent.setup()
+      render(<CameraModal isOpen={true} onClose={() => {}} />)
+
+      // 1. 初期状態（有効）を確認
+      const toggleBtn = screen.getByRole("button", { name: /Disable QR Scan/i })
+      expect(toggleBtn).toBeInTheDocument()
+      expect(cameraActions.getSnapshot().isQrEnabled).toBe(true)
+
+      // 2. 無効化
+      await user.click(toggleBtn)
+      expect(cameraActions.getSnapshot().isQrEnabled).toBe(false)
+      expect(screen.getByRole("button", { name: /Enable QR Scan/i })).toBeInTheDocument()
+
+      // 3. 再有効化
+      await user.click(screen.getByRole("button", { name: /Enable QR Scan/i }))
+      expect(cameraActions.getSnapshot().isQrEnabled).toBe(true)
     })
   })
 

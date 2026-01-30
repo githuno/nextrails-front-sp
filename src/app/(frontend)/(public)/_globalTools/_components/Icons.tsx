@@ -546,6 +546,31 @@ const CheckIcon: React.FC<IconProps> = ({ size = "20px", color = "currentColor" 
   )
 }
 
+const QrIcon: React.FC<IconProps> = ({ size = "24px", color = "currentColor" }) => {
+  const { width, height } = parseSize(size)
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={width}
+      height={height}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="7" height="7" />
+      <rect x="14" y="3" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" />
+      <rect x="3" y="14" width="7" height="7" />
+      <rect x="7" y="7" width="1" height="1" />
+      <rect x="16" y="7" width="1" height="1" />
+      <rect x="7" y="16" width="1" height="1" />
+    </svg>
+  )
+}
+
 export {
   CameraIcon,
   CheckIcon,
@@ -560,6 +585,7 @@ export {
   PictureIcon,
   PlayIcon,
   PrevIcon,
+  QrIcon,
   RecordIcon,
   StopIcon,
   SwitchCameraIcon,
