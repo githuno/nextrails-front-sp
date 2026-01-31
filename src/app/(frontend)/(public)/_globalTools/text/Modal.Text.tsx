@@ -6,8 +6,8 @@
 
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
-import ReactMarkdown from "react-markdown"
+import React, { useCallback, useEffect, useRef, useState } from "react"
+import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Carousel } from "../_components/atoms/Carousel"
 import { Modal } from "../_components/atoms/Modal"
@@ -16,6 +16,7 @@ import { CheckIcon, DocumentIcon, LoadingSpinner, PenIcon, TrashIcon } from "../
 import { useToolActionStore, type ToolFile } from "../_hooks/useToolActionStore"
 import { createTextClient } from "./textClient"
 import { textActions, useTextState } from "./textStore"
+import { buildCheckboxLineMap, toggleCheckboxAtLine, useMarkdownKeyboard } from "./useMarkdownKeyboard"
 
 const SABI_GOLD = "#9f890e"
 
@@ -56,6 +57,51 @@ const TextModal: React.FC<TextModalProps> = ({ isOpen, onClose, standalone, show
   const [isLibraryOpen, setIsLibraryOpen] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Markdown keyboard handler (list/checkbox auto-continuation, Tab indent)
+  const { handleKeyDown } = useMarkdownKeyboard({
+    textareaRef,
+    value: textState.currentText,
+    onChange: textActions.setText,
+  })
+
+  // Create markdown components factory for checkbox interactivity
+  // This creates fresh components on each render to ensure correct checkbox indexing
+  const createMarkdownComponents = useCallback((): Components => {
+    const lineMap = buildCheckboxLineMap(textState.currentText)
+    let checkboxIndex = 0
+
+    return {
+      input: ({ type, checked, ...props }) => {
+        if (type === "checkbox") {
+          const currentIndex = checkboxIndex++
+          const lineIndex = lineMap.get(currentIndex) ?? 0
+
+          return (
+            <input
+              type="checkbox"
+              checked={checked ?? false}
+              className="markdown-checkbox"
+              onChange={(e) => {
+                e.stopPropagation()
+                const newText = toggleCheckboxAtLine(textState.currentText, lineIndex, e.target.checked)
+                textActions.setText(newText)
+              }}
+            />
+          )
+        }
+        return <input type={type} checked={checked} {...props} />
+      },
+      li: ({ children, className, ...props }) => {
+        const isTaskItem = className?.includes("task-list-item")
+        return (
+          <li {...props} className={`${className || ""} ${isTaskItem ? "task-list-item-styled" : ""}`}>
+            {children}
+          </li>
+        )
+      },
+    }
+  }, [textState.currentText])
 
   // FileSet切り替え時の選択リセット
   const [prevFileSet, setPrevFileSet] = useState(currentFileSet)
@@ -233,6 +279,149 @@ const TextModal: React.FC<TextModalProps> = ({ isOpen, onClose, standalone, show
           font-size: 0.65rem;
           color: rgba(159, 137, 14, 0.4);
         }
+        /* Markdown checkbox styling - Wabi-Sabi aesthetic */
+        .markdown-checkbox {
+          appearance: none;
+          -webkit-appearance: none;
+          width: 1.125rem;
+          height: 1.125rem;
+          min-width: 1.125rem;
+          min-height: 1.125rem;
+          border: 2px solid ${SABI_GOLD};
+          border-radius: 3px;
+          margin-right: 0.625rem;
+          margin-top: 0.25rem;
+          cursor: pointer;
+          position: relative;
+          background: transparent;
+          transition: all 0.15s ease;
+          flex-shrink: 0;
+        }
+        .markdown-checkbox:hover {
+          border-color: #c4aa12;
+          box-shadow: 0 0 8px rgba(159, 137, 14, 0.3);
+        }
+        .markdown-checkbox:checked {
+          background-color: ${SABI_GOLD};
+          border-color: ${SABI_GOLD};
+        }
+        .markdown-checkbox:checked::after {
+          content: "\\2713";
+          color: white;
+          font-size: 0.75rem;
+          font-weight: bold;
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          line-height: 1;
+        }
+        .prose ul:has(.task-list-item-styled),
+        .prose ul.contains-task-list {
+          list-style: none;
+          padding-left: 0;
+          margin-left: 0;
+        }
+        .task-list-item-styled,
+        .prose li.task-list-item {
+          display: flex;
+          align-items: flex-start;
+          margin-left: 0;
+          padding-left: 0;
+          list-style: none;
+        }
+        .task-list-item-styled > *:not(.markdown-checkbox),
+        .prose li.task-list-item > *:not(.markdown-checkbox) {
+          flex: 1;
+        }
+        /* GitHub-like table styling */
+        .prose table {
+          border-spacing: 0;
+          border-collapse: collapse;
+          display: block;
+          width: max-content;
+          max-width: 100%;
+          overflow: auto;
+          margin: 1rem 0;
+          font-variant: tabular-nums;
+        }
+        .prose table th,
+        .prose table td {
+          padding: 6px 13px;
+          border: 1px solid rgba(0, 0, 0, 0.2);
+        }
+        .prose table th {
+          font-weight: 600;
+          background-color: rgba(0, 0, 0, 0.04);
+        }
+        .prose table tr {
+          background-color: transparent;
+          border-top: 1px solid rgba(0, 0, 0, 0.15);
+        }
+        .prose table tr:nth-child(2n) {
+          background-color: rgba(0, 0, 0, 0.03);
+        }
+        .prose table td > :last-child {
+          margin-bottom: 0;
+        }
+        /* GitHub-like code block styling */
+        .prose pre {
+          background-color: rgba(0, 0, 0, 0.05);
+          border-radius: 6px;
+          padding: 1rem;
+          overflow-x: auto;
+          font-size: 0.875rem;
+          line-height: 1.5;
+        }
+        .prose pre code {
+          color: rgba(0, 0, 0, 0.85);
+        }
+        .prose code {
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+          font-size: 0.875em;
+          color: rgba(0, 0, 0, 0.8);
+        }
+        /* Tailwind Typographyのデフォルトバッククォートを無効化 */
+        .prose code::before,
+        .prose code::after {
+          content: none !important;
+        }
+        .prose :not(pre) > code {
+          background-color: rgba(0, 0, 0, 0.06);
+          padding: 0.2em 0.4em;
+          border-radius: 4px;
+          color: rgba(0, 0, 0, 0.85);
+        }
+        /* GitHub-like blockquote styling */
+        .prose blockquote {
+          border-left: 4px solid ${SABI_GOLD};
+          padding-left: 1rem;
+          margin: 1rem 0;
+          color: rgba(0, 0, 0, 0.6);
+          font-style: italic;
+        }
+        /* Horizontal rule styling */
+        .prose hr {
+          border: none;
+          height: 2px;
+          background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.15), transparent);
+          margin: 2rem 0;
+        }
+        /* Link styling */
+        .prose a {
+          color: ${SABI_GOLD};
+          text-decoration: none;
+          border-bottom: 1px solid transparent;
+          transition: border-color 0.2s;
+        }
+        .prose a:hover {
+          border-bottom-color: ${SABI_GOLD};
+        }
+        /* Strikethrough */
+        .prose del {
+          text-decoration: line-through;
+          opacity: 0.6;
+        }
       `}</style>
 
       <div className="wabi-grain" />
@@ -265,6 +454,7 @@ const TextModal: React.FC<TextModalProps> = ({ isOpen, onClose, standalone, show
                 ref={textareaRef}
                 value={textState.currentText}
                 onChange={(e) => textActions.setText(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder="--- Begin your narrative here ---"
                 className="custom-scrollbar h-full min-h-[45svh] w-full resize-none bg-transparent py-4 font-mono text-base leading-relaxed text-zinc-400 transition-colors placeholder:text-zinc-900 focus:text-zinc-200 focus:outline-none"
                 onClick={(e) => e.stopPropagation()}
@@ -548,7 +738,9 @@ const TextModal: React.FC<TextModalProps> = ({ isOpen, onClose, standalone, show
               </div>
             </header>
             <div className="prose prose-zinc min-h-[50svh] max-w-none font-serif text-lg leading-relaxed text-zinc-800 sm:text-xl">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{textState.currentText}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={createMarkdownComponents()}>
+                {textState.currentText}
+              </ReactMarkdown>
             </div>
             <footer className="border-t border-zinc-200 pt-8 pb-4">
               <div className="flex items-center justify-between text-[10px] font-black tracking-[0.2em] text-zinc-300 uppercase">

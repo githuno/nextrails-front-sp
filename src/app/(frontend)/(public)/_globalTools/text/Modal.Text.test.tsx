@@ -373,6 +373,257 @@ describe("TextModal (Clean and Semantic Test)", () => {
     })
   })
 
+  describe("Markdown Keyboard Features", () => {
+    it("リスト項目入力後にEnterで自動継続される", async () => {
+      renderModal()
+      await waitForModalReady()
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      // "- item" と入力
+      await user.type(textarea, "- item")
+      // Enter を押す
+      await user.keyboard("{Enter}")
+      // 次の行に "- " が自動挿入される
+      await waitFor(() => {
+        expect(textarea).toHaveValue("- item\n- ")
+      })
+    })
+
+    it("番号付きリストで自動的に番号がインクリメントされる", async () => {
+      renderModal()
+      await waitForModalReady()
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      await user.type(textarea, "1. first")
+      await user.keyboard("{Enter}")
+      await waitFor(() => {
+        expect(textarea).toHaveValue("1. first\n2. ")
+      })
+    })
+
+    it("'- [' と入力すると '- [ ] ' に自動補完される", async () => {
+      renderModal()
+      await waitForModalReady()
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      // "- " と入力
+      await user.type(textarea, "- ")
+      // "[" を入力 (特殊文字なので {[} でエスケープ)
+      await user.keyboard("{[}")
+      // "- [ ] " に自動補完される
+      await waitFor(() => {
+        expect(textarea).toHaveValue("- [ ] ")
+      })
+    })
+
+    it("チェックボックス項目でEnterすると未チェックのチェックボックスが継続される", async () => {
+      renderModal()
+      await waitForModalReady()
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      // 自動補完機能を使用: "- " + "[" で "- [ ] " に補完される
+      await user.type(textarea, "- ")
+      await user.keyboard("{[}")
+      // 補完後に task1 を入力
+      await user.type(textarea, "task1")
+      await user.keyboard("{Enter}")
+      await waitFor(() => {
+        expect(textarea).toHaveValue("- [ ] task1\n- [ ] ")
+      })
+    })
+
+    it("空のリスト項目でEnterするとプレフィックスが削除される", async () => {
+      renderModal()
+      await waitForModalReady()
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      await user.type(textarea, "- item")
+      await user.keyboard("{Enter}")
+      // 空の "- " 状態で Enter
+      await user.keyboard("{Enter}")
+      await waitFor(() => {
+        // プレフィックスが削除され、空行になる
+        expect(textarea).toHaveValue("- item\n")
+      })
+    })
+
+    it("Tabでインデントが追加される", async () => {
+      renderModal()
+      await waitForModalReady()
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      await user.type(textarea, "text")
+      // カーソルを行頭に移動
+      await user.keyboard("{Home}")
+      await user.keyboard("{Tab}")
+      await waitFor(() => {
+        expect(textarea).toHaveValue("  text")
+      })
+    })
+  })
+
+  describe("Preview Checkbox Toggle", () => {
+    it("プレビューのチェックボックスをクリックするとソーステキストが更新される", async () => {
+      renderModal()
+      await waitForModalReady()
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      // 自動補完を使用してチェックボックスを入力
+      await user.type(textarea, "- ")
+      await user.keyboard("{[}")
+      await user.type(textarea, "unchecked task")
+      // プレビューを開く
+      const previewBtn = screen.getByRole("button", { name: /toggle preview/i })
+      await user.click(previewBtn)
+      // プレビュー内のチェックボックスを探してクリック
+      const checkbox = await screen.findByRole("checkbox", {}, { timeout: 3000 })
+      expect(checkbox).not.toBeChecked()
+      await user.click(checkbox)
+      // ソーステキストが更新される
+      await waitFor(() => {
+        expect(textarea).toHaveValue("- [x] unchecked task")
+      })
+    })
+  })
+
+  describe("Markdown Preview Rendering", () => {
+    // 包括的なMarkdownサンプルで全ての要素が正しくレンダリングされることを確認
+    const COMPREHENSIVE_MARKDOWN = `# Heading 1
+
+## Heading 2
+
+### Heading 3
+
+This is a **bold** text and *italic* text. Also ~~strikethrough~~ and \`inline code\`.
+
+- Unordered list item 1
+- Unordered list item 2
+  - Nested item
+
+1. Ordered list item 1
+2. Ordered list item 2
+
+- [ ] Task unchecked
+- [x] Task checked
+
+> This is a blockquote
+
+| Header 1 | Header 2 | Header 3 |
+|----------|----------|----------|
+| Cell 1   | Cell 2   | Cell 3   |
+| Cell 4   | Cell 5   | Cell 6   |
+
+\`\`\`javascript
+const code = "block";
+\`\`\`
+
+[Link text](https://example.com)
+
+---
+
+End of sample.`
+
+    it("包括的なMarkdownが正しくプレビューされる", async () => {
+      // textActions を直接使用してテキストを設定
+      textActions.setText(COMPREHENSIVE_MARKDOWN)
+      textActions.setTitle("Markdown Test")
+      renderModal()
+      await waitForModalReady()
+
+      // プレビューを開く
+      const previewBtn = screen.getByRole("button", { name: /toggle preview/i })
+      await user.click(previewBtn)
+
+      // 各要素が表示されることを確認
+      await waitFor(
+        () => {
+          // ヘッダー
+          expect(screen.getByRole("heading", { level: 1, name: "Heading 1" })).toBeInTheDocument()
+          expect(screen.getByRole("heading", { level: 2, name: "Heading 2" })).toBeInTheDocument()
+          expect(screen.getByRole("heading", { level: 3, name: "Heading 3" })).toBeInTheDocument()
+        },
+        { timeout: 5000 },
+      )
+
+      // リスト
+      expect(screen.getByText("Unordered list item 1")).toBeInTheDocument()
+      expect(screen.getByText("Ordered list item 1")).toBeInTheDocument()
+
+      // チェックボックス
+      const checkboxes = screen.getAllByRole("checkbox")
+      expect(checkboxes.length).toBe(2)
+      expect(checkboxes[0]).not.toBeChecked() // unchecked
+      expect(checkboxes[1]).toBeChecked() // checked
+
+      // テーブル
+      expect(screen.getByRole("table")).toBeInTheDocument()
+      expect(screen.getByText("Header 1")).toBeInTheDocument()
+      expect(screen.getByText("Cell 1")).toBeInTheDocument()
+
+      // 引用
+      expect(screen.getByText("This is a blockquote")).toBeInTheDocument()
+
+      // コードブロック (プレビュー内の pre > code 要素を確認)
+      const codeBlocks = screen.getAllByText(/const code/)
+      // textarea以外にもコードブロックがあることを確認
+      expect(codeBlocks.length).toBeGreaterThanOrEqual(2) // textarea内とプレビュー内
+
+      // リンク
+      expect(screen.getByRole("link", { name: "Link text" })).toHaveAttribute("href", "https://example.com")
+
+      // 水平線
+      expect(document.querySelector("hr")).toBeInTheDocument()
+    })
+
+    it("インラインコードがバッククォートなしでレンダリングされる", async () => {
+      const inlineCodeMarkdown = "This is `inline code` text"
+
+      textActions.setText(inlineCodeMarkdown)
+      renderModal()
+      await waitForModalReady()
+
+      const previewBtn = screen.getByRole("button", { name: /toggle preview/i })
+      await user.click(previewBtn)
+
+      await waitFor(
+        () => {
+          // インラインコードが <code> 要素としてレンダリングされる
+          const codeElement = document.querySelector(".prose code")
+          expect(codeElement).toBeInTheDocument()
+          expect(codeElement?.textContent).toBe("inline code")
+          // バッククォートが表示されていないことを確認
+          const proseContent = document.querySelector(".prose")?.textContent
+          expect(proseContent).not.toContain("`")
+        },
+        { timeout: 3000 },
+      )
+    })
+
+    it("テーブルがGitHub風にスタイリングされる", async () => {
+      const tableMarkdown = `| Name | Age | City |
+|------|-----|------|
+| John | 30  | NYC  |
+| Jane | 25  | LA   |`
+
+      textActions.setText(tableMarkdown)
+      renderModal()
+      await waitForModalReady()
+
+      const previewBtn = screen.getByRole("button", { name: /toggle preview/i })
+      await user.click(previewBtn)
+
+      await waitFor(
+        () => {
+          const table = screen.getByRole("table")
+          expect(table).toBeInTheDocument()
+          // テーブルのスタイルを確認（prose クラスによるスタイリング）
+          expect(table.closest(".prose")).toBeInTheDocument()
+        },
+        { timeout: 3000 },
+      )
+    })
+  })
+
   describe("Lifecycle", () => {
     it("isOpen=false から true に変わると setup が呼ばれる", async () => {
       const setupSpy = vi.spyOn(textActions, "setup")
