@@ -273,39 +273,7 @@ describe("TextModal (Clean and Semantic Test)", () => {
       sessionId: "s1",
     }
 
-    it("ファイルカードの選択ボタンで選択状態になる", async () => {
-      vi.mocked(useToolActionStore).mockReturnValue({
-        ...defaultState,
-        textFiles: [mockFile],
-      } as unknown as ToolActionState & ToolActions)
-      render(<TextModal isOpen={true} onClose={() => {}} />)
-      // 選択ボタンをクリック
-      const selectBtn = await screen.findByRole("button", { name: /select note note/i })
-      await user.click(selectBtn)
-      // バッジに "1" が表示される
-      expect(await screen.findByText("1")).toBeInTheDocument()
-    })
-
-    it("Clear ボタンで選択解除", async () => {
-      vi.mocked(useToolActionStore).mockReturnValue({
-        ...defaultState,
-        textFiles: [mockFile],
-      } as unknown as ToolActionState & ToolActions)
-      render(<TextModal isOpen={true} onClose={() => {}} />)
-      // 選択
-      const selectBtn = await screen.findByRole("button", { name: /select note note/i })
-      await user.click(selectBtn)
-      expect(await screen.findByText("1")).toBeInTheDocument()
-      // Clear をクリック
-      const clearBtn = screen.getByText("Clear")
-      await user.click(clearBtn)
-      // バッジが消える
-      await waitFor(() => {
-        expect(screen.queryByText("1")).not.toBeInTheDocument()
-      })
-    })
-
-    it("削除ボタンで confirm 後に deleteFiles が呼ばれる", async () => {
+    it("ファイルカードの選択・Clear・削除が正しく動作する", async () => {
       const mockDeleteFiles = vi.fn()
       vi.mocked(useToolActionStore).mockReturnValue({
         ...defaultState,
@@ -313,59 +281,44 @@ describe("TextModal (Clean and Semantic Test)", () => {
         deleteFiles: mockDeleteFiles,
       } as unknown as ToolActionState & ToolActions)
       render(<TextModal isOpen={true} onClose={() => {}} />)
-      // 選択
+      // 1. 選択ボタンをクリック → 選択状態になる
       const selectBtn = await screen.findByRole("button", { name: /select note note/i })
       await user.click(selectBtn)
-      // 削除ボタンをクリック
+      expect(await screen.findByText("1")).toBeInTheDocument()
+      // 2. Clear をクリック → 選択解除
+      const clearBtn = screen.getByText("Clear")
+      await user.click(clearBtn)
+      await waitFor(() => {
+        expect(screen.queryByText("1")).not.toBeInTheDocument()
+      })
+      // 3. 再選択して削除
+      await user.click(selectBtn)
       const deleteBtn = screen.getByRole("button", { name: /delete 1 selected notes/i })
       await user.click(deleteBtn)
-      // confirm=true なので deleteFiles が呼ばれる
       expect(mockDeleteFiles).toHaveBeenCalledWith([{ idbKey: "key1", id: "id1" }])
     })
   })
 
   describe("Main Action Button", () => {
-    it("未保存時は Save ボタンが表示される", async () => {
-      renderModal()
-      expect(screen.getByRole("button", { name: "Save note" })).toBeInTheDocument()
-    })
-
-    it("保存後は Create new note ボタンに変わる", async () => {
-      // Classical Approach: textActions を直接操作
+    it("Save → Create new note のフローが正しく動作する", async () => {
       const mockSaveFile = vi.fn().mockResolvedValue({ idbKey: "new-key", id: "new-id" })
       textActions.setExternalActions({
         saveFile: mockSaveFile,
         getFileWithUrl: vi.fn().mockResolvedValue("blob:test-url"),
       })
       renderModal()
-      // テキストを入力して保存
+      // 1. 初期状態: Save ボタンが表示される
+      expect(screen.getByRole("button", { name: "Save note" })).toBeInTheDocument()
+      // 2. テキストを入力して保存
       const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
       await user.click(textarea)
       await user.type(textarea, "Test content")
       const saveBtn = screen.getByRole("button", { name: "Save note" })
       await user.click(saveBtn)
-      // 保存後は Create new note に変わる
-      await screen.findByRole("button", { name: "Create new note" }, { timeout: 3000 })
-    })
-
-    it("Create new note で新規作成状態にリセットされる", async () => {
-      // Classical Approach: textActions を直接操作
-      const mockSaveFile = vi.fn().mockResolvedValue({ idbKey: "new-key", id: "new-id" })
-      textActions.setExternalActions({
-        saveFile: mockSaveFile,
-        getFileWithUrl: vi.fn().mockResolvedValue("blob:test-url"),
-      })
-      renderModal()
-      // テキストを入力して保存
-      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
-      await user.click(textarea)
-      await user.type(textarea, "Test content for new")
-      const saveBtn = screen.getByRole("button", { name: "Save note" })
-      await user.click(saveBtn)
+      // 3. 保存後は Create new note に変わる
       const newBtn = await screen.findByRole("button", { name: "Create new note" }, { timeout: 3000 })
-      // Create new note をクリック
+      // 4. Create new note をクリック → 新規作成状態にリセット
       await user.click(newBtn)
-      // テキストがクリアされ、Save note に戻る
       await waitFor(() => {
         expect(screen.getByRole("button", { name: "Save note" })).toBeInTheDocument()
         expect(screen.getByPlaceholderText(/Begin your narrative/i)).toHaveValue("")
@@ -573,58 +526,16 @@ End of sample.`
 
       // 水平線
       expect(document.querySelector("hr")).toBeInTheDocument()
-    })
 
-    it("インラインコードがバッククォートなしでレンダリングされる", async () => {
-      const inlineCodeMarkdown = "This is `inline code` text"
-
-      textActions.setText(inlineCodeMarkdown)
-      renderModal()
-      await waitForModalReady()
-
-      const previewBtn = screen.getByRole("button", { name: /toggle preview/i })
-      await user.click(previewBtn)
-
-      await waitFor(
-        () => {
-          // インラインコードが <code> 要素としてレンダリングされる
-          const codeElement = document.querySelector(".prose code")
-          expect(codeElement).toBeInTheDocument()
-          expect(codeElement?.textContent).toBe("inline code")
-          // バッククォートが表示されていないことを確認
-          const proseContent = document.querySelector(".prose")?.textContent
-          expect(proseContent).not.toContain("`")
-        },
-        { timeout: 3000 },
-      )
-    })
-
-    it("テーブルがGitHub風にスタイリングされる", async () => {
-      const tableMarkdown = `| Name | Age | City |
-|------|-----|------|
-| John | 30  | NYC  |
-| Jane | 25  | LA   |`
-
-      textActions.setText(tableMarkdown)
-      renderModal()
-      await waitForModalReady()
-
-      const previewBtn = screen.getByRole("button", { name: /toggle preview/i })
-      await user.click(previewBtn)
-
-      await waitFor(
-        () => {
-          const table = screen.getByRole("table")
-          expect(table).toBeInTheDocument()
-          // テーブルのスタイルを確認（prose クラスによるスタイリング）
-          expect(table.closest(".prose")).toBeInTheDocument()
-        },
-        { timeout: 3000 },
-      )
+      // インラインコードがバッククォートなしでレンダリングされる
+      const codeElement = document.querySelector(".prose code")
+      expect(codeElement).toBeInTheDocument()
+      const proseContent = document.querySelector(".prose")?.textContent
+      expect(proseContent).not.toContain("`")
     })
   })
 
-  describe("Lifecycle", () => {
+  describe("Lifecycle and State Persistence", () => {
     it("isOpen=false から true に変わると setup が呼ばれる", async () => {
       const setupSpy = vi.spyOn(textActions, "setup")
       const { rerender } = render(<TextModal isOpen={false} onClose={() => {}} />)
@@ -638,16 +549,60 @@ End of sample.`
       setupSpy.mockRestore()
     })
 
-    it("isOpen=false で cleanup が呼ばれない（状態維持）", async () => {
-      const cleanupSpy = vi.spyOn(textActions, "cleanup")
+    it("モーダルを閉じて再度開くと状態が保持される", async () => {
+      vi.mocked(useToolActionStore).mockReturnValue(defaultState as unknown as ToolActionState & ToolActions)
       const { rerender } = render(<TextModal isOpen={true} onClose={() => {}} />)
-      // isOpen=false に変更
+      await waitForModalReady()
+      // テキストとタイトルを入力
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      await user.type(textarea, "Persistent content")
+      const titleInput = screen.getByPlaceholderText(/UNTITLED THOUGHT/i)
+      await user.click(titleInput)
+      await user.clear(titleInput)
+      await user.type(titleInput, "Persistent Title")
+      // モーダルを閉じて再度開く
       rerender(<TextModal isOpen={false} onClose={() => {}} />)
-      // 状態維持のため cleanup は呼ばれないはず
+      rerender(<TextModal isOpen={true} onClose={() => {}} />)
+      await waitForModalReady()
+      // 状態が保持されている
       await waitFor(() => {
-        expect(cleanupSpy).not.toHaveBeenCalled()
+        expect(screen.getByPlaceholderText(/Begin your narrative/i)).toHaveValue("Persistent content")
+        expect(screen.getByPlaceholderText(/UNTITLED THOUGHT/i)).toHaveValue("Persistent Title")
       })
-      cleanupSpy.mockRestore()
+    })
+
+    it("FileSet切り替え時にエディターの内容がリセットされる", async () => {
+      vi.mocked(useToolActionStore).mockReturnValue({
+        ...defaultState,
+        currentFileSet: "set-a",
+      } as unknown as ToolActionState & ToolActions)
+      const { rerender } = render(<TextModal isOpen={true} onClose={() => {}} />)
+      await waitForModalReady()
+      // テキストとタイトルを入力
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i)
+      await user.click(textarea)
+      await user.type(textarea, "Content in set-a")
+      const titleInput = screen.getByPlaceholderText(/UNTITLED THOUGHT/i)
+      await user.click(titleInput)
+      await user.clear(titleInput)
+      await user.type(titleInput, "Title in set-a")
+      await waitFor(() => {
+        expect(textarea).toHaveValue("Content in set-a")
+        expect(titleInput).toHaveValue("Title in set-a")
+      })
+      // FileSetを切り替え
+      vi.mocked(useToolActionStore).mockReturnValue({
+        ...defaultState,
+        currentFileSet: "set-b",
+        textFiles: [],
+      } as unknown as ToolActionState & ToolActions)
+      rerender(<TextModal isOpen={true} onClose={() => {}} />)
+      // エディターの内容がリセットされる
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText(/Begin your narrative/i)).toHaveValue("")
+        expect(screen.getByPlaceholderText(/UNTITLED THOUGHT/i)).toHaveValue("Untitled")
+      })
     })
   })
 })

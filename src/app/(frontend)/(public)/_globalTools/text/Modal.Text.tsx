@@ -103,11 +103,13 @@ const TextModal: React.FC<TextModalProps> = ({ isOpen, onClose, standalone, show
     }
   }, [textState.currentText])
 
-  // FileSet切り替え時の選択リセット
+  // FileSet切り替え時の選択リセット＆エディター内容クリア
   const [prevFileSet, setPrevFileSet] = useState(currentFileSet)
   if (currentFileSet !== prevFileSet) {
     setPrevFileSet(currentFileSet)
     setSelectedKeys(new Set())
+    // 前のFileSetのコンテンツがメインプレビューに残らないようにリセット
+    textActions.newText()
   }
 
   // Register external actions (once on mount)
