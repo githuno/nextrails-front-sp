@@ -3,17 +3,16 @@
  * Provides GitHub-like editing experience with list/checkbox auto-continuation
  */
 
-import { useCallback } from "react"
+import React, { useCallback } from "react"
 
-// Regex patterns for list detection
-const ORDERED_LIST_REGEX = /^(\s*)(\d+)\.\s/
+// Regex patterns for list detection - Standard Markdown only supports numeric ordered lists
+const ORDERED_LIST_REGEX = /^(\s*)(\d+)(\.|\))\s/
 const UNORDERED_LIST_REGEX = /^(\s*)([-*])\s/
 const CHECKBOX_REGEX = /^(\s*)([-*])\s\[([xX\s])\]\s/
 const EMPTY_LIST_ITEM_REGEX = /^(\s*)([-*]|\d+\.)\s(\[[ xX]\]\s)?$/
 
 interface UseMarkdownKeyboardOptions {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
-  value: string
   onChange: (newValue: string) => void
 }
 
@@ -46,11 +45,11 @@ function getNextListPrefix(line: string): string | null {
     return `${indent}${bullet} [ ] `
   }
 
-  // Check ordered list
+  // Check ordered list - Always use numbers for standard MD compatibility
   const orderedMatch = line.match(ORDERED_LIST_REGEX)
   if (orderedMatch) {
-    const [, indent, num] = orderedMatch
-    return `${indent}${parseInt(num) + 1}. `
+    const [, indent, num, delimiter] = orderedMatch
+    return `${indent}${parseInt(num) + 1}${delimiter} `
   }
 
   // Check unordered list
@@ -111,7 +110,7 @@ function handleIndent(
   onChange: (newValue: string) => void,
   textarea: HTMLTextAreaElement,
 ): void {
-  const INDENT = "  " // 2 spaces
+  const INDENT = "    " // 4 spaces for standard MD compatibility
 
   const beforeStart = text.substring(0, selectionStart)
   const afterEnd = text.substring(selectionEnd)
@@ -120,11 +119,21 @@ function handleIndent(
   const firstLineStart = beforeStart.lastIndexOf("\n") + 1
 
   if (!selectedText.includes("\n")) {
-    // Single line - add indent at line start
-    const newText = text.substring(0, firstLineStart) + INDENT + text.substring(firstLineStart)
+    // Single line
+    const lineContent = text.substring(firstLineStart)
+    let newContent = INDENT + lineContent
+    const cursorOffset = INDENT.length
+    // Standard Markdown compatibility: always use numbers for ordered lists.
+    // When indenting, we reset to "1." to ensure it's recognized as a new nested list.
+    const match = lineContent.match(ORDERED_LIST_REGEX)
+    if (match) {
+      const [, indent, , delimiter] = match
+      newContent = indent + INDENT + "1" + delimiter + " " + lineContent.substring(match[0].length)
+    }
+    const newText = text.substring(0, firstLineStart) + newContent
     onChange(newText)
     requestAnimationFrame(() => {
-      textarea.setSelectionRange(selectionStart + INDENT.length, selectionEnd + INDENT.length)
+      textarea.setSelectionRange(selectionStart + cursorOffset, selectionEnd + cursorOffset)
     })
   } else {
     // Multi-line - indent each line
@@ -149,19 +158,17 @@ function handleOutdent(
   onChange: (newValue: string) => void,
   textarea: HTMLTextAreaElement,
 ): void {
-  const INDENT = "  " // 2 spaces
-
+  const INDENT = "    " // 4 spaces
   const beforeStart = text.substring(0, selectionStart)
   const afterEnd = text.substring(selectionEnd)
   const selectedText = text.substring(selectionStart, selectionEnd)
-
   const firstLineStart = beforeStart.lastIndexOf("\n") + 1
-
   if (!selectedText.includes("\n")) {
     // Single line
     const lineContent = text.substring(firstLineStart)
     if (lineContent.startsWith(INDENT)) {
-      const newText = text.substring(0, firstLineStart) + lineContent.substring(INDENT.length)
+      const newContent = lineContent.substring(INDENT.length)
+      const newText = text.substring(0, firstLineStart) + newContent
       onChange(newText)
       requestAnimationFrame(() => {
         textarea.setSelectionRange(
@@ -196,58 +203,133 @@ function handleOutdent(
   }
 }
 
-export function useMarkdownKeyboard({ textareaRef, value, onChange }: UseMarkdownKeyboardOptions) {
+function handleCheckboxAutocomplete(
+  text: string,
+  selectionStart: number,
+  textarea: HTMLTextAreaElement,
+  onChange: (newValue: string) => void,
+): boolean {
+  const { line, lineStart } = getCurrentLine(text, selectionStart)
+  const lineUpToCursor = line.substring(0, selectionStart - lineStart)
+  // Case 1: Before input (cursor is at "- ")
+  // Match "- " or "* " (allowing optional indentation)
+  const matchBefore = lineUpToCursor.match(/^(\s*)([-*])\s+$/)
+  if (matchBefore) {
+    const prefix = matchBefore[0]
+    const newText = text.substring(0, lineStart) + prefix + "[ ] " + text.substring(selectionStart)
+    const newCursorPos = lineStart + prefix.length + 4
+    onChange(newText)
+    setTimeout(() => {
+      if (textarea) {
+        textarea.setSelectionRange(newCursorPos, newCursorPos)
+        textarea.focus()
+      }
+    }, 10)
+    return true
+  }
+  // Case 2: After input (cursor is at "- [" or "* [")
+  // Sometimes beforeinput preventDefault doesn't work, so we check if we just typed the bracket
+  const matchAfter = lineUpToCursor.match(/^(\s*)([-*])\s+[[［]$/)
+  if (matchAfter) {
+    const prefix = matchAfter[0].slice(0, -1) // remove the bracket
+    const newText = text.substring(0, lineStart) + prefix + "[ ] " + text.substring(selectionStart)
+    const newCursorPos = lineStart + prefix.length + 4
+    onChange(newText)
+    setTimeout(() => {
+      if (textarea) {
+        textarea.setSelectionRange(newCursorPos, newCursorPos)
+        textarea.focus()
+      }
+    }, 10)
+    return true
+  }
+  return false
+}
+
+export function useMarkdownKeyboard({ textareaRef, onChange }: UseMarkdownKeyboardOptions) {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       const textarea = textareaRef.current
       if (!textarea) return
-
       const { selectionStart, selectionEnd } = textarea
-
+      const currentText = textarea.value
       // Handle "[" key for checkbox auto-completion
       if (e.key === "[" && selectionStart === selectionEnd) {
-        // Check if we should auto-complete after the "[" is inserted
-        const { line, lineStart } = getCurrentLine(value, selectionStart)
-        const lineUpToCursor = line.substring(0, selectionStart - lineStart)
-
-        // Check if line matches "- " or "* " pattern (will become "- [" after keystroke)
-        if (/^(\s*)([-*])\s$/.test(lineUpToCursor)) {
+        const handled = handleCheckboxAutocomplete(currentText, selectionStart, textarea, onChange)
+        if (handled) {
           e.preventDefault()
-          const newText = value.substring(0, selectionStart) + "[ ] " + value.substring(selectionStart)
-          const newCursorPos = selectionStart + 4 // After "[ ] "
-          onChange(newText)
-          requestAnimationFrame(() => {
-            textarea.setSelectionRange(newCursorPos, newCursorPos)
-          })
           return
         }
       }
 
       // Handle Enter key
-      if (e.key === "Enter") {
-        const handled = handleEnterKey(value, selectionStart, selectionEnd, onChange, textarea)
+      if (e.key === "Enter" || e.keyCode === 13) {
+        const handled = handleEnterKey(currentText, selectionStart, selectionEnd, onChange, textarea)
         if (handled) {
           e.preventDefault()
         }
         return
       }
-
       // Handle Tab key
       if (e.key === "Tab") {
         e.preventDefault()
         if (e.shiftKey) {
-          handleOutdent(value, selectionStart, selectionEnd, onChange, textarea)
+          handleOutdent(currentText, selectionStart, selectionEnd, onChange, textarea)
         } else {
-          handleIndent(value, selectionStart, selectionEnd, onChange, textarea)
+          handleIndent(currentText, selectionStart, selectionEnd, onChange, textarea)
         }
       }
     },
-    [textareaRef, value, onChange],
+    [textareaRef, onChange],
   )
 
-  return { handleKeyDown }
-}
+  const handleBeforeInput = useCallback(
+    (e: React.FormEvent<HTMLTextAreaElement>) => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      const { selectionStart, selectionEnd } = textarea
+      const currentText = textarea.value
+      const nativeEvent = e.nativeEvent as InputEvent
+      // Handle Enter on mobile
+      if (
+        nativeEvent.inputType === "insertLineBreak" ||
+        (nativeEvent.inputType === "insertText" && nativeEvent.data === "\n")
+      ) {
+        const handled = handleEnterKey(currentText, selectionStart, selectionEnd, onChange, textarea)
+        if (handled) {
+          e.preventDefault()
+        }
+        return
+      }
+      // Handle "[" on mobile
+      // data might be "[" (standard) or "［" (full-width) or even part of composition
+      const isBracket = nativeEvent.data === "[" || nativeEvent.data === "［"
+      if (isBracket && selectionStart === selectionEnd) {
+        const handled = handleCheckboxAutocomplete(currentText, selectionStart, textarea, onChange)
+        if (handled) {
+          e.preventDefault()
+        }
+      }
+    },
+    [textareaRef, onChange],
+  )
 
+  const handleInput = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    const { selectionStart } = textarea
+    const currentText = textarea.value
+    // If the last character entered was "[" and it wasn't handled by beforeinput
+    // (meaning preventDefault failed or wasn't called), try to fix it up now.
+    const { line, lineStart } = getCurrentLine(currentText, selectionStart)
+    const lineUpToCursor = line.substring(0, selectionStart - lineStart)
+    if (/^(\s*)([-*])\s+[[［]$/.test(lineUpToCursor)) {
+      handleCheckboxAutocomplete(currentText, selectionStart, textarea, onChange)
+    }
+  }, [textareaRef, onChange])
+
+  return { handleKeyDown, handleBeforeInput, handleInput }
+}
 /**
  * Toggle checkbox state in markdown text
  * @param text - Full markdown text

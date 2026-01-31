@@ -369,6 +369,42 @@ describe("TextModal (Clean and Semantic Test)", () => {
       })
     })
 
+    it("モバイル環境で '- [' が '- [ ] ' に自動補完される (beforeinput + input 補完)", async () => {
+      renderModal()
+      await waitForModalReady()
+      const textarea = screen.getByPlaceholderText(/Begin your narrative/i) as HTMLTextAreaElement
+      await user.click(textarea)
+      // 1. "- " を入力済み状態にする
+      await user.type(textarea, "- ")
+      expect(textarea.value).toBe("- ")
+      // 2. "[" の beforeinput イベントを発火
+      const beforeInputEvent = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        data: "[",
+        inputType: "insertText",
+      })
+      textarea.dispatchEvent(beforeInputEvent)
+      // 3. (オプション) beforeinput で preventDefault されなかった場合、実際に文字が入る
+      if (textarea.value === "- ") {
+        textarea.value = "- ["
+        // input イベントを発火 (fallback の handleInput をトリガー)
+        const inputEvent = new InputEvent("input", {
+          bubbles: true,
+          inputType: "insertText",
+          data: "[",
+        })
+        textarea.dispatchEvent(inputEvent)
+      }
+      // 4. 補完結果を確認
+      await waitFor(
+        () => {
+          expect(textarea.value).toBe("- [ ] ")
+        },
+        { timeout: 2000 },
+      )
+    })
+
     it("チェックボックス項目でEnterすると未チェックのチェックボックスが継続される", async () => {
       renderModal()
       await waitForModalReady()
@@ -410,7 +446,7 @@ describe("TextModal (Clean and Semantic Test)", () => {
       await user.keyboard("{Home}")
       await user.keyboard("{Tab}")
       await waitFor(() => {
-        expect(textarea).toHaveValue("  text")
+        expect(textarea).toHaveValue("    text")
       })
     })
   })
@@ -532,6 +568,41 @@ End of sample.`
       expect(codeElement).toBeInTheDocument()
       const proseContent = document.querySelector(".prose")?.textContent
       expect(proseContent).not.toContain("`")
+    })
+
+    it("深層ネスト（4段階以上）されたリストが正しく垂直にスタックし、マーカーが循環する", async () => {
+      const DEEP_NESTED_MARKDOWN = `1. Level 1
+    1. Level 2
+        1. Level 3
+            1. Level 4
+2. Back`
+      textActions.setText(DEEP_NESTED_MARKDOWN)
+      renderModal()
+      await waitForModalReady()
+      const previewBtn = screen.getByRole("button", { name: /toggle preview/i })
+      await user.click(previewBtn)
+      await waitFor(
+        () => {
+          const ols = document.querySelectorAll(".prose ol")
+          expect(ols.length).toBeGreaterThanOrEqual(4) // 4段階
+          // マーカーの検証 (CSSが適用されていることを確認するため、computedStyleを取得)
+          const firstOlStyle = window.getComputedStyle(ols[0])
+          const secondOlStyle = window.getComputedStyle(ols[1])
+          const thirdOlStyle = window.getComputedStyle(ols[2])
+          expect(firstOlStyle.listStyleType).toBe("decimal")
+          expect(secondOlStyle.listStyleType).toBe("lower-alpha")
+          expect(thirdOlStyle.listStyleType).toBe("lower-roman")
+          // 垂直スタックの検証: 子要素の top が親要素の top より下にあることを確認
+          const items = document.querySelectorAll(".prose li")
+          if (items.length >= 2) {
+            const firstItemRect = items[0].getBoundingClientRect()
+            const secondItemRect = items[1].getBoundingClientRect()
+            // 2番目の項目（ネストされた子）は、1番目の項目（親のテキスト）より確実に下にあるはず
+            expect(secondItemRect.top).toBeGreaterThan(firstItemRect.top)
+          }
+        },
+        { timeout: 3000 },
+      )
     })
   })
 
